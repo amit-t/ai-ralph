@@ -67,14 +67,7 @@ alias rpx.wt.int='ralph-codex --no-codex-auto-exit --live --monitor'
 alias rpx.monitor='ralph-monitor-codex'
 alias rpx.install='(cd ~/Projects/Tools-Utilities/ai-ralph/codex && ./install_codex.sh)'
 alias rpx.uninstall='(cd ~/Projects/Tools-Utilities/ai-ralph/codex && ./uninstall_codex.sh)'
+alias rpx.enable='ralph-codex-enable'
 
 # Planning mode (AI-powered, uses codex engine)
 alias rpx.plan='ralph-plan --engine codex'
-
-# Shared commands (work for all engines)
-alias ralph.setup='ralph-setup'
-alias ralph.enable='ralph-enable'
-alias ralph.enable.ci='ralph-enable-ci'
-alias ralph.migrate='ralph-migrate'
-alias ralph.import='ralph-import'
-alias ralph.plan='ralph-plan'

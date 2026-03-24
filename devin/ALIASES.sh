@@ -68,14 +68,7 @@ alias rpd.wt.int='ralph-devin --no-devin-auto-exit --live --monitor'
 alias rpd.monitor='ralph-monitor-devin'
 alias rpd.install='(cd ~/Projects/Tools-Utilities/ai-ralph/devin && ./install_devin.sh)'
 alias rpd.uninstall='(cd ~/Projects/Tools-Utilities/ai-ralph/devin && ./uninstall_devin.sh)'
+alias rpd.enable='ralph-devin-enable'
 
 # Planning mode (AI-powered, uses devin engine)
 alias rpd.plan='ralph-plan --engine devin'
-
-# Shared commands (work for all engines)
-alias ralph.setup='ralph-setup'
-alias ralph.enable='ralph-enable'
-alias ralph.enable.ci='ralph-enable-ci'
-alias ralph.migrate='ralph-migrate'
-alias ralph.import='ralph-import'
-alias ralph.plan='ralph-plan'

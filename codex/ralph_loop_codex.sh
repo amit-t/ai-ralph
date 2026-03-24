@@ -595,6 +595,18 @@ You are operating inside an **isolated git worktree**.
     # Otherwise use background mode (which supports live streaming)
     if [[ "$print_mode" == "false" ]]; then
         log_status "INFO" "Live output mode - Codex running interactively..."
+
+        # Print pre-session instructions
+        if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+            echo ""
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BLUE}  Ralph will auto-detect when Codex finishes (RALPH_STATUS)${NC}"
+            echo -e "${BLUE}  and then auto-commit, push, and create a PR.${NC}"
+            echo -e "${BLUE}  You can also press Ctrl+C to end the session manually.${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+        fi
+
         echo -e "${PURPLE}━━━━━━━━━━━━━━━━ Codex Session ━━━━━━━━━━━━━━━━${NC}"
 
         # Run Codex directly on the terminal (interactive TUI needs real TTY)
@@ -604,28 +616,102 @@ You are operating inside an **isolated git worktree**.
         local resolved_timeout_cmd
         resolved_timeout_cmd=$(detect_timeout_command 2>/dev/null)
 
-        if command -v script &>/dev/null && [[ -n "$resolved_timeout_cmd" ]]; then
-            (cd "$work_dir" && script -q "$output_file" "$resolved_timeout_cmd" ${timeout_seconds}s "${CODEX_CMD_ARGS[@]}")
-            exit_code=$?
-        elif [[ -n "$resolved_timeout_cmd" ]]; then
-            (cd "$work_dir" && "$resolved_timeout_cmd" ${timeout_seconds}s "${CODEX_CMD_ARGS[@]}")
+        # ── SIGINT handling for interactive sessions ──────────────────────
+        # Replace the global cleanup trap with a non-fatal handler so that
+        # Ctrl+C terminates the Codex TUI but does NOT kill the Ralph loop.
+        # After Codex exits (by any means: normal exit, Ctrl+C, timeout),
+        # Ralph must continue to auto-commit → push → PR → worktree cleanup.
+        local _codex_sigint_received="false"
+        trap '_codex_sigint_received=true' SIGINT
+
+        # ── Auto-exit detection ──────────────────────────────────────────
+        # When running in worktree mode with `script`, start a background
+        # monitor that polls the output file for END_RALPH_STATUS. When
+        # detected, it kills the `script` process (which sends SIGHUP to
+        # Codex), ending the session automatically. Ctrl+C remains as a
+        # manual fallback.
+        local _auto_exit_monitor_pid=""
+        local _codex_pid_file="${RALPH_DIR}/.codex_session_pid"
+        rm -f "$_codex_pid_file"
+
+        if [[ "$WORKTREE_ENABLED" == "true" ]] && command -v script &>/dev/null; then
+            # Background monitor: poll output file for END_RALPH_STATUS
+            (
+                # Wait for PID file (max 30s)
+                local _wait=0
+                while [[ ! -f "$_codex_pid_file" ]] && [[ $_wait -lt 60 ]]; do
+                    sleep 0.5
+                    ((_wait++))
+                done
+                local _target_pid
+                _target_pid=$(cat "$_codex_pid_file" 2>/dev/null)
+                [[ -z "$_target_pid" ]] && exit 0
+
+                # Poll output file every 2s for the RALPH_STATUS end marker
+                while kill -0 "$_target_pid" 2>/dev/null; do
+                    if [[ -f "$output_file" ]] && grep -qa "END_RALPH_STATUS" "$output_file" 2>/dev/null; then
+                        sleep 3  # Grace period for output flush
+                        if kill -0 "$_target_pid" 2>/dev/null; then
+                            kill -TERM "$_target_pid" 2>/dev/null || true
+                        fi
+                        break
+                    fi
+                    sleep 2
+                done
+            ) &
+            _auto_exit_monitor_pid=$!
+
+            # Run with exec so the subshell PID becomes the script PID
+            # (monitor can then kill `script` directly)
+            if [[ -n "$resolved_timeout_cmd" ]]; then
+                (echo $BASHPID > "$_codex_pid_file"; cd "$work_dir" && exec script -q "$output_file" "$resolved_timeout_cmd" ${timeout_seconds}s "${CODEX_CMD_ARGS[@]}")
+            else
+                (echo $BASHPID > "$_codex_pid_file"; cd "$work_dir" && exec script -q "$output_file" "${CODEX_CMD_ARGS[@]}")
+            fi
             exit_code=$?
         else
-            (cd "$work_dir" && "${CODEX_CMD_ARGS[@]}")
-            exit_code=$?
+            # No auto-exit: run normally (user Ctrl+C's to end)
+            if command -v script &>/dev/null && [[ -n "$resolved_timeout_cmd" ]]; then
+                (cd "$work_dir" && script -q "$output_file" "$resolved_timeout_cmd" ${timeout_seconds}s "${CODEX_CMD_ARGS[@]}")
+                exit_code=$?
+            elif [[ -n "$resolved_timeout_cmd" ]]; then
+                (cd "$work_dir" && "$resolved_timeout_cmd" ${timeout_seconds}s "${CODEX_CMD_ARGS[@]}")
+                exit_code=$?
+            else
+                (cd "$work_dir" && "${CODEX_CMD_ARGS[@]}")
+                exit_code=$?
+            fi
+        fi
+
+        # Cleanup auto-exit monitor
+        if [[ -n "$_auto_exit_monitor_pid" ]]; then
+            kill "$_auto_exit_monitor_pid" 2>/dev/null || true
+            wait "$_auto_exit_monitor_pid" 2>/dev/null || true
+        fi
+        rm -f "$_codex_pid_file"
+
+        # Restore the global cleanup trap
+        trap cleanup SIGINT SIGTERM
+
+        # In interactive mode, Ctrl+C or auto-exit termination (SIGTERM→143)
+        # are both expected ways to end the session. Treat as normal exit.
+        if [[ "$_codex_sigint_received" == "true" ]]; then
+            log_status "INFO" "Codex session ended via Ctrl+C"
+            exit_code=0
+        elif [[ "$CODEX_AUTO_EXIT" == "false" && $exit_code -ne 0 ]]; then
+            log_status "INFO" "Interactive Codex session exited (code $exit_code) — treating as normal exit"
+            exit_code=0
         fi
 
         cp "$output_file" "$LIVE_LOG_FILE" 2>/dev/null || true
         echo ""
         echo -e "${PURPLE}━━━━━━━━━━━━━━━━ End of Session ━━━━━━━━━━━━━━━━━━━${NC}"
 
-        # After interactive Codex session completes in worktree mode,
-        # print a notice. Ralph's post-loop code handles auto-commit,
-        # push, PR creation, and worktree cleanup automatically.
-        if [[ "$CODEX_AUTO_EXIT" == "false" && "$WORKTREE_ENABLED" == "true" && "$exit_code" -eq 0 ]]; then
+        # Print post-session notice: Ralph handles PR/cleanup from here
+        if [[ "$WORKTREE_ENABLED" == "true" ]]; then
             echo ""
             echo -e "${YELLOW}━━━━━━━━━━━━━━━━ Post-Session ━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${BLUE}Ralph will now auto-commit any remaining changes,${NC}"
+            echo -e "${BLUE}Ralph will now auto-commit remaining changes,${NC}"
             echo -e "${BLUE}push the branch, and open a pull request.${NC}"
             echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         fi
@@ -831,8 +917,15 @@ EOF
 cleanup() {
     log_status "INFO" "Ralph Codex loop interrupted. Cleaning up..."
     if worktree_is_active 2>/dev/null; then
-        log_status "INFO" "Cleaning up active worktree..."
-        worktree_cleanup "true" 2>/dev/null || true
+        # Try to push and create PR before destroying the worktree
+        if [[ "${PR_ENABLED:-true}" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
+            log_status "INFO" "Attempting PR before cleanup..."
+            worktree_commit_and_pr "" "" "true" "${loop_count:-0}" 2>/dev/null || true
+            worktree_cleanup "false" 2>/dev/null || true   # preserve branch as PR head
+        else
+            log_status "INFO" "Cleaning up active worktree..."
+            worktree_cleanup "true" 2>/dev/null || true
+        fi
     fi
     reset_session "manual_interrupt"
     update_status "$loop_count" "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "interrupted" "stopped"
