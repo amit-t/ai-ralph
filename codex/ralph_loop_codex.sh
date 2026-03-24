@@ -595,6 +595,17 @@ You are operating inside an **isolated git worktree**.
     # Otherwise use background mode (which supports live streaming)
     if [[ "$print_mode" == "false" ]]; then
         log_status "INFO" "Live output mode - Codex running interactively..."
+
+        # Print pre-session instructions so the user knows how to end the session
+        if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+            echo ""
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BLUE}  When Codex finishes the task, press Ctrl+C to end the${NC}"
+            echo -e "${BLUE}  session. Ralph will auto-commit, push, and create a PR.${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+        fi
+
         echo -e "${PURPLE}━━━━━━━━━━━━━━━━ Codex Session ━━━━━━━━━━━━━━━━${NC}"
 
         # Run Codex directly on the terminal (interactive TUI needs real TTY)
@@ -603,6 +614,14 @@ You are operating inside an **isolated git worktree**.
         # script spawns a subprocess that can't see functions, so resolve to actual binary.
         local resolved_timeout_cmd
         resolved_timeout_cmd=$(detect_timeout_command 2>/dev/null)
+
+        # ── SIGINT handling for interactive sessions ──────────────────────
+        # Replace the global cleanup trap with a non-fatal handler so that
+        # Ctrl+C terminates the Codex TUI but does NOT kill the Ralph loop.
+        # After Codex exits (by any means: normal exit, Ctrl+C, timeout),
+        # Ralph must continue to auto-commit → push → PR → worktree cleanup.
+        local _codex_sigint_received="false"
+        trap '_codex_sigint_received=true' SIGINT
 
         if command -v script &>/dev/null && [[ -n "$resolved_timeout_cmd" ]]; then
             (cd "$work_dir" && script -q "$output_file" "$resolved_timeout_cmd" ${timeout_seconds}s "${CODEX_CMD_ARGS[@]}")
@@ -615,17 +634,28 @@ You are operating inside an **isolated git worktree**.
             exit_code=$?
         fi
 
+        # Restore the global cleanup trap
+        trap cleanup SIGINT SIGTERM
+
+        # In interactive mode, Ctrl+C is the expected way to end the session.
+        # Treat SIGINT or any non-zero exit as a normal "user is done" signal.
+        if [[ "$_codex_sigint_received" == "true" ]]; then
+            log_status "INFO" "Codex session ended via Ctrl+C"
+            exit_code=0
+        elif [[ "$CODEX_AUTO_EXIT" == "false" && $exit_code -ne 0 ]]; then
+            log_status "INFO" "Interactive Codex session exited (code $exit_code) — treating as normal exit"
+            exit_code=0
+        fi
+
         cp "$output_file" "$LIVE_LOG_FILE" 2>/dev/null || true
         echo ""
         echo -e "${PURPLE}━━━━━━━━━━━━━━━━ End of Session ━━━━━━━━━━━━━━━━━━━${NC}"
 
-        # After interactive Codex session completes in worktree mode,
-        # print a notice. Ralph's post-loop code handles auto-commit,
-        # push, PR creation, and worktree cleanup automatically.
-        if [[ "$CODEX_AUTO_EXIT" == "false" && "$WORKTREE_ENABLED" == "true" && "$exit_code" -eq 0 ]]; then
+        # Print post-session notice: Ralph handles PR/cleanup from here
+        if [[ "$WORKTREE_ENABLED" == "true" ]]; then
             echo ""
             echo -e "${YELLOW}━━━━━━━━━━━━━━━━ Post-Session ━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${BLUE}Ralph will now auto-commit any remaining changes,${NC}"
+            echo -e "${BLUE}Ralph will now auto-commit remaining changes,${NC}"
             echo -e "${BLUE}push the branch, and open a pull request.${NC}"
             echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         fi
@@ -831,8 +861,15 @@ EOF
 cleanup() {
     log_status "INFO" "Ralph Codex loop interrupted. Cleaning up..."
     if worktree_is_active 2>/dev/null; then
-        log_status "INFO" "Cleaning up active worktree..."
-        worktree_cleanup "true" 2>/dev/null || true
+        # Try to push and create PR before destroying the worktree
+        if [[ "${PR_ENABLED:-true}" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
+            log_status "INFO" "Attempting PR before cleanup..."
+            worktree_commit_and_pr "" "" "true" "${loop_count:-0}" 2>/dev/null || true
+            worktree_cleanup "false" 2>/dev/null || true   # preserve branch as PR head
+        else
+            log_status "INFO" "Cleaning up active worktree..."
+            worktree_cleanup "true" 2>/dev/null || true
+        fi
     fi
     reset_session "manual_interrupt"
     update_status "$loop_count" "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "interrupted" "stopped"
