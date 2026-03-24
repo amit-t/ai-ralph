@@ -307,6 +307,7 @@ RALPH_PR_GH_CAPABLE="true"
 PR_EDIT_LABEL_CALLED=0
 gh() {
     if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "https://github.com/owner/repo/pull/99"; return 0; fi
+    if [[ "$1" == "label" && "$2" == "list" ]]; then echo "quality-gates-failed"; return 0; fi
     if [[ "$1" == "pr" && "$2" == "edit" && "$*" == *"quality-gates-failed"* ]]; then PR_EDIT_LABEL_CALLED=1; return 0; fi
     return 0
 }
@@ -317,6 +318,28 @@ unset -f gh git
 RALPH_PR_PUSH_CAPABLE="false"
 RALPH_PR_GH_CAPABLE="false"
 rm -rf "$WT_DIR4"
+
+# Test: _pr_ensure_label auto-creates label when it doesn't exist
+LABEL_CREATE_CALLED=0
+gh() {
+    if [[ "$1" == "label" && "$2" == "list" ]]; then echo "bug"; return 0; fi  # label NOT in list
+    if [[ "$1" == "label" && "$2" == "create" && "$*" == *"quality-gates-failed"* ]]; then LABEL_CREATE_CALLED=1; return 0; fi
+    return 0
+}
+_pr_ensure_label "quality-gates-failed" "d93f0b" "test description"
+run_test "_pr_ensure_label creates missing label" "1" "$LABEL_CREATE_CALLED"
+unset -f gh
+
+# Test: _pr_ensure_label skips creation when label already exists
+LABEL_CREATE_CALLED=0
+gh() {
+    if [[ "$1" == "label" && "$2" == "list" ]]; then echo "quality-gates-failed"; return 0; fi
+    if [[ "$1" == "label" && "$2" == "create" ]]; then LABEL_CREATE_CALLED=1; return 0; fi
+    return 0
+}
+_pr_ensure_label "quality-gates-failed" "d93f0b" "test description"
+run_test "_pr_ensure_label skips creation for existing label" "0" "$LABEL_CREATE_CALLED"
+unset -f gh
 
 # ── worktree_fallback_branch_pr ───────────────────────────────────────────────
 
