@@ -30,6 +30,31 @@ _pr_warn_block() {
     echo "╚══════════════════════════════════════════════════════╝"
 }
 
+# ── _pr_ensure_label ──────────────────────────────────────────────────────────
+# Ensures a GitHub label exists in the repo, creating it if missing.
+# Args: $1=label_name  $2=color (hex without #, default: "d93f0b")
+#       $3=description (optional)
+# Returns: 0 if label exists or was created; 1 on failure.
+_pr_ensure_label() {
+    local label_name="$1"
+    local color="${2:-d93f0b}"
+    local description="${3:-}"
+
+    # Check if label already exists
+    if gh label list --limit 200 2>/dev/null | grep -qF "$label_name"; then
+        return 0
+    fi
+
+    # Create the label
+    local create_args=(--name "$label_name" --color "$color")
+    [[ -n "$description" ]] && create_args+=(--description "$description")
+    if gh label create "${create_args[@]}" 2>/dev/null; then
+        log_status "INFO" "Created label '$label_name' in repo"
+        return 0
+    fi
+    return 1
+}
+
 # ── _pr_remote_to_web_url ────────────────────────────────────────────────────
 # Normalises git remote URL → HTTPS web base URL for browser links.
 # Handles HTTPS, SSH (git@), and embedded credentials in URL.
@@ -334,8 +359,9 @@ worktree_commit_and_pr() {
 
     # ── Step 4: Add failure label ────────────────────────────────────────────
     if [[ "$gate_passed" == "false" && "$RALPH_PR_GH_CAPABLE" == "true" ]]; then
+        _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
         gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
-            || log_status "WARN" "Could not add 'quality-gates-failed' label (may not exist in repo)"
+            || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
     fi
 
     return 0
@@ -452,8 +478,9 @@ worktree_fallback_branch_pr() {
 
     # ── Step 7: Add failure label ─────────────────────────────────────────────
     if [[ "$gate_passed" == "false" && "$RALPH_PR_GH_CAPABLE" == "true" ]]; then
+        _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
         gh pr edit "$FALLBACK_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
-            || log_status "WARN" "Could not add 'quality-gates-failed' label (may not exist in repo)"
+            || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
     fi
 
     return 0

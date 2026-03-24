@@ -1040,10 +1040,12 @@ main() {
                 worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "false" "1" || pr_result=$?
             fi
             worktree_cleanup "false"
-            if [[ $pr_result -eq 0 && $gate_result -eq 0 ]]; then
-                [[ -n "$picked_line_num" ]] && mark_fix_plan_complete "$RALPH_DIR/fix_plan.md" "$picked_line_num"
-            else
+            if [[ $pr_result -ne 0 ]]; then
                 log_status "ERROR" "PR workflow failed. Branch preserved: $wt_branch_for_log"
+            elif [[ $gate_result -ne 0 ]]; then
+                log_status "WARN" "Quality gates failed but PR created with failure details. Branch: $wt_branch_for_log"
+            else
+                [[ -n "$picked_line_num" ]] && mark_fix_plan_complete "$RALPH_DIR/fix_plan.md" "$picked_line_num"
             fi
         fi
 
