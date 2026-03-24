@@ -14,7 +14,10 @@
 #
 # Version: 0.2.0
 
-set -e
+# Note: set -e intentionally NOT used — see Issue #208.
+# set -e causes silent script death in pipelines, command substitutions,
+# and piped subshells (e.g., cleanup prompt injection, quality gate checks).
+# Errors are handled explicitly throughout the script.
 
 # Source library components (shared with Claude version)
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
@@ -28,9 +31,11 @@ source "$RALPH_ROOT/lib/task_sources.sh"
 source "$SCRIPT_DIR/lib/codex_adapter.sh"
 source "$SCRIPT_DIR/lib/worktree_manager.sh"
 source "$RALPH_ROOT/lib/parallel_spawn.sh"
+source "$RALPH_ROOT/lib/pr_manager.sh"
 
 # Configuration
 RALPH_DIR=".ralph"
+RALPH_ENGINE="codex"           # identifier used by pr_manager.sh
 PROMPT_FILE="$RALPH_DIR/PROMPT.md"
 LOG_DIR="$RALPH_DIR/logs"
 DOCS_DIR="$RALPH_DIR/docs/generated"
@@ -42,6 +47,7 @@ TIMESTAMP_FILE="$RALPH_DIR/.last_reset"
 USE_TMUX=false
 LIVE_OUTPUT=false
 PARALLEL_COUNT=0
+PARALLEL_BG=false
 SLEEP_DURATION=3600
 
 # Save environment variable state BEFORE setting defaults
@@ -65,6 +71,8 @@ CODEX_TIMEOUT_MINUTES="${CODEX_TIMEOUT_MINUTES:-30}"
 CODEX_USE_CONTINUE="${CODEX_USE_CONTINUE:-true}"
 CODEX_AUTO_EXIT="${CODEX_AUTO_EXIT:-true}"  # true = use -p flag (auto-exit), false = interactive
 MAX_LOOPS="${MAX_LOOPS:-0}"  # 0 = unlimited
+QG_RETRY_COUNT=0
+MAX_QG_RETRIES="${MAX_QG_RETRIES:-3}"
 
 # Session management
 CODEX_SESSION_EXPIRY_HOURS="${CODEX_SESSION_EXPIRY_HOURS:-24}"
@@ -611,28 +619,15 @@ You are operating inside an **isolated git worktree**.
         echo ""
         echo -e "${PURPLE}━━━━━━━━━━━━━━━━ End of Session ━━━━━━━━━━━━━━━━━━━${NC}"
 
-        # If CODEX_AUTO_EXIT=false and worktree is enabled, inject cleanup prompt
+        # After interactive Codex session completes in worktree mode,
+        # print a notice. Ralph's post-loop code handles auto-commit,
+        # push, PR creation, and worktree cleanup automatically.
         if [[ "$CODEX_AUTO_EXIT" == "false" && "$WORKTREE_ENABLED" == "true" && "$exit_code" -eq 0 ]]; then
-            log_status "INFO" "Injecting worktree cleanup prompt to Codex..."
             echo ""
-            echo -e "${YELLOW}━━━━━━━━━━━━━━━━ Worktree Cleanup Phase ━━━━━━━━━━━━━━━━${NC}"
-            
-            # Create cleanup prompt
-            local cleanup_prompt="Task complete. Now perform git worktree cleanup:
-
-1. Review all changes in the current worktree
-2. If there are uncommitted changes, commit them with a descriptive message
-3. Run quality checks: \`npm test\` and \`npm run lint\` (or equivalent for this project)
-4. If all checks pass, merge this worktree branch into the main branch using the squash strategy
-5. After successful merge, delete this worktree
-6. Clean up any other stale worktrees that have no uncommitted changes
-
-After completing these steps, type 'exit' to end the session."
-
-            # Inject cleanup prompt into Codex
-            echo "$cleanup_prompt" | (cd "$work_dir" && "${CODEX_CMD_ARGS[@]}")
-            echo ""
-            echo -e "${PURPLE}━━━━━━━━━━━━━━━━ Cleanup Complete ━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━ Post-Session ━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BLUE}Ralph will now auto-commit any remaining changes,${NC}"
+            echo -e "${BLUE}push the branch, and open a pull request.${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         fi
     else
         # Background mode: non-interactive (-p flag), output to file
@@ -899,6 +894,9 @@ main() {
         fi
     fi
 
+    # Run PR preflight checks once before entering the loop
+    pr_preflight_check
+
     log_status "INFO" "Starting main loop..."
 
     while true; do
@@ -960,10 +958,12 @@ main() {
         local picked_line_num=""
         local picked_bead_id=""
         local task_info=""
+        local picked_task_name=""
         if task_info=$(pick_next_task "$RALPH_DIR/fix_plan.md"); then
             picked_task_id=$(echo "$task_info" | cut -d'|' -f1)
             picked_line_num=$(echo "$task_info" | cut -d'|' -f2)
             picked_bead_id=$(echo "$task_info" | cut -d'|' -f3)
+            picked_task_name=$(sed -n "${picked_line_num}p" "$RALPH_DIR/fix_plan.md" 2>/dev/null | sed 's/.*\[.\] //' | tr -d '\n' || echo "")
 
             log_status "SUCCESS" "Picked and locked task: $picked_task_id (line $picked_line_num)"
 
@@ -986,12 +986,19 @@ main() {
         local work_dir
         work_dir="$(pwd)"
         if [[ "$WORKTREE_ENABLED" == "true" ]]; then
-            local wt_task_id="${picked_task_id:-loop-${loop_count}-$(date +%s)}"
-            if worktree_create "$loop_count" "$wt_task_id" > /dev/null; then
+            if worktree_is_active; then
+                # QG retry — reuse existing worktree (do not create a new one)
                 work_dir="$(worktree_get_path)"
-                log_status "SUCCESS" "Worktree: $work_dir (branch: $(worktree_get_branch))"
+                log_status "INFO" "QG retry #${QG_RETRY_COUNT}: reusing worktree $work_dir (branch: $(worktree_get_branch))"
             else
-                log_status "WARN" "Worktree creation failed, using main directory"
+                QG_RETRY_COUNT=0   # reset counter when starting fresh with a new worktree
+                local wt_task_id="${picked_task_id:-loop-${loop_count}-$(date +%s)}"
+                if worktree_create "$loop_count" "$wt_task_id" > /dev/null; then
+                    work_dir="$(worktree_get_path)"
+                    log_status "SUCCESS" "Worktree: $work_dir (branch: $(worktree_get_branch))"
+                else
+                    log_status "WARN" "Worktree creation failed, using main directory"
+                fi
             fi
         fi
 
@@ -1005,7 +1012,7 @@ main() {
         local exec_result=$?
 
         if [[ $exec_result -eq 0 ]]; then
-            # Worktree: quality gates + interactive merge prompt + cleanup
+            # Worktree: quality gates + commit + push + PR + cleanup
             if [[ "$WORKTREE_ENABLED" == "true" ]] && worktree_is_active; then
                 log_status "INFO" "Running quality gates in worktree..."
                 local gate_output
@@ -1014,35 +1021,40 @@ main() {
                 while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
 
                 if [[ $gate_result -eq 0 ]]; then
+                    # Quality gates passed — commit + push + open PR
                     log_status "SUCCESS" "Quality gates passed."
-                    echo ""
-                    echo -e "${GREEN}Quality gates passed for branch: ${CYAN}$(worktree_get_branch)${NC}"
-                    echo -e "Merge into ${CYAN}$(worktree_get_main_branch)${NC}? (yes/no)"
-                    local merge_answer=""
-                    read -r merge_answer < /dev/tty 2>/dev/null || merge_answer="no"
-
-                    if [[ "$merge_answer" == "yes" ]]; then
-                        log_status "INFO" "User approved merge. Merging..."
-                        local merge_output
-                        merge_output=$(worktree_merge 2>&1)
-                        local merge_result=$?
-                        while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$merge_output"
-
-                        if [[ $merge_result -eq 0 ]]; then
-                            log_status "SUCCESS" "Merged $(worktree_get_branch) into $(worktree_get_main_branch)"
-                            worktree_cleanup "true"
-                        else
-                            log_status "ERROR" "Merge failed. Branch preserved: $(worktree_get_branch)"
-                            worktree_cleanup "false"
+                    QG_RETRY_COUNT=0
+                    local wt_branch_for_log
+                    wt_branch_for_log="$(worktree_get_branch)"
+                    local pr_result=0
+                    worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "true" "$loop_count" || pr_result=$?
+                    worktree_cleanup "false"    # worktree directory removed; branch preserved as PR head
+                    if [[ $pr_result -eq 0 ]]; then
+                        if [[ -n "$picked_line_num" ]] && [[ -f "$RALPH_DIR/fix_plan.md" ]]; then
+                            mark_fix_plan_complete "$RALPH_DIR/fix_plan.md" "$picked_line_num"
                         fi
                     else
-                        log_status "INFO" "Merge skipped by user. Branch preserved: $(worktree_get_branch)"
-                        worktree_cleanup "false"
+                        log_status "ERROR" "PR workflow failed. Branch preserved for manual recovery: $wt_branch_for_log"
                     fi
                 else
-                    log_status "WARN" "Quality gates failed. Branch preserved: $(worktree_get_branch)"
-                    worktree_cleanup "false"
+                    # Quality gates failed — increment retry counter, keep worktree alive
+                    QG_RETRY_COUNT=$((QG_RETRY_COUNT + 1))
+                    log_status "WARN" "Quality gates failed (attempt $QG_RETRY_COUNT/$MAX_QG_RETRIES)."
+                    if [[ $QG_RETRY_COUNT -ge $MAX_QG_RETRIES ]]; then
+                        log_status "WARN" "Max QG retries reached. Creating PR with failure details."
+                        worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "false" "$loop_count" || true
+                        worktree_cleanup "false"    # worktree directory removed; branch preserved
+                        QG_RETRY_COUNT=0
+                    else
+                        log_status "INFO" "Keeping worktree alive for QG retry in next loop iteration."
+                        # do NOT call worktree_cleanup — worktree stays active for next iteration
+                    fi
                 fi
+            fi
+
+            # Non-worktree PR: create branch + push + PR when not using worktrees
+            if [[ "$WORKTREE_ENABLED" != "true" ]]; then
+                worktree_fallback_branch_pr "$picked_task_id" "$picked_task_name" "$loop_count" "true" || true
             fi
 
             # Beads post-sync: close completed beads
@@ -1056,7 +1068,13 @@ main() {
             update_status "$loop_count" "$(cat "$CALL_COUNT_FILE")" "completed" "success"
             sleep 5
         elif [[ $exec_result -eq 3 ]]; then
-            if worktree_is_active; then worktree_cleanup "true"; fi
+            # Circuit breaker opened — create failure PR before cleanup
+            if worktree_is_active; then
+                log_status "WARN" "Circuit breaker opened — creating failure PR before cleanup."
+                worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "false" "$loop_count" || true
+                worktree_cleanup "false"    # worktree directory removed; branch preserved
+            fi
+            QG_RETRY_COUNT=0
             reset_session "circuit_breaker_trip"
             update_status "$loop_count" "$(cat "$CALL_COUNT_FILE")" "circuit_breaker_open" "halted" "stagnation_detected"
             log_status "ERROR" "Circuit breaker has opened - halting loop"
@@ -1271,6 +1289,15 @@ while [[ $# -gt 0 ]]; do
             PARALLEL_COUNT="$2"
             shift 2
             ;;
+        --parallel-bg)
+            if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: --parallel-bg requires a positive integer (number of agents)"
+                exit 1
+            fi
+            PARALLEL_COUNT="$2"
+            PARALLEL_BG=true
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             show_help
@@ -1281,8 +1308,9 @@ done
 
 # Only execute when run directly, not when sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # If parallel mode requested, spawn iTerm windows and exit
+    # If parallel mode requested, spawn agents (iTerm tabs or background jobs)
     if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
+        # Rebuild args without --parallel N / --parallel-bg N
         passthrough_args=()
         skip_next=false
         for arg in "${_RALPH_ORIGINAL_ARGS[@]}"; do
@@ -1290,12 +1318,13 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 skip_next=false
                 continue
             fi
-            if [[ "$arg" == "--parallel" ]]; then
+            if [[ "$arg" == "--parallel" || "$arg" == "--parallel-bg" ]]; then
                 skip_next=true
                 continue
             fi
             passthrough_args+=("$arg")
         done
+        export PARALLEL_BG
         spawn_parallel_agents "$PARALLEL_COUNT" ralph-codex "${passthrough_args[@]}"
         exit $?
     fi

@@ -48,9 +48,13 @@ alias rpx.wt.nogate='ralph-codex --quality-gates none'
 alias rpx.autoexit='ralph-codex --codex-auto-exit'
 alias rpx.int='ralph-codex --no-codex-auto-exit'
 
-# Parallel mode (spawns N iTerm2 windows in int mode)
+# Parallel mode (spawns N agents: iTerm2 tabs from iTerm, IDE terminal tabs from Windsurf/VS Code/Cursor)
 # Usage: rpx.int.p 3  -> spawns 3 parallel codex agents
 rpx.int.p() { ralph-codex --no-codex-auto-exit --parallel "${1:?Usage: rpx.int.p <number>}"; }
+
+# Parallel background mode (spawns N agents as background processes in any terminal)
+# Usage: rpx.int.p.b 3  -> spawns 3 parallel codex agents in background
+rpx.int.p.b() { ralph-codex --no-codex-auto-exit --parallel-bg "${1:?Usage: rpx.int.p.b <number>}"; }
 
 # Combined common workflows
 alias rpx.dev='ralph-codex --live --monitor --verbose'

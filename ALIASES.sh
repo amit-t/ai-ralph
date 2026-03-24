@@ -47,9 +47,13 @@ alias rpc.wt.full='ralph --live --monitor --merge-strategy squash --quality-gate
 # Interactive mode
 alias rpc.int='ralph --live --monitor'
 
-# Parallel mode (spawns N iTerm2 windows in int mode)
+# Parallel mode (spawns N agents: iTerm2 tabs from iTerm, IDE terminal tabs from Windsurf/VS Code/Cursor)
 # Usage: rpc.int.p 3  -> spawns 3 parallel ralph agents
 rpc.int.p() { ralph --live --monitor --parallel "${1:?Usage: rpc.int.p <number>}"; }
+
+# Parallel background mode (spawns N agents as background processes in any terminal)
+# Usage: rpc.int.p.b 3  -> spawns 3 parallel ralph agents in background
+rpc.int.p.b() { ralph --live --monitor --parallel-bg "${1:?Usage: rpc.int.p.b <number>}"; }
 
 # Combined common workflows
 alias rpc.dev='ralph --live --monitor --verbose'
@@ -63,6 +67,7 @@ alias rpc.uninstall='(cd ~/Projects/Tools-Utilities/ai-ralph && ./uninstall.sh)'
 
 # Planning mode (AI-powered, always uses claude engine)
 alias rpc.plan='ralph-plan'
+alias rpc.plan.sup='ralph-plan --yolo --superpowers'
 
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'
@@ -72,3 +77,5 @@ alias ralph.migrate='ralph-migrate'
 alias ralph.import='ralph-import'
 alias ralph.check.beads='ralph-check-beads'
 alias ralph.plan='ralph-plan'
+
+alias rp.install="rpc.install;rpd.install;rpx.install"

@@ -49,9 +49,13 @@ alias rpd.wt.nogate='ralph-devin --quality-gates none'
 alias rpd.autoexit='ralph-devin --devin-auto-exit'
 alias rpd.int='ralph-devin --no-devin-auto-exit'
 
-# Parallel mode (spawns N iTerm2 windows in int mode)
+# Parallel mode (spawns N agents: iTerm2 tabs from iTerm, IDE terminal tabs from Windsurf/VS Code/Cursor)
 # Usage: rpd.int.p 3  -> spawns 3 parallel devin agents
 rpd.int.p() { ralph-devin --no-devin-auto-exit --parallel "${1:?Usage: rpd.int.p <number>}"; }
+
+# Parallel background mode (spawns N agents as background processes in any terminal)
+# Usage: rpd.int.p.b 3  -> spawns 3 parallel devin agents in background
+rpd.int.p.b() { ralph-devin --no-devin-auto-exit --parallel-bg "${1:?Usage: rpd.int.p.b <number>}"; }
 
 # Combined common workflows
 alias rpd.dev='ralph-devin --live --monitor --verbose'

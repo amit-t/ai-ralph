@@ -97,9 +97,11 @@ create_install_dirs() {
     log "INFO" "Creating installation directories..."
 
     mkdir -p "$INSTALL_DIR"
+    mkdir -p "$RALPH_HOME/lib"
+    mkdir -p "$RALPH_HOME/templates"
     mkdir -p "$DEVIN_HOME/lib"
 
-    log "SUCCESS" "Directories created: $INSTALL_DIR, $DEVIN_HOME"
+    log "SUCCESS" "Directories created: $INSTALL_DIR, $RALPH_HOME/lib, $DEVIN_HOME"
 }
 
 # Install Devin-specific scripts
@@ -226,17 +228,17 @@ install_shared_libs() {
         "lib/enable_core.sh"
         "lib/wizard_utils.sh"
         "lib/task_sources.sh"
+        "lib/parallel_spawn.sh"
+        "lib/pr_manager.sh"
     )
 
     for lib in "${shared_libs[@]}"; do
-        if [[ ! -f "$RALPH_HOME/$lib" ]]; then
-            if [[ -f "$RALPH_ROOT/$lib" ]]; then
-                cp "$RALPH_ROOT/$lib" "$RALPH_HOME/$lib"
-                chmod +x "$RALPH_HOME/$lib"
-                log "INFO" "Copied shared library: $lib"
-            else
-                log "WARN" "Shared library not found: $lib (run main install.sh if needed)"
-            fi
+        if [[ -f "$RALPH_ROOT/$lib" ]]; then
+            cp "$RALPH_ROOT/$lib" "$RALPH_HOME/$lib"
+            chmod +x "$RALPH_HOME/$lib"
+            log "INFO" "Updated shared library: $lib"
+        else
+            log "WARN" "Shared library not found: $lib (run main install.sh if needed)"
         fi
     done
 
