@@ -1,1166 +1,802 @@
-# Ralph for Claude Code
+# AI Ralph
 
-[![CI](https://github.com/frankbria/ralph-claude-code/actions/workflows/test.yml/badge.svg)](https://github.com/frankbria/ralph-claude-code/actions/workflows/test.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.11.5-blue)
-![Tests](https://img.shields.io/badge/tests-556%20passing-green)
-[![GitHub Issues](https://img.shields.io/github/issues/frankbria/ralph-claude-code)](https://github.com/frankbria/ralph-claude-code/issues)
-[![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge.svg)](https://github.com/hesreallyhim/awesome-claude-code)
-[![Follow on X](https://img.shields.io/twitter/follow/FrankBria18044?style=social)](https://x.com/FrankBria18044)
+> **Multi-engine autonomous AI development loop** -- Devin, Claude Code, and Codex under one roof.
 
-> **Autonomous AI development loop with intelligent exit detection and rate limiting**
+Ralph is an autonomous development loop system inspired by [Geoffrey Huntley's Ralph technique](https://ghuntley.com/ralph/). It wraps AI coding agents in a persistent bash loop with intelligent exit detection, circuit breakers, rate limiting, git worktree isolation, and automatic PR creation -- so you can kick off a task and walk away.
 
-Ralph is an implementation of the Geoffrey Huntley's technique for Claude Code that enables continuous autonomous development cycles he named after [Ralph Wiggum](https://ghuntley.com/ralph/). It enables continuous autonomous development cycles where Claude Code iteratively improves your project until completion, with built-in safeguards to prevent infinite loops and API overuse.
-
-**Install once, use everywhere** - Ralph becomes a global command available in any directory.
+This project is a fork of [frankbria/ralph-claude-code](https://github.com/frankbria/ralph-claude-code) extended with first-class **Devin CLI** and **Codex CLI** support, parallel agent spawning, interactive TUI mode, automatic PR workflows, and 150+ shell aliases for rapid operation.
 
 ## Project Status
 
-**Version**: v0.11.5 - Active Development
-**Core Features**: Working and tested
-**Test Coverage**: 566 tests, 100% pass rate
+| | |
+|---|---|
+| **Repo** | [amit-t/ai-ralph](https://github.com/amit-t/ai-ralph) |
+| **Upstream** | [frankbria/ralph-claude-code](https://github.com/frankbria/ralph-claude-code) |
+| **Engines** | Devin CLI, Claude Code, Codex CLI |
+| **Architecture** | Single-run per loop iteration, git worktree isolation, auto-PR |
+| **Status** | Active development |
 
-### What's Working Now
-- Autonomous development loops with intelligent exit detection
-- **Dual-condition exit gate**: Requires BOTH completion indicators AND explicit EXIT_SIGNAL
-- Rate limiting with hourly reset (100 calls/hour, configurable)
-- Circuit breaker with advanced error detection (prevents runaway loops)
-- Response analyzer with semantic understanding and two-stage error filtering
-- **JSON output format support with automatic fallback to text parsing**
-- **Session continuity with `--resume` flag for context preservation (no session hijacking)**
-- **Session expiration with configurable timeout (default: 24 hours)**
-- **Modern CLI flags: `--output-format`, `--allowed-tools`, `--no-continue`**
-- **Interactive project enablement with `ralph-enable` wizard**
-- **`.ralphrc` configuration file for project settings**
-- **Live streaming output with `--live` flag for real-time Claude Code visibility**
-- Multi-line error matching for accurate stuck loop detection
-- 5-hour API limit handling with user prompts
-- tmux integration for live monitoring
-- PRD import functionality
-- **CI/CD pipeline with GitHub Actions**
-- **Dedicated uninstall script for clean removal**
+### What this fork adds over upstream
 
-### Recent Improvements
+- **Devin CLI engine** (`ralph-devin`, `rpd.*` aliases) with cloud session polling, ACU limits, and parallel agent spawning
+- **Codex CLI engine** (`ralph-codex`, `rpx.*` aliases) with GPT-4/Claude model selection
+- **Single-run architecture** -- each loop iteration is one agent invocation (no inner while-loop)
+- **Git worktree isolation** -- each loop runs on a dedicated branch; changes merge back only after quality gates pass
+- **Automatic PR creation** via `lib/pr_manager.sh` with quality-gate labels
+- **Parallel agent spawning** via `lib/parallel_spawn.sh` (iTerm2 tabs, IDE terminals, or background processes)
+- **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
+- **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
+- **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
 
-**v0.11.5 - Community Bug Fixes** (latest)
-- Fixed API limit false positive: Timeout (exit code 124) no longer misidentified as API 5-hour limit (#183)
-- Three-layer API limit detection: timeout guard → structural JSON (`rate_limit_event`) → filtered text fallback
-- Unattended mode: API limit prompt now auto-waits on timeout instead of exiting
-- Fixed bash 3.x compatibility: `${,,}` lowercase substitution replaced with POSIX `tr` (#187)
-- Added 8 new tests for API limit detection (548 → 566 tests)
+---
 
-**v0.11.4 - Bug Fixes & Compatibility**
-- Fixed progress detection: Git commits within a loop now count as progress (#141)
-- Fixed checkbox regex: Date entries `[2026-01-29]` no longer counted as checkboxes (#144)
-- Fixed session hijacking: Use `--resume <session_id>` instead of `--continue` (#151)
-- Fixed EXIT_SIGNAL override: `STATUS: COMPLETE` with `EXIT_SIGNAL: false` now continues working (#146)
-- Fixed ralph-import hanging indefinitely (added `--print` flag for non-interactive mode)
-- Fixed ralph-import absolute path handling
-- Fixed cross-platform date commands for macOS with Homebrew coreutils
-- Added configurable circuit breaker thresholds via environment variables (#99)
-- Added tmux support for non-zero `base-index` configurations
-- Added 13 new regression tests for progress detection and checkbox regex
+## Table of Contents
 
-**v0.11.3 - Live Streaming & Beads Fix**
-- Added live streaming output mode with `--live` flag for real-time Claude Code visibility (#125)
-- Fixed beads task import using correct `bd list` arguments (#150)
-- Applied CodeRabbit review fixes: camelCase variables, status-respecting fallback, jq guards
-- Added 12 new tests for live streaming and beads import improvements
+- [Installation](#installation)
+- [Enabling Ralph in a Project](#enabling-ralph-in-a-project)
+- [Quick Start](#quick-start)
+- [Aliases Reference](#aliases-reference)
+  - [Devin Aliases (rpd)](#devin-aliases-rpd)
+  - [Claude Code Aliases (rpc)](#claude-code-aliases-rpc)
+  - [Codex Aliases (rpx)](#codex-aliases-rpx)
+  - [Shared Aliases](#shared-aliases)
+- [Commands Reference](#commands-reference)
+- [Configuration](#configuration)
+- [How It Works](#how-it-works)
+- [System Requirements](#system-requirements)
+- [Uninstalling](#uninstalling)
 
-**v0.11.2 - Setup Permissions Fix**
-- Fixed issue #136: `ralph-setup` now creates `.ralphrc` with consistent tool permissions
-- Updated default `ALLOWED_TOOLS` to include `Edit`, `Bash(npm *)`, and `Bash(pytest)`
-- Both `ralph-setup` and `ralph-enable` now create identical `.ralphrc` configurations
-- Monitor now forwards all CLI parameters to inner ralph loop (#126)
-- Added 16 new tests for permissions and parameter forwarding
+---
 
-**v0.11.1 - Completion Indicators Fix**
-- Fixed premature exit after exactly 5 loops in JSON output mode
-- `completion_indicators` now only accumulates when `EXIT_SIGNAL: true`
-- Aligns with documented dual-condition exit gate behavior
+## Installation
 
-**v0.11.0 - Ralph Enable Wizard**
-- Added `ralph-enable` interactive wizard for enabling Ralph in existing projects
-- 5-phase wizard: Environment Detection → Task Source Selection → Configuration → File Generation → Verification
-- Auto-detects project type (TypeScript, Python, Rust, Go) and framework (Next.js, FastAPI, Django)
-- Imports tasks from beads, GitHub Issues, or PRD documents
-- Added `ralph-enable-ci` non-interactive version for CI/automation
-- New library components: `enable_core.sh`, `wizard_utils.sh`, `task_sources.sh`
+Ralph has a **base install** (Claude Code engine) plus **optional engine installs** for Devin and Codex.
 
-**v0.10.1 - Bug Fixes & Monitor Path Corrections**
-- Fixed `ralph_monitor.sh` hardcoded paths for v0.10.0 compatibility
-- Fixed EXIT_SIGNAL parsing in JSON format
-- Added safety circuit breaker (force exit after 5 consecutive completion indicators)
-- Fixed checkbox parsing for indented markdown
-
-**v0.10.0 - .ralph/ Subfolder Structure (BREAKING CHANGE)**
-- **Breaking**: Moved all Ralph-specific files to `.ralph/` subfolder
-- Project root stays clean: only `src/`, `README.md`, and user files remain
-- Added `ralph-migrate` command for upgrading existing projects
-
-<details>
-<summary>Earlier versions (v0.9.x)</summary>
-
-**v0.9.9 - EXIT_SIGNAL Gate & Uninstall Script**
-- Fixed premature exit bug: completion indicators now require Claude's explicit `EXIT_SIGNAL: true`
-- Added dedicated `uninstall.sh` script for clean Ralph removal
-
-**v0.9.8 - Modern CLI for PRD Import**
-- Modernized `ralph_import.sh` to use Claude Code CLI JSON output format
-- Enhanced error handling with structured JSON error messages
-
-**v0.9.7 - Session Lifecycle Management**
-- Complete session lifecycle management with automatic reset triggers
-- Added `--reset-session` CLI flag for manual session reset
-
-**v0.9.6 - JSON Output & Session Management**
-- Extended `parse_json_response()` to support Claude Code CLI JSON format
-- Added session management functions
-
-**v0.9.5 - v0.9.0** - PRD import tests, project setup tests, installation tests, prompt file fix, modern CLI commands, circuit breaker enhancements
-
-</details>
-
-### In Progress
-- Expanding test coverage
-- Log rotation functionality
-- Dry-run mode
-- Metrics and analytics tracking
-- Desktop notifications
-- Git backup and rollback system
-- [Automated badge updates](#138)
-
-**Timeline to v1.0**: ~4 weeks | [Full roadmap](IMPLEMENTATION_PLAN.md) | **Contributions welcome!**
-
-## Features
-
-- **Autonomous Development Loop** - Continuously executes Claude Code with your project requirements
-- **Intelligent Exit Detection** - Dual-condition check requiring BOTH completion indicators AND explicit EXIT_SIGNAL
-- **Session Continuity** - Preserves context across loop iterations with automatic session management
-- **Session Expiration** - Configurable timeout (default: 24 hours) with automatic session reset
-- **Rate Limiting** - Built-in API call management with hourly limits and countdown timers
-- **5-Hour API Limit Handling** - Three-layer detection (timeout guard, JSON parsing, filtered text) with auto-wait for unattended mode
-- **Live Monitoring** - Real-time dashboard showing loop status, progress, and logs
-- **Task Management** - Structured approach with prioritized task lists and progress tracking
-- **Project Templates** - Quick setup for new projects with best-practice structure
-- **Interactive Project Setup** - `ralph-enable` wizard for existing projects with task import
-- **Configuration Files** - `.ralphrc` for project-specific settings and tool permissions
-- **Comprehensive Logging** - Detailed execution logs with timestamps and status tracking
-- **Configurable Timeouts** - Set execution timeout for Claude Code operations (1-120 minutes)
-- **Verbose Progress Mode** - Optional detailed progress updates during execution
-- **Response Analyzer** - AI-powered analysis of Claude Code responses with semantic understanding
-- **Circuit Breaker** - Advanced error detection with two-stage filtering, multi-line error matching, and automatic recovery
-- **CI/CD Integration** - GitHub Actions workflow with automated testing
-- **Clean Uninstall** - Dedicated uninstall script for complete removal
-- **Live Streaming Output** - Real-time visibility into Claude Code execution with `--live` flag
-
-## Quick Start
-
-Ralph has two phases: **one-time installation** and **per-project setup**.
-
-```
-INSTALL ONCE              USE MANY TIMES
-+-----------------+          +----------------------+
-| ./install.sh    |    ->    | ralph-setup project1 |
-|                 |          | ralph-enable         |
-| Adds global     |          | ralph-import prd.md  |
-| commands        |          | ...                  |
-+-----------------+          +----------------------+
-```
-
-### Phase 1: Install Ralph (One Time Only)
-
-Install Ralph globally on your system:
+### Step 1 -- Clone this repo
 
 ```bash
-git clone https://github.com/frankbria/ralph-claude-code.git
-cd ralph-claude-code
+git clone git@github.com:amit-t/ai-ralph.git
+cd ai-ralph
+```
+
+### Step 2 -- Install base Ralph (Claude Code engine)
+
+```bash
 ./install.sh
 ```
 
-This adds `ralph`, `ralph-monitor`, `ralph-setup`, `ralph-import`, `ralph-migrate`, `ralph-enable`, `ralph-enable-ci`, and `ralph-check-beads` commands to your PATH.
+This installs global commands to `~/.local/bin/`:
 
-> **Note**: You only need to do this once per system. After installation, you can delete the cloned repository if desired.
+| Command | Description |
+|---|---|
+| `ralph` | Main autonomous loop (Claude Code) |
+| `ralph-monitor` | Live tmux monitoring dashboard |
+| `ralph-setup` | Create a new Ralph project from scratch |
+| `ralph-enable` | Interactive wizard to enable Ralph in an existing project |
+| `ralph-enable-ci` | Non-interactive enable for CI/automation |
+| `ralph-import` | Convert a PRD/spec document into a Ralph project |
+| `ralph-migrate` | Migrate old flat-structure projects to `.ralph/` subfolder |
+| `ralph-plan` | AI-powered planning mode (builds `fix_plan.md` from PRDs) |
+| `ralph-check-beads` | Diagnostic tool for beads integration |
 
-### Phase 2: Initialize Projects (Per Project)
+> Make sure `~/.local/bin` is in your `PATH`. Add `export PATH="$HOME/.local/bin:$PATH"` to your shell profile if needed.
 
-#### Option A: Enable Ralph in Existing Project (Recommended)
+### Step 3 -- Install Devin engine (recommended)
+
 ```bash
-cd my-existing-project
-
-# Interactive wizard - auto-detects project type and imports tasks
-ralph-enable
-
-# Or with specific task source
-ralph-enable --from beads
-ralph-enable --from github --label "sprint-1"
-ralph-enable --from prd ./docs/requirements.md
-
-# Start autonomous development
-ralph --monitor
+./devin/install_devin.sh
 ```
 
-#### Option B: Import Existing PRD/Specifications
+This adds:
+
+| Command | Description |
+|---|---|
+| `ralph-devin` | Main autonomous loop (Devin CLI) |
+| `ralph-devin-monitor` | Devin monitoring dashboard |
+| `ralph-devin-setup` | Create a new project configured for Devin |
+| `ralph-devin-enable` | Enable Ralph+Devin in an existing project |
+| `ralph-devin-enable-ci` | Non-interactive enable for Devin |
+| `ralph-devin-import` | Convert PRD for Devin |
+
+### Step 4 -- Install Codex engine (optional)
+
 ```bash
-# Convert existing PRD/specs to Ralph format
-ralph-import my-requirements.md my-project
+./codex/install_codex.sh
+```
+
+This adds:
+
+| Command | Description |
+|---|---|
+| `ralph-codex` | Main autonomous loop (Codex CLI) |
+| `ralph-codex-monitor` | Codex monitoring dashboard |
+| `ralph-codex-setup` | Create a new project configured for Codex |
+| `ralph-codex-enable` | Enable Ralph+Codex in an existing project |
+| `ralph-codex-enable-ci` | Non-interactive enable for Codex |
+| `ralph-codex-import` | Convert PRD for Codex |
+
+### Install all engines at once
+
+If you have the aliases loaded, you can reinstall everything with:
+
+```bash
+rp.install   # runs install.sh + devin/install_devin.sh + codex/install_codex.sh
+```
+
+### Load aliases
+
+Add one or more of these to your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+source ~/Projects/Tools-Utilities/ai-ralph/ALIASES.sh          # rpc.* aliases (Claude)
+source ~/Projects/Tools-Utilities/ai-ralph/devin/ALIASES.sh    # rpd.* aliases (Devin)
+source ~/Projects/Tools-Utilities/ai-ralph/codex/ALIASES.sh    # rpx.* aliases (Codex)
+```
+
+Then `source ~/.zshrc` (or restart your terminal).
+
+---
+
+## Enabling Ralph in a Project
+
+Before running Ralph in any project, you need to enable it. This creates a `.ralph/` directory with configuration files.
+
+### Option A -- Interactive wizard (recommended)
+
+```bash
 cd my-project
 
-# Review and adjust the generated files:
-# - .ralph/PROMPT.md (Ralph instructions)
-# - .ralph/fix_plan.md (task priorities)
-# - .ralph/specs/requirements.md (technical specs)
+# For Devin:
+ralph-devin-enable
 
-# Start autonomous development
-ralph --monitor
-```
-
-#### Option C: Create New Project from Scratch
-```bash
-# Create blank Ralph project
-ralph-setup my-awesome-project
-cd my-awesome-project
-
-# Configure your project requirements manually
-# Edit .ralph/PROMPT.md with your project goals
-# Edit .ralph/specs/ with detailed specifications
-# Edit .ralph/fix_plan.md with initial priorities
-
-# Start autonomous development
-ralph --monitor
-```
-
-### Ongoing Usage (After Setup)
-
-Once Ralph is installed and your project is initialized:
-
-```bash
-# Navigate to any Ralph project and run:
-ralph --monitor              # Integrated tmux monitoring (recommended)
-
-# Or use separate terminals:
-ralph                        # Terminal 1: Ralph loop
-ralph-monitor               # Terminal 2: Live monitor dashboard
-```
-
-### Uninstalling Ralph
-
-To completely remove Ralph from your system:
-
-```bash
-# Run the uninstall script
-./uninstall.sh
-
-# Or if you deleted the repo, download and run:
-curl -sL https://raw.githubusercontent.com/frankbria/ralph-claude-code/main/uninstall.sh | bash
-```
-
-## Understanding Ralph Files
-
-After running `ralph-enable` or `ralph-import`, you'll have a `.ralph/` directory with several files. Here's what each file does and whether you need to edit it:
-
-| File | Auto-Generated? | You Should... |
-|------|-----------------|---------------|
-| `.ralph/PROMPT.md` | Yes (smart defaults) | **Review & customize** project goals and principles |
-| `.ralph/fix_plan.md` | Yes (can import tasks) | **Add/modify** specific implementation tasks |
-| `.ralph/AGENT.md` | Yes (detects build commands) | Rarely edit (auto-maintained by Ralph) |
-| `.ralph/specs/` | Empty directory | Add files when PROMPT.md isn't detailed enough |
-| `.ralph/specs/stdlib/` | Empty directory | Add reusable patterns and conventions |
-| `.ralphrc` | Yes (project-aware) | Rarely edit (sensible defaults) |
-
-### Key File Relationships
-
-```
-PROMPT.md (high-level goals)
-    ↓
-specs/ (detailed requirements when needed)
-    ↓
-fix_plan.md (specific tasks Ralph executes)
-    ↓
-AGENT.md (build/test commands - auto-maintained)
-```
-
-### When to Use specs/
-
-- **Simple projects**: PROMPT.md + fix_plan.md is usually enough
-- **Complex features**: Add specs/feature-name.md for detailed requirements
-- **Team conventions**: Add specs/stdlib/convention-name.md for reusable patterns
-
-See the [User Guide](docs/user-guide/) for detailed explanations and the [examples/](examples/) directory for realistic project configurations.
-
-## How It Works
-
-Ralph operates on a simple but powerful cycle:
-
-1. **Read Instructions** - Loads `PROMPT.md` with your project requirements
-2. **Execute Claude Code** - Runs Claude Code with current context and priorities
-3. **Track Progress** - Updates task lists and logs execution results
-4. **Evaluate Completion** - Checks for exit conditions and project completion signals
-5. **Repeat** - Continues until project is complete or limits are reached
-
-### Intelligent Exit Detection
-
-Ralph uses a **dual-condition check** to prevent premature exits during productive iterations:
-
-**Exit requires BOTH conditions:**
-1. `completion_indicators >= 2` (heuristic detection from natural language patterns)
-2. Claude's explicit `EXIT_SIGNAL: true` in the RALPH_STATUS block
-
-**Example behavior:**
-```
-Loop 5: Claude outputs "Phase complete, moving to next feature"
-        → completion_indicators: 3 (high confidence from patterns)
-        → EXIT_SIGNAL: false (Claude says more work needed)
-        → Result: CONTINUE (respects Claude's explicit intent)
-
-Loop 8: Claude outputs "All tasks complete, project ready"
-        → completion_indicators: 4
-        → EXIT_SIGNAL: true (Claude confirms done)
-        → Result: EXIT with "project_complete"
-```
-
-**Other exit conditions:**
-- All tasks in `.ralph/fix_plan.md` marked complete
-- Multiple consecutive "done" signals from Claude Code
-- Too many test-focused loops (indicating feature completeness)
-- Claude API 5-hour usage limit reached (with user prompt to wait or exit)
-
-## Enabling Ralph in Existing Projects
-
-The `ralph-enable` command provides an interactive wizard for adding Ralph to existing projects:
-
-```bash
-cd my-existing-project
+# For Claude Code:
 ralph-enable
+
+# For Codex:
+ralph-codex-enable
 ```
 
-**The wizard:**
-1. **Detects Environment** - Identifies project type (TypeScript, Python, etc.) and framework
-2. **Selects Task Sources** - Choose from beads, GitHub Issues, or PRD documents
-3. **Configures Settings** - Set tool permissions and loop parameters
-4. **Generates Files** - Creates `.ralph/` directory and `.ralphrc` configuration
-5. **Verifies Setup** - Confirms all files are created correctly
+The wizard auto-detects your project type (TypeScript, Python, Rust, Go) and framework, lets you import tasks from beads, GitHub Issues, or PRD documents, and generates all configuration files.
 
-**Non-interactive mode for CI/automation:**
-```bash
-ralph-enable-ci                              # Sensible defaults
-ralph-enable-ci --from github               # Import from GitHub Issues
-ralph-enable-ci --project-type typescript   # Override detection
-ralph-enable-ci --json                      # Machine-readable output
-```
-
-## Importing Existing Requirements
-
-Ralph can convert existing PRDs, specifications, or requirement documents into the proper Ralph format using Claude Code.
-
-### Supported Formats
-- **Markdown** (.md) - Product requirements, technical specs
-- **Text files** (.txt) - Plain text requirements
-- **JSON** (.json) - Structured requirement data
-- **Word documents** (.docx) - Business requirements
-- **PDFs** (.pdf) - Design documents, specifications
-- **Any text-based format** - Ralph will intelligently parse the content
-
-### Usage Examples
+### Option B -- Non-interactive (CI / automation)
 
 ```bash
-# Convert a markdown PRD
-ralph-import product-requirements.md my-app
+ralph-enable-ci                              # Claude, sensible defaults
+ralph-enable-ci --from github               # Import tasks from GitHub Issues
+ralph-enable-ci --from prd ./docs/spec.md   # Import from PRD
 
-# Convert a text specification
-ralph-import requirements.txt webapp
-
-# Convert a JSON API spec
-ralph-import api-spec.json backend-service
-
-# Let Ralph auto-name the project from filename
-ralph-import design-doc.pdf
+ralph-devin-enable-ci                       # Devin
+ralph-codex-enable-ci                       # Codex
 ```
 
-### What Gets Generated
+### Option C -- Import an existing PRD
 
-Ralph-import creates a complete project with:
+```bash
+ralph-import requirements.md my-project     # Claude
+ralph-devin-import requirements.md my-project   # Devin
+ralph-codex-import requirements.md my-project   # Codex
+```
 
-- **.ralph/PROMPT.md** - Converted into Ralph development instructions
-- **.ralph/fix_plan.md** - Requirements broken down into prioritized tasks
-- **.ralph/specs/requirements.md** - Technical specifications extracted from your document
-- **.ralphrc** - Project configuration file with tool permissions
-- **Standard Ralph structure** - All necessary directories and template files in `.ralph/`
+### Option D -- New project from scratch
 
-The conversion is intelligent and preserves your original requirements while making them actionable for autonomous development.
+```bash
+ralph-setup my-project           # Claude
+ralph-devin-setup my-project     # Devin
+ralph-codex-setup my-project     # Codex
+```
+
+### What gets created
+
+```
+my-project/
+├── .ralph/                 # Ralph configuration and state
+│   ├── PROMPT.md           # Main development instructions
+│   ├── fix_plan.md         # Prioritized task list
+│   ├── AGENT.md            # Build/test/run instructions (auto-maintained)
+│   ├── specs/              # Detailed specifications
+│   ├── logs/               # Execution logs
+│   └── docs/generated/     # Auto-generated docs
+├── .ralphrc                # Project config (tool permissions, loop settings)
+└── src/                    # Your source code
+```
+
+| File | You should... |
+|---|---|
+| `.ralph/PROMPT.md` | **Review and customize** -- your project goals and principles |
+| `.ralph/fix_plan.md` | **Add/modify** -- specific implementation tasks |
+| `.ralph/AGENT.md` | Rarely edit (auto-maintained by Ralph) |
+| `.ralphrc` | Rarely edit (sensible defaults) |
+
+---
+
+## Quick Start
+
+### With Devin (recommended)
+
+```bash
+cd my-project
+ralph-devin-enable           # One-time setup
+ralph-devin --monitor        # Start the loop with tmux dashboard
+
+# Or use aliases:
+rpd.hitl                     # Human-in-the-loop (live + monitor)
+rpd.dev                      # Development mode (live + monitor + verbose)
+rpd.p 3                      # Spawn 3 parallel Devin agents
+```
+
+### With Claude Code
+
+```bash
+cd my-project
+ralph-enable                 # One-time setup
+ralph --monitor              # Start the loop
+
+# Or use aliases:
+rpc.hitl                     # Human-in-the-loop (live + monitor)
+rpc.dev                      # Development mode
+```
+
+### With Codex
+
+```bash
+cd my-project
+ralph-codex-enable           # One-time setup
+ralph-codex --monitor        # Start the loop
+
+# Or use aliases:
+rpx.hitl                     # Human-in-the-loop (live + monitor)
+rpx.gpt4                     # Use GPT-4 model
+```
+
+---
+
+## Aliases Reference
+
+All aliases follow a consistent naming convention: `<prefix>.<category>.<variant>`
+
+| Prefix | Engine |
+|---|---|
+| `rpd` | Devin CLI |
+| `rpc` | Claude Code |
+| `rpx` | Codex CLI |
+
+### Devin Aliases (rpd)
+
+Source: `devin/ALIASES.sh`
+
+#### Basic Execution
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd` | `ralph-devin` | Start the Devin loop |
+| `rpd.live` | `ralph-devin --live` | Live streaming output |
+| `rpd.monitor` | `ralph-devin --monitor` | tmux monitoring dashboard |
+| `rpd.verbose` | `ralph-devin --verbose` | Verbose progress updates |
+| `rpd.hitl` | `ralph-devin --live --monitor` | Human-in-the-loop (live + monitor) |
+
+#### Session Management
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.continue` | `ralph-devin --continue` | Resume previous session |
+| `rpd.reset` | `ralph-devin --reset-session` | Reset session state |
+| `rpd.status` | `ralph-devin --status` | Show current loop status |
+
+#### Circuit Breaker
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.cb.reset` | `ralph-devin --reset-circuit` | Reset circuit breaker |
+| `rpd.cb.status` | `ralph-devin --circuit-status` | Show circuit breaker status |
+| `rpd.cb.auto` | `ralph-devin --auto-reset-circuit` | Auto-reset on startup |
+
+#### Rate Limiting
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.fast` | `ralph-devin --calls 200` | 200 calls/hour |
+| `rpd.slow` | `ralph-devin --calls 50` | 50 calls/hour |
+
+#### Model Selection
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.opus` | `ralph-devin --model opus` | Use Opus model |
+| `rpd.sonnet` | `ralph-devin --model sonnet` | Use Sonnet model |
+| `rpd.swe` | `ralph-devin --model swe` | Use SWE model |
+| `rpd.gpt` | `ralph-devin --model gpt` | Use GPT model |
+
+#### Permission Modes
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.safe` | `ralph-devin --permission-mode auto` | Safe auto-permission mode |
+| `rpd.danger` | `ralph-devin --permission-mode dangerous` | Dangerous mode (skip permissions) |
+
+#### Git Worktree
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.nowt` | `ralph-devin --no-worktree` | Disable worktree isolation |
+| `rpd.wt.squash` | `ralph-devin --merge-strategy squash` | Squash merge strategy |
+| `rpd.wt.merge` | `ralph-devin --merge-strategy merge` | Merge commit strategy |
+| `rpd.wt.rebase` | `ralph-devin --merge-strategy rebase` | Rebase strategy |
+| `rpd.wt.nogate` | `ralph-devin --quality-gates none` | Skip quality gates |
+
+#### Interactive / TUI Mode
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.int` | `ralph-devin --no-devin-auto-exit` | Interactive TUI mode (no auto-exit) |
+| `rpd.wt.int` | `ralph-devin --no-devin-auto-exit --live --monitor` | Interactive + live + monitor |
+
+#### Parallel Agents
+
+| Alias | Usage | Description |
+|---|---|---|
+| `rpd.p N` | `rpd.p 3` | Spawn N parallel agents (auto-exit) |
+| `rpd.int.p N` | `rpd.int.p 3` | Spawn N parallel agents (interactive TUI) |
+| `rpd.p.b N` | `rpd.p.b 3` | Spawn N agents as background processes |
+| `rpd.int.p.b N` | `rpd.int.p.b 3` | Spawn N interactive agents in background |
+
+#### Workflow Presets
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.dev` | `ralph-devin --live --monitor --verbose` | Development mode |
+| `rpd.prod` | `ralph-devin --calls 50 --auto-reset-circuit --permission-mode dangerous` | Production / unattended mode |
+| `rpd.wt.full` | `ralph-devin --live --monitor --merge-strategy squash --quality-gates auto` | Full worktree mode |
+
+#### Setup and Management
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.monitor` | `ralph-monitor-devin` | Launch Devin monitor |
+| `rpd.install` | *(runs install_devin.sh)* | Install/reinstall Devin engine |
+| `rpd.uninstall` | *(runs uninstall_devin.sh)* | Uninstall Devin engine |
+| `rpd.enable` | `ralph-devin-enable` | Enable Ralph+Devin in current project |
+| `rpd.plan` | `ralph-plan --engine devin` | Planning mode with Devin |
+
+---
+
+### Claude Code Aliases (rpc)
+
+Source: `ALIASES.sh`
+
+#### Basic Execution
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc` | `ralph` | Start the Claude Code loop |
+| `rpc.live` | `ralph --live` | Live streaming output |
+| `rpc.monitor` | `ralph --monitor` | tmux monitoring dashboard |
+| `rpc.verbose` | `ralph --verbose` | Verbose progress updates |
+| `rpc.hitl` | `ralph --live --monitor` | Human-in-the-loop (live + monitor) |
+
+#### Session Management
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.continue` | `ralph --continue` | Resume previous session |
+| `rpc.reset` | `ralph --reset-session` | Reset session state |
+| `rpc.status` | `ralph --status` | Show current loop status |
+
+#### Circuit Breaker
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.cb.reset` | `ralph --reset-circuit` | Reset circuit breaker |
+| `rpc.cb.status` | `ralph --circuit-status` | Show circuit breaker status |
+| `rpc.cb.auto` | `ralph --auto-reset-circuit` | Auto-reset on startup |
+
+#### Rate Limiting / Loop Control
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.fast` | `ralph --calls 200` | 200 calls/hour |
+| `rpc.slow` | `ralph --calls 50` | 50 calls/hour |
+| `rpc.test` | `ralph --max-loops 1` | Single loop iteration (test) |
+| `rpc.5` | `ralph --max-loops 5` | Run 5 loops |
+| `rpc.10` | `ralph --max-loops 10` | Run 10 loops |
+
+#### Model Selection
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.opus` | `ralph --model opus` | Use Opus model |
+| `rpc.sonnet` | `ralph --model sonnet` | Use Sonnet model |
+
+#### Output Format
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.json` | `ralph --output-format json` | JSON output mode |
+| `rpc.text` | `ralph --output-format text` | Text output mode |
+
+#### Git Worktree
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.nowt` | `ralph --no-worktree` | Disable worktree isolation |
+| `rpc.wt.squash` | `ralph --merge-strategy squash` | Squash merge strategy |
+| `rpc.wt.merge` | `ralph --merge-strategy merge` | Merge commit strategy |
+| `rpc.wt.rebase` | `ralph --merge-strategy rebase` | Rebase strategy |
+| `rpc.wt.nogate` | `ralph --quality-gates none` | Skip quality gates |
+| `rpc.wt.full` | `ralph --live --monitor --merge-strategy squash --quality-gates auto` | Full worktree mode |
+
+#### Interactive / Parallel
+
+| Alias | Usage | Description |
+|---|---|---|
+| `rpc.int` | `rpc.int` | Interactive mode (live + monitor) |
+| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents |
+| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N agents in background |
+
+#### Workflow Presets
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.dev` | `ralph --live --monitor --verbose` | Development mode |
+| `rpc.prod` | `ralph --calls 50 --auto-reset-circuit` | Production / unattended mode |
+| `rpc.debug` | `ralph --live --verbose --max-loops 1` | Debug mode (single loop) |
+
+#### Setup, Management, and Planning
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.monitor` | `ralph-monitor` | Launch Claude monitor |
+| `rpc.install` | *(runs install.sh)* | Install/reinstall Claude engine |
+| `rpc.uninstall` | *(runs uninstall.sh)* | Uninstall Claude engine |
+| `rpc.plan` | `ralph-plan` | Planning mode (Claude engine) |
+| `rpc.plan.sup` | `ralph-plan --yolo --superpowers` | Planning with yolo + superpowers plugin |
+
+---
+
+### Codex Aliases (rpx)
+
+Source: `codex/ALIASES.sh`
+
+#### Basic Execution
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx` | `ralph-codex` | Start the Codex loop |
+| `rpx.live` | `ralph-codex --live` | Live streaming output |
+| `rpx.monitor` | `ralph-codex --monitor` | tmux monitoring dashboard |
+| `rpx.verbose` | `ralph-codex --verbose` | Verbose progress updates |
+| `rpx.hitl` | `ralph-codex --live --monitor` | Human-in-the-loop (live + monitor) |
+
+#### Session Management
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.continue` | `ralph-codex --continue` | Resume previous session |
+| `rpx.reset` | `ralph-codex --reset-session` | Reset session state |
+| `rpx.status` | `ralph-codex --status` | Show current loop status |
+
+#### Circuit Breaker
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.cb.reset` | `ralph-codex --reset-circuit` | Reset circuit breaker |
+| `rpx.cb.status` | `ralph-codex --circuit-status` | Show circuit breaker status |
+| `rpx.cb.auto` | `ralph-codex --auto-reset-circuit` | Auto-reset on startup |
+
+#### Rate Limiting / Loop Control
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.fast` | `ralph-codex --calls 200` | 200 calls/hour |
+| `rpx.slow` | `ralph-codex --calls 50` | 50 calls/hour |
+| `rpx.test` | `ralph-codex --max-loops 1` | Single loop iteration (test) |
+| `rpx.5` | `ralph-codex --max-loops 5` | Run 5 loops |
+| `rpx.10` | `ralph-codex --max-loops 10` | Run 10 loops |
+
+#### Model Selection
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.gpt4` | `ralph-codex --model gpt-4` | Use GPT-4 |
+| `rpx.gpt35` | `ralph-codex --model gpt-3.5` | Use GPT-3.5 |
+| `rpx.claude` | `ralph-codex --model claude` | Use Claude |
+
+#### Permission Modes
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.safe` | `ralph-codex --permission-mode auto` | Safe auto-permission mode |
+| `rpx.danger` | `ralph-codex --permission-mode dangerous` | Dangerous mode (skip permissions) |
+
+#### Git Worktree
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.nowt` | `ralph-codex --no-worktree` | Disable worktree isolation |
+| `rpx.wt.squash` | `ralph-codex --merge-strategy squash` | Squash merge strategy |
+| `rpx.wt.merge` | `ralph-codex --merge-strategy merge` | Merge commit strategy |
+| `rpx.wt.rebase` | `ralph-codex --merge-strategy rebase` | Rebase strategy |
+| `rpx.wt.nogate` | `ralph-codex --quality-gates none` | Skip quality gates |
+
+#### Auto-Exit / Interactive
+
+| Alias | Usage | Description |
+|---|---|---|
+| `rpx.autoexit` | `rpx.autoexit` | Force auto-exit mode |
+| `rpx.int` | `rpx.int` | Interactive mode (no auto-exit) |
+| `rpx.wt.int` | `rpx.wt.int` | Interactive + live + monitor |
+| `rpx.int.p N` | `rpx.int.p 3` | Spawn N parallel interactive agents |
+| `rpx.int.p.b N` | `rpx.int.p.b 3` | Spawn N interactive agents in background |
+
+#### Workflow Presets
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.dev` | `ralph-codex --live --monitor --verbose` | Development mode |
+| `rpx.prod` | `ralph-codex --calls 50 --auto-reset-circuit --permission-mode dangerous` | Production / unattended mode |
+| `rpx.debug` | `ralph-codex --live --verbose --max-loops 1` | Debug mode (single loop) |
+| `rpx.wt.full` | `ralph-codex --live --monitor --merge-strategy squash --quality-gates auto` | Full worktree mode |
+
+#### Setup and Management
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.monitor` | `ralph-monitor-codex` | Launch Codex monitor |
+| `rpx.install` | *(runs install_codex.sh)* | Install/reinstall Codex engine |
+| `rpx.uninstall` | *(runs uninstall_codex.sh)* | Uninstall Codex engine |
+| `rpx.enable` | `ralph-codex-enable` | Enable Ralph+Codex in current project |
+| `rpx.plan` | `ralph-plan --engine codex` | Planning mode with Codex |
+
+---
+
+### Shared Aliases
+
+These work regardless of engine:
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `ralph.setup` | `ralph-setup` | Create new project |
+| `ralph.enable` | `ralph-enable` | Enable Ralph (Claude) |
+| `ralph.enable.ci` | `ralph-enable-ci` | Non-interactive enable |
+| `ralph.migrate` | `ralph-migrate` | Migrate to `.ralph/` structure |
+| `ralph.import` | `ralph-import` | Import PRD |
+| `ralph.check.beads` | `ralph-check-beads` | Beads diagnostic |
+| `ralph.plan` | `ralph-plan` | Planning mode |
+| `rp.install` | *(all three install scripts)* | Install all engines at once |
+
+---
+
+## Commands Reference
+
+### Global Commands (per engine)
+
+| Action | Devin | Claude Code | Codex |
+|---|---|---|---|
+| Main loop | `ralph-devin` | `ralph` | `ralph-codex` |
+| Monitor dashboard | `ralph-devin-monitor` | `ralph-monitor` | `ralph-codex-monitor` |
+| New project | `ralph-devin-setup` | `ralph-setup` | `ralph-codex-setup` |
+| Enable in project | `ralph-devin-enable` | `ralph-enable` | `ralph-codex-enable` |
+| Enable (CI) | `ralph-devin-enable-ci` | `ralph-enable-ci` | `ralph-codex-enable-ci` |
+| Import PRD | `ralph-devin-import` | `ralph-import` | `ralph-codex-import` |
+| Planning mode | `ralph-plan --engine devin` | `ralph-plan` | `ralph-plan --engine codex` |
+
+### Common Loop Options
+
+These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph-codex`):
+
+```
+-h, --help              Show help message
+-c, --calls NUM         Max calls per hour (default: 100)
+-p, --prompt FILE       Custom prompt file
+-s, --status            Show current status and exit
+-m, --monitor           Start with tmux monitoring
+-v, --verbose           Detailed progress updates
+-l, --live              Live streaming output
+-t, --timeout MIN       Execution timeout in minutes (default: 15)
+--no-continue           Disable session continuity
+--reset-circuit         Reset circuit breaker
+--circuit-status        Show circuit breaker status
+--auto-reset-circuit    Auto-reset circuit breaker on startup
+--reset-session         Reset session state
+```
+
+### Devin-Specific Options
+
+```
+--model MODEL           Model: opus, sonnet, swe, gpt
+--permission-mode MODE  Permission mode: auto, dangerous
+--max-loops NUM         Stop after N loops (0 = unlimited)
+--no-worktree           Disable git worktree isolation
+--merge-strategy STR    Merge strategy: squash, merge, rebase
+--quality-gates GATES   Quality gates: auto, none, or "cmd1;cmd2"
+--no-devin-auto-exit    Interactive TUI mode (no auto-exit)
+--parallel N            Spawn N parallel agents
+--parallel-bg N         Spawn N background agents
+```
+
+### Codex-Specific Options
+
+```
+--model MODEL           Model: gpt-4, gpt-3.5, claude
+--permission-mode MODE  Permission mode: auto, dangerous
+--max-loops NUM         Stop after N loops (0 = unlimited)
+--no-worktree           Disable git worktree isolation
+--merge-strategy STR    Merge strategy: squash, merge, rebase
+--quality-gates GATES   Quality gates: auto, none, or "cmd1;cmd2"
+--no-codex-auto-exit    Interactive mode (no auto-exit)
+--codex-auto-exit       Force auto-exit with -p flag
+--parallel N            Spawn N parallel agents
+--parallel-bg N         Spawn N background agents
+```
+
+### Claude-Specific Options
+
+```
+--model MODEL           Model: opus, sonnet
+--output-format FORMAT  Output format: json, text
+--allowed-tools TOOLS   Restrict allowed tools
+--yolo                  Skip all permission checks (plan mode)
+--superpowers           Load superpowers plugin (plan mode)
+```
+
+---
 
 ## Configuration
 
 ### Project Configuration (.ralphrc)
 
-Each Ralph project can have a `.ralphrc` configuration file:
+Each project gets a `.ralphrc` file with engine-specific settings:
 
 ```bash
-# .ralphrc - Ralph project configuration
+# .ralphrc -- Ralph project configuration
 PROJECT_NAME="my-project"
 PROJECT_TYPE="typescript"
 
-# Claude Code CLI command (auto-detected, override if needed)
-CLAUDE_CODE_CMD="claude"
-# CLAUDE_CODE_CMD="npx @anthropic-ai/claude-code"  # Alternative: use npx
+# Engine: claude (default), devin, codex
+RALPH_ENGINE="devin"
 
 # Loop settings
 MAX_CALLS_PER_HOUR=100
 CLAUDE_TIMEOUT_MINUTES=15
-CLAUDE_OUTPUT_FORMAT="json"
 
-# Tool permissions
-ALLOWED_TOOLS="Write,Read,Edit,Bash(git *),Bash(npm *),Bash(pytest)"
+# Tool permissions (Claude Code)
+ALLOWED_TOOLS="Write,Read,Edit,Bash(git *),Bash(npm *)"
 
 # Session management
 SESSION_CONTINUITY=true
 SESSION_EXPIRY_HOURS=24
 
-# Circuit breaker thresholds
+# Circuit breaker
 CB_NO_PROGRESS_THRESHOLD=3
 CB_SAME_ERROR_THRESHOLD=5
+CB_COOLDOWN_MINUTES=30
+CB_AUTO_RESET=false
+
+# Auto-PR (all engines)
+PR_ENABLED=true
 ```
-
-### Rate Limiting & Circuit Breaker
-
-Ralph includes intelligent rate limiting and circuit breaker functionality:
-
-```bash
-# Default: 100 calls per hour
-ralph --calls 50
-
-# With integrated monitoring
-ralph --monitor --calls 50
-
-# Check current usage
-ralph --status
-```
-
-The circuit breaker automatically:
-- Detects API errors and rate limit issues with advanced two-stage filtering
-- Opens circuit after 3 loops with no progress or 5 loops with same errors
-- Eliminates false positives from JSON fields containing "error"
-- Accurately detects stuck loops with multi-line error matching
-- Gradually recovers with half-open monitoring state
-- **Auto-recovers** after cooldown period (default: 30 minutes) — OPEN → HALF_OPEN → CLOSED
-- Provides detailed error tracking and logging with state history
-
-**Auto-recovery options:**
-```bash
-# Default: 30-minute cooldown before auto-recovery attempt
-CB_COOLDOWN_MINUTES=30     # Set in .ralphrc (0 = immediate)
-
-# Auto-reset on startup (for fully unattended operation)
-ralph --auto-reset-circuit
-# Or set in .ralphrc: CB_AUTO_RESET=true
-```
-
-### Claude API 5-Hour Limit
-
-When Claude's 5-hour usage limit is reached, Ralph:
-1. Detects the limit using three-layer verification (timeout guard → structural JSON → filtered text fallback)
-2. Prompts you to choose:
-   - **Option 1**: Wait 60 minutes for the limit to reset (with countdown timer)
-   - **Option 2**: Exit gracefully
-3. **Unattended mode**: Auto-waits on prompt timeout (30s) instead of exiting
-4. Prevents false positives from echoed file content mentioning "5-hour limit"
-
-### Custom Prompts
-
-```bash
-# Use custom prompt file
-ralph --prompt my_custom_instructions.md
-
-# With integrated monitoring
-ralph --monitor --prompt my_custom_instructions.md
-```
-
-### Execution Timeouts
-
-```bash
-# Set Claude Code execution timeout (default: 15 minutes)
-ralph --timeout 30  # 30-minute timeout for complex tasks
-
-# With monitoring and custom timeout
-ralph --monitor --timeout 60  # 60-minute timeout
-
-# Short timeout for quick iterations
-ralph --verbose --timeout 5  # 5-minute timeout with progress
-```
-
-### Verbose Mode
-
-```bash
-# Enable detailed progress updates during execution
-ralph --verbose
-
-# Combine with other options
-ralph --monitor --verbose --timeout 30
-```
-
-### Live Streaming Output
-
-```bash
-# Enable real-time visibility into Claude Code execution
-ralph --live
-
-# Combine with monitoring for best experience
-ralph --monitor --live
-
-# Live output is written to .ralph/live.log
-tail -f .ralph/live.log  # Watch in another terminal
-```
-
-Live streaming mode shows Claude Code's output in real-time as it works, providing visibility into what's happening during each loop iteration.
-
-### Session Continuity
-
-Ralph maintains session context across loop iterations for improved coherence:
-
-```bash
-# Sessions are enabled by default with --continue flag
-ralph --monitor                 # Uses session continuity
-
-# Start fresh without session context
-ralph --no-continue             # Isolated iterations
-
-# Reset session manually (clears context)
-ralph --reset-session           # Clears current session
-
-# Check session status
-cat .ralph/.ralph_session              # View current session file
-cat .ralph/.ralph_session_history      # View session transition history
-```
-
-**Session Auto-Reset Triggers:**
-- Circuit breaker opens (stagnation detected)
-- Manual interrupt (Ctrl+C / SIGINT)
-- Project completion (graceful exit)
-- Manual circuit breaker reset (`--reset-circuit`)
-- Session expiration (default: 24 hours)
-
-Sessions are persisted to `.ralph/.ralph_session` with a configurable expiration (default: 24 hours). The last 50 session transitions are logged to `.ralph/.ralph_session_history` for debugging.
-
-### Exit Thresholds
-
-Modify these variables in `~/.ralph/ralph_loop.sh`:
-
-**Exit Detection Thresholds:**
-```bash
-MAX_CONSECUTIVE_TEST_LOOPS=3     # Exit after 3 test-only loops
-MAX_CONSECUTIVE_DONE_SIGNALS=2   # Exit after 2 "done" signals
-TEST_PERCENTAGE_THRESHOLD=30     # Flag if 30%+ loops are test-only
-```
-
-**Circuit Breaker Thresholds:**
-```bash
-CB_NO_PROGRESS_THRESHOLD=3       # Open circuit after 3 loops with no file changes
-CB_SAME_ERROR_THRESHOLD=5        # Open circuit after 5 loops with repeated errors
-CB_OUTPUT_DECLINE_THRESHOLD=70   # Open circuit if output declines by >70%
-CB_COOLDOWN_MINUTES=30           # Minutes before OPEN → HALF_OPEN auto-recovery
-CB_AUTO_RESET=false              # true = reset to CLOSED on startup (bypasses cooldown)
-```
-
-**Completion Indicators with EXIT_SIGNAL Gate:**
-
-| completion_indicators | EXIT_SIGNAL | Result |
-|-----------------------|-------------|--------|
-| >= 2 | `true` | **Exit** ("project_complete") |
-| >= 2 | `false` | **Continue** (Claude still working) |
-| >= 2 | missing | **Continue** (defaults to false) |
-| < 2 | `true` | **Continue** (threshold not met) |
-
-## Project Structure
-
-Ralph creates a standardized structure for each project with a `.ralph/` subfolder for configuration:
-
-```
-my-project/
-├── .ralph/                 # Ralph configuration and state (hidden folder)
-│   ├── PROMPT.md           # Main development instructions for Ralph
-│   ├── fix_plan.md        # Prioritized task list
-│   ├── AGENT.md           # Build and run instructions
-│   ├── specs/              # Project specifications and requirements
-│   │   └── stdlib/         # Standard library specifications
-│   ├── examples/           # Usage examples and test cases
-│   ├── logs/               # Ralph execution logs
-│   └── docs/generated/     # Auto-generated documentation
-├── .ralphrc                # Ralph configuration file (tool permissions, settings)
-└── src/                    # Source code implementation (at project root)
-```
-
-> **Migration**: If you have existing Ralph projects using the old flat structure, run `ralph-migrate` to automatically move files to the `.ralph/` subfolder.
-
-## Best Practices
-
-### Writing Effective Prompts
-
-1. **Be Specific** - Clear requirements lead to better results
-2. **Prioritize** - Use `.ralph/fix_plan.md` to guide Ralph's focus
-3. **Set Boundaries** - Define what's in/out of scope
-4. **Include Examples** - Show expected inputs/outputs
-
-### Project Specifications
-
-- Place detailed requirements in `.ralph/specs/`
-- Use `.ralph/fix_plan.md` for prioritized task tracking
-- Keep `.ralph/AGENT.md` updated with build instructions
-- Document key decisions and architecture
-
-### Monitoring Progress
-
-- Use `ralph-monitor` for live status updates
-- Check logs in `.ralph/logs/` for detailed execution history
-- Monitor `.ralph/status.json` for programmatic access
-- Watch for exit condition signals
-
-## System Requirements
-
-- **Bash 4.0+** - For script execution
-- **Claude Code CLI** - `npm install -g @anthropic-ai/claude-code` (or use npx — set `CLAUDE_CODE_CMD` in `.ralphrc`)
-- **tmux** - Terminal multiplexer for integrated monitoring (recommended)
-- **jq** - JSON processing for status tracking
-- **Git** - Version control (projects are initialized as git repos)
-- **GNU coreutils** - For the `timeout` command (execution timeouts)
-  - Linux: Pre-installed on most distributions
-  - macOS: Install via `brew install coreutils` (provides `gtimeout`)
-- **Standard Unix tools** - grep, date, etc.
-
-### Testing Requirements (Development)
-
-See [TESTING.md](TESTING.md) for the comprehensive testing guide.
-
-If you want to run the test suite:
-
-```bash
-# Install BATS testing framework
-npm install -g bats bats-support bats-assert
-
-# Run all tests (566 tests)
-npm test
-
-# Run specific test suites
-bats tests/unit/test_rate_limiting.bats
-bats tests/unit/test_exit_detection.bats
-bats tests/unit/test_json_parsing.bats
-bats tests/unit/test_cli_modern.bats
-bats tests/unit/test_cli_parsing.bats
-bats tests/unit/test_session_continuity.bats
-bats tests/unit/test_enable_core.bats
-bats tests/unit/test_task_sources.bats
-bats tests/unit/test_ralph_enable.bats
-bats tests/unit/test_wizard_utils.bats
-bats tests/unit/test_circuit_breaker_recovery.bats
-bats tests/integration/test_loop_execution.bats
-bats tests/integration/test_prd_import.bats
-bats tests/integration/test_project_setup.bats
-bats tests/integration/test_installation.bats
-
-# Run error detection and circuit breaker tests
-./tests/test_error_detection.sh
-./tests/test_stuck_loop_detection.sh
-```
-
-Current test status:
-- **566 tests** across 18 test files
-- **100% pass rate** (556/556 passing)
-- Comprehensive unit and integration tests
-- Specialized tests for JSON parsing, CLI flags, circuit breaker, EXIT_SIGNAL behavior, enable wizard, and installation workflows
-
-> **Note on Coverage**: Bash code coverage measurement with kcov has fundamental limitations when tracing subprocess executions. Test pass rate (100%) is the quality gate. See [bats-core#15](https://github.com/bats-core/bats-core/issues/15) for details.
-
-### Installing tmux
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install tmux
-
-# macOS
-brew install tmux
-
-# CentOS/RHEL
-sudo yum install tmux
-```
-
-### Installing GNU coreutils (macOS)
-
-Ralph uses the `timeout` command for execution timeouts. On macOS, you need to install GNU coreutils:
-
-```bash
-# Install coreutils (provides gtimeout)
-brew install coreutils
-
-# Verify installation
-gtimeout --version
-```
-
-Ralph automatically detects and uses `gtimeout` on macOS. No additional configuration is required after installation.
-
-## Monitoring and Debugging
-
-### Live Dashboard
-
-```bash
-# Integrated tmux monitoring (recommended)
-ralph --monitor
-
-# Manual monitoring in separate terminal
-ralph-monitor
-```
-
-Shows real-time:
-- Current loop count and status
-- API calls used vs. limit
-- Recent log entries
-- Rate limit countdown
-
-**tmux Controls:**
-- `Ctrl+B` then `D` - Detach from session (keeps Ralph running)
-- `Ctrl+B` then `←/→` - Switch between panes
-- `tmux list-sessions` - View active sessions
-- `tmux attach -t <session-name>` - Reattach to session
-
-### Status Checking
-
-```bash
-# JSON status output
-ralph --status
-
-# Manual log inspection
-tail -f .ralph/logs/ralph.log
-```
-
-### Common Issues
-
-- **Ralph exits silently on first loop** - Claude Code CLI may not be installed or not in PATH. Ralph validates the command at startup and shows installation instructions. If using npx, add `CLAUDE_CODE_CMD="npx @anthropic-ai/claude-code"` to `.ralphrc`
-- **Rate Limits** - Ralph automatically waits and displays countdown
-- **5-Hour API Limit** - Ralph detects and prompts for user action (wait or exit)
-- **Stuck Loops** - Check `fix_plan.md` for unclear or conflicting tasks
-- **Early Exit** - Review exit thresholds if Ralph stops too soon
-- **Premature Exit** - Check if Claude is setting `EXIT_SIGNAL: false` (Ralph now respects this)
-- **Execution Timeouts** - Increase `--timeout` value for complex operations
-- **Missing Dependencies** - Ensure Claude Code CLI and tmux are installed
-- **tmux Session Lost** - Use `tmux list-sessions` and `tmux attach` to reconnect
-- **Session Expired** - Sessions expire after 24 hours by default; use `--reset-session` to start fresh
-- **timeout: command not found (macOS)** - Install GNU coreutils: `brew install coreutils`
-- **Permission Denied** - Ralph halts when Claude Code is denied permission for commands:
-  1. Edit `.ralphrc` and update `ALLOWED_TOOLS` to include required tools
-  2. Common patterns: `Bash(npm *)`, `Bash(git *)`, `Bash(pytest)`
-  3. Run `ralph --reset-session` after updating `.ralphrc`
-  4. Restart with `ralph --monitor`
-
-## Contributing
-
-Ralph is actively seeking contributors! We're working toward v1.0.0 with clear priorities and a detailed roadmap.
-
-**See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contributor guide** including:
-- Getting started and setup instructions
-- Development workflow and commit conventions
-- Code style guidelines
-- Testing requirements (100% pass rate mandatory)
-- Pull request process and code review guidelines
-- Quality standards and checklists
-
-### Quick Start
-
-```bash
-# Fork and clone
-git clone https://github.com/YOUR_USERNAME/ralph-claude-code.git
-cd ralph-claude-code
-
-# Install dependencies and run tests
-npm install
-npm test  # All 566 tests must pass
-```
-
-### Priority Contribution Areas
-
-1. **Test Implementation** - Help expand test coverage
-2. **Feature Development** - Log rotation, dry-run mode, metrics
-3. **Documentation** - Tutorials, troubleshooting guides, examples
-4. **Real-World Testing** - Use Ralph, report bugs, share feedback
-
-**Every contribution matters** - from fixing typos to implementing major features!
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Inspired by the [Ralph technique](https://ghuntley.com/ralph/) created by Geoffrey Huntley
-- Built for [Claude Code](https://claude.ai/code) by Anthropic
-- Community feedback and contributions
-
-## Related Projects
-
-- [Claude Code](https://claude.ai/code) - The AI coding assistant that powers Ralph
-- [Aider](https://github.com/paul-gauthier/aider) - Original Ralph technique implementation
-
----
-
-## Command Reference
-
-### Installation Commands (Run Once)
-```bash
-./install.sh              # Install Ralph globally
-./uninstall.sh            # Remove Ralph from system (dedicated script)
-./install.sh uninstall    # Alternative: Remove Ralph from system
-./install.sh --help       # Show installation help
-ralph-migrate             # Migrate existing project to .ralph/ structure
-```
-
-### Ralph Loop Options
-```bash
-ralph [OPTIONS]
-  -h, --help              Show help message
-  -c, --calls NUM         Set max calls per hour (default: 100)
-  -p, --prompt FILE       Set prompt file (default: PROMPT.md)
-  -s, --status            Show current status and exit
-  -m, --monitor           Start with tmux session and live monitor
-  -v, --verbose           Show detailed progress updates during execution
-  -l, --live              Enable live streaming output (real-time Claude Code visibility)
-  -t, --timeout MIN       Set Claude Code execution timeout in minutes (1-120, default: 15)
-  --output-format FORMAT  Set output format: json (default) or text
-  --allowed-tools TOOLS   Set allowed Claude tools (default: Write,Read,Edit,Bash(git *),Bash(npm *),Bash(pytest))
-  --no-continue           Disable session continuity (start fresh each loop)
-  --reset-circuit         Reset the circuit breaker
-  --circuit-status        Show circuit breaker status
-  --auto-reset-circuit    Auto-reset circuit breaker on startup (bypasses cooldown)
-  --reset-session         Reset session state manually
-```
-
-### Project Commands (Per Project)
-```bash
-ralph-setup project-name     # Create new Ralph project
-ralph-enable                 # Enable Ralph in existing project (interactive)
-ralph-enable-ci              # Enable Ralph in existing project (non-interactive)
-ralph-import prd.md project  # Convert PRD/specs to Ralph project
-ralph --monitor              # Start with integrated monitoring
-ralph --status               # Check current loop status
-ralph --verbose              # Enable detailed progress updates
-ralph --timeout 30           # Set 30-minute execution timeout
-ralph --calls 50             # Limit to 50 API calls per hour
-ralph --reset-session        # Reset session state manually
-ralph --live                 # Enable live streaming output
-ralph-monitor                # Manual monitoring dashboard
-ralph-check-beads            # Verify beads integration (diagnostic)
-```
-
-### tmux Session Management
-```bash
-tmux list-sessions        # View active Ralph sessions
-tmux attach -t <name>     # Reattach to detached session
-# Ctrl+B then D           # Detach from session (keeps running)
-```
-
----
-
-## Devin CLI Support
-
-Ralph now supports **Devin CLI** as an alternative AI engine alongside Claude Code. All functionality is mirrored in separate scripts — no changes to the existing Claude-based workflow.
-
-### Install Devin Support (After Base Install)
-
-```bash
-# Base Ralph must be installed first (./install.sh)
-# Then install Devin support separately:
-cd ralph-claude-code
-./devin/install_devin.sh
-```
-
-### Devin Commands (Parallel to Claude Commands)
-
-| Claude Code Command | Devin CLI Command | Description |
-|---|---|---|
-| `ralph` | `ralph-devin` | Main autonomous loop |
-| `ralph-monitor` | `ralph-devin-monitor` | Live status dashboard |
-| `ralph-setup` | `ralph-devin-setup` | Create new project |
-| `ralph-enable` | `ralph-devin-enable` | Enable in existing project |
-| `ralph-enable-ci` | `ralph-devin-enable-ci` | Non-interactive enable |
-| `ralph-import` | `ralph-devin-import` | Convert PRD to project |
-
-### Quick Start with Devin
-
-```bash
-# Option A: New project
-ralph-devin-setup my-project
-cd my-project
-ralph-devin --monitor
-
-# Option B: Existing project
-cd my-existing-project
-ralph-devin-enable
-ralph-devin --monitor
-```
-
-### Key Differences from Claude Code
-
-- **Cloud-based sessions**: Devin works remotely via session-based API
-- **Session continuity**: Uses `devin message` instead of `--resume`
-- **Polling**: Ralph polls Devin session status instead of waiting on local process
-- **ACU limits**: Configurable via `--max-acu` or `DEVIN_MAX_ACU` in `.ralphrc`
-- **Git worktree isolation**: Each loop runs in an isolated worktree with quality gates before merge (enabled by default)
 
 ### Devin-Specific Configuration (.ralphrc.devin)
 
 ```bash
-# Engine selection
 RALPH_ENGINE="devin"
-
-# Devin settings
 DEVIN_TIMEOUT_MINUTES=30
-DEVIN_MAX_ACU=100           # Optional ACU limit
-DEVIN_POLL_INTERVAL=15      # Seconds between status polls
-DEVIN_USE_CONTINUE=true     # Session continuity
+DEVIN_MAX_ACU=100
+DEVIN_POLL_INTERVAL=15
+DEVIN_USE_CONTINUE=true
 
-# Worktree isolation (enabled by default)
-WORKTREE_ENABLED=true              # true|false
-WORKTREE_MERGE_STRATEGY=squash     # squash|merge|rebase
-WORKTREE_QUALITY_GATES=auto        # auto|none|"cmd1;cmd2"
-WORKTREE_AUTO_CLEANUP=true         # Delete branches after merge
-WORKTREE_BRANCH_PREFIX=ralph-devin # Branch name prefix
-WORKTREE_AUTO_COMMIT=true          # Auto-commit before merge
-```
-
-### Git Worktree Isolation
-
-Ralph Devin isolates each loop iteration in a **git worktree** so the agent works on a dedicated branch without touching your main branch. Changes are only merged back after passing quality gates.
-
-**Lifecycle per loop:**
-1. **Create** — New worktree + branch (`ralph-devin/loop-<N>-<ts>`) off current HEAD
-2. **Execute** — Devin runs inside the worktree directory
-3. **Quality gates** — Auto-detected lint/test/build checks run in the worktree
-4. **Merge** — Squash merge (default) back to main branch if gates pass
-5. **Cleanup** — Worktree removed; branch deleted on success, preserved on failure
-
-**Worktree location:** `<project_root>/<project_name>-worktrees/` (auto-gitignored)
-
-```bash
-# Default: worktree isolation enabled
-ralph-devin --monitor
-
-# Disable worktree isolation (work directly on main branch)
-ralph-devin --no-worktree
-
-# Use merge commit instead of squash
-ralph-devin --merge-strategy merge
-
-# Use rebase strategy
-ralph-devin --merge-strategy rebase
-
-# Custom quality gates (semicolon-separated)
-ralph-devin --quality-gates "npm run lint;npm test;npm run build"
-
-# Skip quality gates entirely
-ralph-devin --quality-gates none
-```
-
-**Auto-detected quality gates** (when set to `auto`):
-
-| Project Type | Gates Detected |
-|---|---|
-| Node.js (npm/pnpm/bun/yarn) | `lint`, `typecheck`, `test`, `build` from `package.json` scripts |
-| Python | `ruff check .` (if configured), `pytest` |
-| Go | `go vet ./...`, `go test ./...` |
-| Rust | `cargo clippy`, `cargo test` |
-| Makefile | `make lint`, `make test` (if targets exist) |
-
-**On failure:**
-- **Quality gates fail** → Branch preserved for inspection, worktree removed, no merge
-- **Merge conflict** → Branch preserved, merge aborted, worktree removed
-- **Execution error** → Full cleanup (branch + worktree deleted)
-
-### Devin CLI Requirements
-
-- **Devin CLI**: `pip install devin-cli` or `brew tap revanthpobala/tap && brew install devin-cli`
-- **API Token**: Run `devin configure` to set your token
-- **jq**: For JSON parsing (same as Claude version)
-
-### Devin Loop Options
-
-```bash
-ralph-devin [OPTIONS]
-  -h, --help              Show help message
-  -c, --calls NUM         Set max calls per hour (default: 100)
-  -p, --prompt FILE       Set prompt file
-  -s, --status            Show current status and exit
-  -m, --monitor           Start with tmux session and live monitor
-  -v, --verbose           Show detailed progress updates
-  -l, --live              Show Devin output in real-time
-  -t, --timeout MIN       Set session timeout in minutes (1-120, default: 30)
-  --model MODEL           Set Devin model: opus, sonnet, swe, gpt
-  --permission-mode MODE  Set permission mode: auto or dangerous
-  --no-continue           Disable session continuity
-  --max-loops NUM         Stop after NUM loops (0 = unlimited)
-  --no-worktree           Disable git worktree isolation
-  --merge-strategy STR    Merge strategy: squash, merge, rebase (default: squash)
-  --quality-gates GATES   Quality gates: auto, none, or "cmd1;cmd2" (default: auto)
-  --reset-circuit         Reset circuit breaker
-  --circuit-status        Show circuit breaker status
-  --auto-reset-circuit    Auto-reset circuit breaker on startup
-  --reset-session         Reset session state
-```
-
-### Uninstalling Devin Support
-
-```bash
-./devin/uninstall_devin.sh    # Removes only Devin components
-                               # Claude Code Ralph is NOT affected
-```
-
----
-
-## Ralph for Codex
-
-Ralph now supports **Codex CLI** as a third AI engine option alongside Claude Code and Devin. All features from Devin are available for Codex.
-
-### Installation
-
-```bash
-# Base Ralph must be installed first (./install.sh)
-# Then install Codex support separately:
-cd ralph-claude-code
-./codex/install_codex.sh
-```
-
-### Codex Commands (Parallel to Claude and Devin)
-
-| Claude Code | Devin CLI | Codex CLI | Description |
-|---|---|---|---|
-| `ralph` | `ralph-devin` | `ralph-codex` | Main autonomous loop |
-| `ralph-monitor` | `ralph-devin-monitor` | `ralph-codex-monitor` | Live status dashboard |
-| `ralph-setup` | `ralph-devin-setup` | `ralph-codex-setup` | Create new project |
-| `ralph-enable` | `ralph-devin-enable` | `ralph-codex-enable` | Enable in existing project |
-| `ralph-import` | `ralph-devin-import` | `ralph-codex-import` | Convert PRD to project |
-
-### Quick Start with Codex
-
-```bash
-# Option A: New project
-ralph-codex-setup my-project
-cd my-project
-ralph-codex --monitor
-
-# Option B: Existing project
-cd my-existing-project
-ralph-codex-enable
-ralph-codex --monitor
-
-# Option C: Use aliases (rpx)
-rpx.hitl  # Live + monitor mode
+# Worktree isolation
+WORKTREE_ENABLED=true
+WORKTREE_MERGE_STRATEGY=squash
+WORKTREE_QUALITY_GATES=auto
+WORKTREE_AUTO_CLEANUP=true
+WORKTREE_BRANCH_PREFIX=ralph-devin
 ```
 
 ### Codex-Specific Configuration (.ralphrc.codex)
 
 ```bash
-# Engine selection
 RALPH_ENGINE="codex"
-
-# Codex settings
 CODEX_TIMEOUT_MINUTES=30
-CODEX_MODEL="gpt-4"              # gpt-4, gpt-3.5, claude
-CODEX_PERMISSION_MODE="dangerous" # auto or dangerous
-CODEX_USE_CONTINUE=true          # Session continuity
-CODEX_AUTO_EXIT=true             # Auto-exit with -p flag
+CODEX_MODEL="gpt-4"
+CODEX_PERMISSION_MODE="dangerous"
+CODEX_USE_CONTINUE=true
+CODEX_AUTO_EXIT=true
 
-# Worktree isolation (same as Devin)
+# Worktree isolation (same options as Devin)
 WORKTREE_ENABLED=true
 WORKTREE_MERGE_STRATEGY=squash
 WORKTREE_QUALITY_GATES=auto
 ```
 
-### Codex CLI Requirements
+---
 
-- **Codex CLI**: See https://docs.codex.ai/ for installation
-- **Authentication**: Run `codex auth login`
-- **jq**: For JSON parsing (same as Claude/Devin)
+## How It Works
 
-### Codex Bash Aliases (rpx)
+Ralph operates on a loop cycle:
 
-```bash
-# Add to ~/.bashrc or ~/.zshrc
-source ~/.ralph/codex/ALIASES.sh
+1. **Read instructions** -- Loads `.ralph/PROMPT.md` with your project goals
+2. **Execute AI agent** -- Runs the configured engine (Devin / Claude / Codex) with current context
+3. **Track progress** -- Updates task lists, logs results, detects file changes
+4. **Quality gates** -- Runs lint/test/build checks (when worktree isolation is enabled)
+5. **Merge and PR** -- Squash-merges changes back and optionally creates a PR
+6. **Evaluate completion** -- Checks exit conditions (all tasks done, circuit breaker, rate limits)
+7. **Repeat** -- Continues until the project is complete or limits are reached
 
-# Then use:
-rpx              # Start loop
-rpx.hitl         # Live + monitor
-rpx.gpt4         # Use GPT-4
-rpx.claude       # Use Claude
-rpx.wt.full      # Full worktree mode
-```
+### Git Worktree Isolation
 
-See `codex/README.md` and `codex/ALIASES.sh` for complete documentation.
+When enabled (default for Devin and Codex), each loop iteration runs on a dedicated git branch:
 
-### Uninstalling Codex Support
+1. **Create** -- New worktree + branch (`ralph-devin/loop-<N>-<ts>`)
+2. **Execute** -- Agent works inside the isolated worktree
+3. **Quality gates** -- Auto-detected lint/test/build checks run
+4. **Merge** -- Squash merge back to main if gates pass
+5. **Cleanup** -- Worktree removed; branch deleted on success, preserved on failure
 
-```bash
-./codex/uninstall_codex.sh    # Removes only Codex components
-                               # Claude Code and Devin Ralph are NOT affected
-```
+Auto-detected quality gates by project type:
+
+| Project Type | Gates |
+|---|---|
+| Node.js | `lint`, `typecheck`, `test`, `build` from `package.json` |
+| Python | `ruff check .`, `pytest` |
+| Go | `go vet ./...`, `go test ./...` |
+| Rust | `cargo clippy`, `cargo test` |
+| Makefile | `make lint`, `make test` |
+
+### Intelligent Exit Detection
+
+Ralph uses a **dual-condition gate** to prevent premature exits:
+
+1. `completion_indicators >= 2` (heuristic detection from output patterns)
+2. Agent's explicit `EXIT_SIGNAL: true` in the RALPH_STATUS block
+
+Both must be true to exit. This prevents false exits when the agent says "phase complete" but still has more work to do.
+
+### Circuit Breaker
+
+Prevents runaway loops by detecting stagnation:
+
+- Opens after 3 loops with no file changes
+- Opens after 5 loops with the same repeated error
+- Auto-recovers after a cooldown period (default: 30 minutes)
 
 ---
 
-## Development Roadmap
+## System Requirements
 
-Ralph is under active development with a clear path to v1.0.0. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the complete roadmap.
-
-### Current Status: v0.11.5
-
-**What's Delivered:**
-- Core loop functionality with intelligent exit detection
-- **Dual-condition exit gate** (completion indicators + EXIT_SIGNAL)
-- Rate limiting (100 calls/hour) and circuit breaker pattern
-- Response analyzer with semantic understanding
-- **556 comprehensive tests** (100% pass rate)
-- **Live streaming output mode** for real-time Claude Code visibility
-- tmux integration and live monitoring
-- PRD import functionality with modern CLI JSON parsing
-- Installation system and project templates
-- Modern CLI commands with JSON output support
-- CI/CD pipeline with GitHub Actions
-- **Interactive `ralph-enable` wizard for existing projects**
-- **`.ralphrc` configuration file support**
-- Session lifecycle management with auto-reset triggers
-- Session expiration with configurable timeout
-- Dedicated uninstall script
-
-**Test Coverage Breakdown:**
-- Unit Tests: 420 (CLI parsing, JSON, exit detection, rate limiting, session continuity, enable wizard, live streaming, circuit breaker recovery, file protection, integrity checks)
-- Integration Tests: 136 (loop execution, edge cases, installation, project setup, PRD import)
-- Test Files: 18
-
-### Path to v1.0.0 (~4 weeks)
-
-**Enhanced Testing**
-- Installation and setup workflow tests
-- tmux integration tests
-- Monitor dashboard tests
-
-**Core Features**
-- Log rotation functionality
-- Dry-run mode
-
-**Advanced Features & Polish**
-- Metrics and analytics tracking
-- Desktop notifications
-- Git backup and rollback system
-- End-to-end tests
-- Final documentation and release prep
-
-See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for detailed progress tracking.
-
-### How to Contribute
-Ralph is seeking contributors! See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete guide. Priority areas:
-1. **Test Implementation** - Help expand test coverage ([see plan](IMPLEMENTATION_PLAN.md))
-2. **Feature Development** - Log rotation, dry-run mode, metrics
-3. **Documentation** - Usage examples, tutorials, troubleshooting guides
-4. **Bug Reports** - Real-world usage feedback and edge cases
+| Dependency | Required | Notes |
+|---|---|---|
+| Bash 4.0+ | Yes | Script execution |
+| jq | Yes | JSON processing |
+| Git | Yes | Version control |
+| GNU coreutils | Yes | `timeout` command (`brew install coreutils` on macOS) |
+| tmux | Recommended | Integrated monitoring (`brew install tmux`) |
+| Claude Code CLI | For Claude engine | `npm install -g @anthropic-ai/claude-code` |
+| Devin CLI | For Devin engine | `pip install devin-cli` or `brew tap revanthpobala/tap && brew install devin-cli` |
+| Codex CLI | For Codex engine | See https://docs.codex.ai/ |
 
 ---
 
-**Ready to let AI build your project?** Start with `./install.sh` and let Ralph take it from there!
+## Uninstalling
 
-## Star History
+```bash
+# Uninstall individual engines
+./devin/uninstall_devin.sh       # Remove Devin only
+./codex/uninstall_codex.sh       # Remove Codex only
+./uninstall.sh                   # Remove base Ralph (Claude)
 
-[![Star History Chart](https://api.star-history.com/svg?repos=frankbria/ralph-claude-code&type=date&legend=top-left)](https://www.star-history.com/#frankbria/ralph-claude-code&type=date&legend=top-left)
+# Or via aliases
+rpd.uninstall
+rpx.uninstall
+rpc.uninstall
+```
+
+Uninstalling one engine does not affect the others.
+
+---
+
+## Acknowledgments
+
+- [Ralph technique](https://ghuntley.com/ralph/) by Geoffrey Huntley
+- [frankbria/ralph-claude-code](https://github.com/frankbria/ralph-claude-code) -- the upstream project this is forked from
+- [Claude Code](https://claude.ai/code) by Anthropic
+- [Devin](https://devin.ai) by Cognition
