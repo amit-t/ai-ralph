@@ -678,6 +678,16 @@ parse_args() {
 main() {
     parse_args "$@"
 
+    # Status mode: AI-powered fix plan analysis — exits before any planning
+    # Note: ralph_plan.sh has `set -e`. Using `|| exit $?` disarms set -e for this
+    # line so we can capture the exit code explicitly rather than relying on set -e
+    # to exit on non-zero (which would work but is fragile if set -e is ever changed).
+    if [[ "$STATUS_MODE" == true ]]; then
+        source "$SCRIPT_DIR/lib/fix_plan_status.sh"
+        show_fix_plan_status "$ENGINE" || exit $?
+        exit 0
+    fi
+
     echo ""
     echo -e "${PURPLE}Ralph Planning Mode${NC}"
     echo -e "${PURPLE}===================${NC}"
