@@ -30,6 +30,7 @@ LOG_DIR="$RALPH_DIR/logs"
 PRD_DIR=""
 PM_OS_DIR=""
 DOE_OS_DIR=""
+STATUS_MODE=false
 
 # Engine selection: claude (default), codex, devin
 ENGINE="claude"
@@ -648,6 +649,10 @@ parse_args() {
             --engine)
                 ENGINE="$2"
                 shift 2
+                ;;
+            --status)
+                STATUS_MODE=true
+                shift
                 ;;
             --yolo)
                 YOLO_MODE=true
