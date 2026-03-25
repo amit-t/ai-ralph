@@ -72,3 +72,5 @@ alias rpd.enable='ralph-devin-enable'
 
 # Planning mode (AI-powered, uses devin engine)
 alias rpd.plan='ralph-plan --engine devin'
+# Fix plan status (note: rpd.status is agent session status; rpd.plan.s is fix plan status)
+alias rpd.plan.s='ralph-plan --engine devin --status'

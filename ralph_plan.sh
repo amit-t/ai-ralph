@@ -30,6 +30,7 @@ LOG_DIR="$RALPH_DIR/logs"
 PRD_DIR=""
 PM_OS_DIR=""
 DOE_OS_DIR=""
+STATUS_MODE=false
 
 # Engine selection: claude (default), codex, devin
 ENGINE="claude"
@@ -92,6 +93,7 @@ Options:
     --yolo             Yolo mode: --dangerously-skip-permissions (Claude only)
     --superpowers      Load obra/superpowers plugin (Claude only, auto-cloned)
     --sup              Alias for --superpowers
+    --status           Show AI-powered fix plan status and insights (no planning runs)
     -h, --help         Show this help
 
 Examples:
@@ -102,6 +104,8 @@ Examples:
     ralph-plan --prd-dir ./specs --engine codex # Codex on specific directory
     ralph-plan --yolo --superpowers             # Claude yolo + superpowers (rpc.plan.sup)
     ralph-plan --pm-os ../product/my-pm-os --doe-os ../engineering/my-doe-os
+    ralph-plan --status                         # AI fix plan status (Claude, default)
+    ralph-plan --engine codex --status          # AI fix plan status via Codex
 
 PM-OS / DoE-OS Auto-Detection:
     When Ralph is not enabled in the current directory (no .ralph/ folder),
@@ -649,6 +653,10 @@ parse_args() {
                 ENGINE="$2"
                 shift 2
                 ;;
+            --status)
+                STATUS_MODE=true
+                shift
+                ;;
             --yolo)
                 YOLO_MODE=true
                 shift
@@ -672,6 +680,16 @@ parse_args() {
 
 main() {
     parse_args "$@"
+
+    # Status mode: AI-powered fix plan analysis — exits before any planning
+    # Note: ralph_plan.sh has `set -e`. Using `|| exit $?` disarms set -e for this
+    # line so we can capture the exit code explicitly rather than relying on set -e
+    # to exit on non-zero (which would work but is fragile if set -e is ever changed).
+    if [[ "$STATUS_MODE" == true ]]; then
+        source "$SCRIPT_DIR/lib/fix_plan_status.sh"
+        show_fix_plan_status "$ENGINE" || exit $?
+        exit 0
+    fi
 
     echo ""
     echo -e "${PURPLE}Ralph Planning Mode${NC}"

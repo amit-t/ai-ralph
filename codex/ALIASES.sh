@@ -71,3 +71,5 @@ alias rpx.enable='ralph-codex-enable'
 
 # Planning mode (AI-powered, uses codex engine)
 alias rpx.plan='ralph-plan --engine codex'
+# Fix plan status (note: rpx.status is agent session status; rpx.plan.s is fix plan status)
+alias rpx.plan.s='ralph-plan --engine codex --status'
