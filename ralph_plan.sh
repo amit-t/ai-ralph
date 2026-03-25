@@ -93,6 +93,7 @@ Options:
     --yolo             Yolo mode: --dangerously-skip-permissions (Claude only)
     --superpowers      Load obra/superpowers plugin (Claude only, auto-cloned)
     --sup              Alias for --superpowers
+    --status           Show AI-powered fix plan status and insights (no planning runs)
     -h, --help         Show this help
 
 Examples:
@@ -103,6 +104,8 @@ Examples:
     ralph-plan --prd-dir ./specs --engine codex # Codex on specific directory
     ralph-plan --yolo --superpowers             # Claude yolo + superpowers (rpc.plan.sup)
     ralph-plan --pm-os ../product/my-pm-os --doe-os ../engineering/my-doe-os
+    ralph-plan --status                         # AI fix plan status (Claude, default)
+    ralph-plan --engine codex --status          # AI fix plan status via Codex
 
 PM-OS / DoE-OS Auto-Detection:
     When Ralph is not enabled in the current directory (no .ralph/ folder),
