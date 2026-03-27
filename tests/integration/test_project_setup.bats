@@ -545,43 +545,29 @@ teardown() {
 }
 
 # =============================================================================
-# Test: .gitignore Generation (Issue #174)
+# Test: .gitignore Injection (Issue #174)
 # =============================================================================
 
-@test "setup.sh creates .gitignore file" {
-    # Create .gitignore template
-    cat > templates/.gitignore << 'EOF'
-# Ralph generated files
-.ralph/.call_count
-.ralph/.last_reset
-.ralph/status.json
-EOF
-
+@test "setup.sh creates .gitignore with Ralph entries" {
     run bash "$SETUP_SCRIPT" test-project
 
     assert_success
     assert_file_exists "test-project/.gitignore"
+    grep -qF ".ralph/*" test-project/.gitignore
+    grep -qF "!.ralph/fix_plan.md" test-project/.gitignore
+    grep -qF "!.ralph/PROMPT.md" test-project/.gitignore
 }
 
-@test "setup.sh .gitignore contains Ralph runtime patterns" {
-    cat > templates/.gitignore << 'EOF'
-.ralph/.call_count
-.ralph/.last_reset
-.ralph/status.json
-.ralph/.circuit_breaker_state
-EOF
-
+@test "setup.sh .gitignore contains Ralph wildcard and whitelisted files" {
     bash "$SETUP_SCRIPT" test-project
 
-    grep -q ".ralph/.call_count" test-project/.gitignore
-    grep -q ".ralph/.circuit_breaker_state" test-project/.gitignore
+    grep -qF "# Ralph — ignore everything except key files" test-project/.gitignore
+    grep -qF ".ralph/*" test-project/.gitignore
+    grep -qF "!.ralph/PROMPT_PLAN.md" test-project/.gitignore
+    grep -qF "!.ralph/constitution.md" test-project/.gitignore
 }
 
 @test "setup.sh .gitignore is committed in initial git commit" {
-    cat > templates/.gitignore << 'EOF'
-.ralph/.call_count
-EOF
-
     bash "$SETUP_SCRIPT" test-project
 
     cd test-project
@@ -591,38 +577,41 @@ EOF
     assert_equal "$output" ".gitignore"
 }
 
-@test "setup.sh .gitignore content matches template" {
-    cat > templates/.gitignore << 'EOF'
-# Ralph generated files
-.ralph/.call_count
-.ralph/.last_reset
-EOF
+@test "setup.sh succeeds when lib/ is unavailable and .gitignore template is missing" {
+    # Remove both lib/ and templates/.gitignore — should still succeed
+    # (setup.sh falls back to template copy which also won't find a file)
+    rm -f templates/.gitignore
 
-    bash "$SETUP_SCRIPT" test-project
-
-    diff templates/.gitignore test-project/.gitignore
-}
-
-@test "setup.sh succeeds when .gitignore template is missing" {
-    # Do NOT create templates/.gitignore — should still succeed
     run bash "$SETUP_SCRIPT" test-project
 
     assert_success
-    # .gitignore should not exist since template was missing
-    [[ ! -f "test-project/.gitignore" ]]
 }
 
-@test "setup.sh preserves existing .gitignore on rerun" {
-    echo ".ralph/.call_count" > templates/.gitignore
-
+@test "setup.sh preserves existing .gitignore and appends Ralph entries on rerun" {
     # First run creates the project with .gitignore
     bash "$SETUP_SCRIPT" test-project
 
     # User customizes the .gitignore
     echo "my-custom-pattern" >> test-project/.gitignore
 
-    # Second run (rerun in existing directory) should not overwrite
+    # Second run (rerun in existing directory) should preserve custom content
     bash "$SETUP_SCRIPT" test-project
 
-    grep -q "my-custom-pattern" test-project/.gitignore
+    grep -qF "my-custom-pattern" test-project/.gitignore
+    grep -qF ".ralph/*" test-project/.gitignore
+}
+
+@test "setup.sh .gitignore injection is idempotent" {
+    bash "$SETUP_SCRIPT" test-project
+
+    # Count marker occurrences after first run
+    local count_first
+    count_first=$(grep -cF "# Ralph — ignore everything except key files" test-project/.gitignore)
+
+    # Second run (may fail on git commit with "nothing to commit", that's expected)
+    run bash "$SETUP_SCRIPT" test-project
+
+    local count_second
+    count_second=$(grep -cF "# Ralph — ignore everything except key files" test-project/.gitignore)
+    [[ "$count_second" -eq "$count_first" ]]
 }
