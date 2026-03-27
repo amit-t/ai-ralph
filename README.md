@@ -207,6 +207,23 @@ my-project/
 | `.ralph/AGENT.md` | Rarely edit (auto-maintained by Ralph) |
 | `.ralphrc` | Rarely edit (sensible defaults) |
 
+### .gitignore
+
+When you run `ralph-enable` (or any engine variant), Ralph automatically appends the following entries to your project's `.gitignore`. If no `.gitignore` exists, one is created.
+
+```gitignore
+# Ralph — ignore everything except key files
+.ralph/*
+!.ralph/fix_plan.md
+!.ralph/PROMPT.md
+!.ralph/PROMPT_PLAN.md
+!.ralph/constitution.md
+```
+
+This keeps Ralph's runtime state (logs, session files, circuit breaker state) out of version control while preserving the files you actually edit: your task plan, prompt instructions, planning prompt, and constitution.
+
+If you're setting up `.gitignore` manually, copy the block above into your project's `.gitignore`.
+
 ---
 
 ## Quick Start

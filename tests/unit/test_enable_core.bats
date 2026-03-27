@@ -506,18 +506,10 @@ EOF
 }
 
 # =============================================================================
-# .GITIGNORE CREATION (Issue #174) (4 tests)
+# .GITIGNORE INJECTION (Issue #174) (5 tests)
 # =============================================================================
 
-@test "enable_ralph_in_directory creates .gitignore when template exists" {
-    # HOME is already isolated to TEST_DIR/home by setup()
-    mkdir -p "$HOME/.ralph/templates"
-    cat > "$HOME/.ralph/templates/.gitignore" << 'EOF'
-.ralph/.call_count
-.ralph/.last_reset
-.ralph/status.json
-EOF
-
+@test "enable_ralph_in_directory creates .gitignore with Ralph entries when none exists" {
     export ENABLE_FORCE="false"
     export ENABLE_SKIP_TASKS="true"
     export ENABLE_PROJECT_NAME="test-project"
@@ -526,14 +518,16 @@ EOF
 
     assert_success
     [[ -f ".gitignore" ]]
-    grep -q ".ralph/.call_count" .gitignore
+    grep -qF "# Ralph — ignore everything except key files" .gitignore
+    grep -qF ".ralph/*" .gitignore
+    grep -qF "!.ralph/fix_plan.md" .gitignore
+    grep -qF "!.ralph/PROMPT.md" .gitignore
+    grep -qF "!.ralph/PROMPT_PLAN.md" .gitignore
+    grep -qF "!.ralph/constitution.md" .gitignore
 }
 
-@test "enable_ralph_in_directory skips .gitignore when one exists and no force" {
-    mkdir -p "$HOME/.ralph/templates"
-    echo ".ralph/.call_count" > "$HOME/.ralph/templates/.gitignore"
-
-    # Pre-existing .gitignore
+@test "enable_ralph_in_directory appends Ralph entries to existing .gitignore" {
+    # Pre-existing .gitignore with custom content
     echo "my-custom-ignore" > .gitignore
 
     export ENABLE_FORCE="false"
@@ -543,40 +537,62 @@ EOF
     run enable_ralph_in_directory
 
     assert_success
-    # Should preserve existing .gitignore content
-    grep -q "my-custom-ignore" .gitignore
+    # Should preserve existing content AND add Ralph entries
+    grep -qF "my-custom-ignore" .gitignore
+    grep -qF ".ralph/*" .gitignore
+    grep -qF "!.ralph/fix_plan.md" .gitignore
 }
 
-@test "enable_ralph_in_directory overwrites .gitignore with force" {
-    mkdir -p "$HOME/.ralph/templates"
-    echo ".ralph/.call_count" > "$HOME/.ralph/templates/.gitignore"
+@test "enable_ralph_in_directory is idempotent — does not duplicate entries" {
+    export ENABLE_FORCE="false"
+    export ENABLE_SKIP_TASKS="true"
+    export ENABLE_PROJECT_NAME="test-project"
 
-    # Pre-existing .gitignore with different content
-    echo "my-custom-ignore" > .gitignore
+    # First run
+    enable_ralph_in_directory
 
+    # Count occurrences of the marker
+    local count_before
+    count_before=$(grep -cF "# Ralph — ignore everything except key files" .gitignore)
+
+    # Second run (force to re-enable)
     export ENABLE_FORCE="true"
-    export ENABLE_SKIP_TASKS="true"
-    export ENABLE_PROJECT_NAME="test-project"
-
     run enable_ralph_in_directory
 
     assert_success
-    # Should have template content, not old content
-    grep -q ".ralph/.call_count" .gitignore
-    ! grep -q "my-custom-ignore" .gitignore
+    local count_after
+    count_after=$(grep -cF "# Ralph — ignore everything except key files" .gitignore)
+    [[ "$count_after" -eq "$count_before" ]]
 }
 
-@test "enable_ralph_in_directory succeeds when templates dir exists but .gitignore is missing" {
-    # Templates dir exists but no .gitignore template inside
-    mkdir -p "$HOME/.ralph/templates"
+@test "inject_ralph_gitignore skips when Ralph entries already present" {
+    # Create .gitignore with Ralph entries already present
+    cat > .gitignore << 'EOF'
+node_modules/
+# Ralph — ignore everything except key files
+.ralph/*
+!.ralph/fix_plan.md
+!.ralph/PROMPT.md
+!.ralph/PROMPT_PLAN.md
+!.ralph/constitution.md
+EOF
 
-    export ENABLE_FORCE="false"
-    export ENABLE_SKIP_TASKS="true"
-    export ENABLE_PROJECT_NAME="test-project"
-
-    run enable_ralph_in_directory
+    run inject_ralph_gitignore
 
     assert_success
-    # .gitignore should not be created
-    [[ ! -f ".gitignore" ]]
+    # Should only appear once
+    local count
+    count=$(grep -cF ".ralph/*" .gitignore)
+    [[ "$count" -eq 1 ]]
+}
+
+@test "inject_ralph_gitignore appends with blank line separator" {
+    echo "node_modules/" > .gitignore
+
+    run inject_ralph_gitignore
+
+    assert_success
+    # The file should have the original content followed by Ralph block
+    head -1 .gitignore | grep -qF "node_modules/"
+    grep -qF ".ralph/*" .gitignore
 }

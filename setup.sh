@@ -51,9 +51,26 @@ cp -r "$TEMPLATES_DIR/specs"/* .ralph/specs/ 2>/dev/null || true
 [[ -f "$TEMPLATES_DIR/PROMPT_PLAN.md" ]] && cp "$TEMPLATES_DIR/PROMPT_PLAN.md" .ralph/
 [[ -f "$TEMPLATES_DIR/constitution.md" ]] && cp "$TEMPLATES_DIR/constitution.md" .ralph/
 
-# Copy .gitignore template to project root (skip if one already exists)
-if [[ -f "$TEMPLATES_DIR/.gitignore" ]] && [[ ! -f ".gitignore" ]]; then
-    cp "$TEMPLATES_DIR/.gitignore" .gitignore
+# Inject Ralph gitignore entries into project .gitignore
+_ralph_gitignore_marker="# Ralph — ignore everything except key files"
+if [[ -f ".gitignore" ]]; then
+    if ! grep -qF "$_ralph_gitignore_marker" .gitignore 2>/dev/null; then
+        printf '\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+            "$_ralph_gitignore_marker" \
+            ".ralph/*" \
+            "!.ralph/fix_plan.md" \
+            "!.ralph/PROMPT.md" \
+            "!.ralph/PROMPT_PLAN.md" \
+            "!.ralph/constitution.md" >> .gitignore
+    fi
+else
+    printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+        "$_ralph_gitignore_marker" \
+        ".ralph/*" \
+        "!.ralph/fix_plan.md" \
+        "!.ralph/PROMPT.md" \
+        "!.ralph/PROMPT_PLAN.md" \
+        "!.ralph/constitution.md" > .gitignore
 fi
 
 # Generate .ralphrc configuration file

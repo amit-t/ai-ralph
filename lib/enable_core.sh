@@ -765,6 +765,51 @@ RALPHRCEOF
 }
 
 # =============================================================================
+# GITIGNORE INJECTION
+# =============================================================================
+
+# RALPH_GITIGNORE_MARKER - Unique marker to detect if Ralph entries are already present
+RALPH_GITIGNORE_MARKER="# Ralph — ignore everything except key files"
+
+# RALPH_GITIGNORE_BLOCK - The gitignore entries to inject into project .gitignore
+RALPH_GITIGNORE_BLOCK="${RALPH_GITIGNORE_MARKER}
+.ralph/*
+!.ralph/fix_plan.md
+!.ralph/PROMPT.md
+!.ralph/PROMPT_PLAN.md
+!.ralph/constitution.md"
+
+# inject_ralph_gitignore - Append Ralph entries to project .gitignore
+#
+# Behavior:
+#   - If no .gitignore exists, creates one with Ralph entries
+#   - If .gitignore exists but has no Ralph entries, appends them
+#   - If .gitignore already contains Ralph entries, skips (idempotent)
+#
+# Returns:
+#   0 - Entries injected or already present
+#
+inject_ralph_gitignore() {
+    if [[ -f ".gitignore" ]]; then
+        # Check if Ralph entries are already present
+        if grep -qF "$RALPH_GITIGNORE_MARKER" .gitignore 2>/dev/null; then
+            enable_log "SKIP" ".gitignore already contains Ralph entries"
+            return 0
+        fi
+
+        # Append Ralph block (with a blank line separator)
+        printf '\n%s\n' "$RALPH_GITIGNORE_BLOCK" >> .gitignore
+        enable_log "SUCCESS" "Appended Ralph entries to .gitignore"
+    else
+        # Create new .gitignore with Ralph block
+        printf '%s\n' "$RALPH_GITIGNORE_BLOCK" > .gitignore
+        enable_log "SUCCESS" "Created .gitignore with Ralph entries"
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # MAIN ENABLE LOGIC
 # =============================================================================
 
@@ -849,16 +894,8 @@ enable_ralph_in_directory() {
         safe_create_file ".ralph/fix_plan.md" "$fix_plan_content"
     fi
 
-    # Copy .gitignore template to project root (if available)
-    local templates_dir
-    templates_dir=$(get_templates_dir 2>/dev/null) || true
-    if [[ -n "$templates_dir" ]] && [[ -f "$templates_dir/.gitignore" ]]; then
-        local gitignore_content
-        gitignore_content=$(<"$templates_dir/.gitignore")
-        safe_create_file ".gitignore" "$gitignore_content"
-    else
-        enable_log "WARN" ".gitignore template not found, skipping"
-    fi
+    # Inject Ralph gitignore entries into project .gitignore
+    inject_ralph_gitignore
 
     # Detect task sources for .ralphrc
     detect_task_sources
@@ -895,4 +932,5 @@ export -f generate_prompt_md
 export -f generate_agent_md
 export -f generate_fix_plan_md
 export -f generate_ralphrc
+export -f inject_ralph_gitignore
 export -f enable_ralph_in_directory

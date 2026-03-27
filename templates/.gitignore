@@ -1,4 +1,9 @@
-# Ralph generated files (inside .ralph/ subfolder)
+# Ralph — ignore everything except key files
+.ralph/*
+!.ralph/fix_plan.md
+!.ralph/PROMPT.md
+!.ralph/PROMPT_PLAN.md
+!.ralph/constitution.md
 .ralph/.call_count
 .ralph/.last_reset
 .ralph/.exit_signals
@@ -32,6 +37,7 @@
 # OS files
 .DS_Store
 Thumbs.db
+
 
 # Temporary files
 *.tmp
