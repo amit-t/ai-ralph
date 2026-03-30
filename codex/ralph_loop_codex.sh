@@ -49,6 +49,7 @@ LIVE_OUTPUT=false
 PARALLEL_COUNT=0
 PARALLEL_BG=false
 SLEEP_DURATION=3600
+SPECIFIC_TASK_NUM=""
 
 # Save environment variable state BEFORE setting defaults
 _env_MAX_CALLS_PER_HOUR="${MAX_CALLS_PER_HOUR:-}"
@@ -538,6 +539,30 @@ You are operating inside an **isolated git worktree**.
 - If a tool or command attempts to change to a different directory, refuse and stay in \`${work_dir}\`."
     fi
 
+    # ── Non-interactive execution directive ─────────────────────────
+    # When running with -p (auto-exit / non-interactive), inject a directive
+    # telling the AI to always execute immediately and never ask for confirmation.
+    # This prevents "Shall I proceed?" stalls in headless loop mode.
+    if [[ "$CODEX_AUTO_EXIT" != "false" ]]; then
+        local non_interactive_directive="# ⚠️  NON-INTERACTIVE MODE — ALWAYS EXECUTE
+
+You are running in **non-interactive, autonomous mode**. There is no human to respond.
+
+- **DO NOT** ask for confirmation or approval. Proceed with implementation immediately.
+- **DO NOT** output \"Shall I proceed?\", \"Should I continue?\", or any similar prompts.
+- If there are multiple reasonable approaches, pick the best one and execute it.
+- If you encounter an ambiguity, make a pragmatic decision and document it.
+- Your only job is to **implement the task completely** and output a RALPH_STATUS block when done."
+
+        if [[ -n "$worktree_directive" ]]; then
+            worktree_directive="${worktree_directive}
+
+${non_interactive_directive}"
+        else
+            worktree_directive="$non_interactive_directive"
+        fi
+    fi
+
     # Initialize or resume session
     local session_id=""
     if [[ "$CODEX_USE_CONTINUE" == "true" ]]; then
@@ -982,9 +1007,20 @@ main() {
         done
     fi
 
-    # Pick one task
+    # Pick one task (specific or next available)
     local picked_task_id="" picked_line_num="" picked_bead_id="" task_info="" picked_task_name=""
-    if task_info=$(pick_next_task "$RALPH_DIR/fix_plan.md"); then
+    if [[ -n "$SPECIFIC_TASK_NUM" ]]; then
+        if task_info=$(pick_task_by_number "$RALPH_DIR/fix_plan.md" "$SPECIFIC_TASK_NUM"); then
+            picked_task_id=$(echo "$task_info" | cut -d'|' -f1)
+            picked_line_num=$(echo "$task_info" | cut -d'|' -f2)
+            picked_bead_id=$(echo "$task_info" | cut -d'|' -f3)
+            picked_task_name=$(sed -n "${picked_line_num}p" "$RALPH_DIR/fix_plan.md" 2>/dev/null | sed 's/.*\[.\] //' | tr -d '\n' || echo "")
+            log_status "SUCCESS" "Picked task #$SPECIFIC_TASK_NUM: $picked_task_id (line $picked_line_num)"
+        else
+            log_status "ERROR" "Could not select task #$SPECIFIC_TASK_NUM from fix_plan.md"
+            exit 1
+        fi
+    elif task_info=$(pick_next_task "$RALPH_DIR/fix_plan.md"); then
         picked_task_id=$(echo "$task_info" | cut -d'|' -f1)
         picked_line_num=$(echo "$task_info" | cut -d'|' -f2)
         picked_bead_id=$(echo "$task_info" | cut -d'|' -f3)
@@ -1017,12 +1053,86 @@ main() {
 
     update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "executing" "running"
 
+    # Capture HEAD SHA before execution for change detection
+    local pre_exec_sha=""
+    if command -v git &>/dev/null; then
+        if [[ "$WORKTREE_ENABLED" == "true" && -n "$work_dir" && "$work_dir" != "$(pwd)" ]]; then
+            pre_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+        else
+            pre_exec_sha=$(git rev-parse HEAD 2>/dev/null || echo "")
+        fi
+    fi
+
     # Execute Codex session
     execute_codex_session 1 "$work_dir"
     local exec_result=$?
 
     if [[ $exec_result -eq 0 ]]; then
-        # Worktree: quality gates + commit + push + PR + cleanup
+        # ── Change detection ─────────────────────────────────────────────
+        local git_dir="${work_dir}"
+        [[ "$WORKTREE_ENABLED" != "true" ]] && git_dir="$(pwd)"
+        local post_exec_sha=""
+        local files_changed=0
+        local lines_added=0
+        local lines_removed=0
+        local has_uncommitted=false
+
+        if command -v git &>/dev/null; then
+            post_exec_sha=$(cd "$git_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+
+            # Committed changes
+            if [[ -n "$pre_exec_sha" && -n "$post_exec_sha" && "$pre_exec_sha" != "$post_exec_sha" ]]; then
+                files_changed=$(cd "$git_dir" && git diff --name-only "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | wc -l | tr -d ' ')
+                lines_added=$(cd "$git_dir" && git diff --stat "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
+                lines_removed=$(cd "$git_dir" && git diff --stat "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
+            fi
+
+            # Uncommitted changes (staged + unstaged)
+            local uncommitted_files=0
+            uncommitted_files=$(cd "$git_dir" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+            if [[ $uncommitted_files -gt 0 ]]; then
+                has_uncommitted=true
+                files_changed=$((files_changed + uncommitted_files))
+                local uc_added uc_removed
+                uc_added=$(cd "$git_dir" && git diff HEAD --stat 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
+                uc_removed=$(cd "$git_dir" && git diff HEAD --stat 2>/dev/null | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
+                lines_added=$((lines_added + uc_added))
+                lines_removed=$((lines_removed + uc_removed))
+            fi
+        fi
+
+        [[ -z "$lines_added" ]] && lines_added=0
+        [[ -z "$lines_removed" ]] && lines_removed=0
+
+        # ── Feature 1: Early exit if no changes were made ────────────────
+        if [[ $files_changed -eq 0 ]]; then
+            log_status "WARN" "No changes were made during this execution."
+            echo ""
+            echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${YELLOW}║               Summary - No Changes Made                   ║${NC}"
+            echo -e "${YELLOW}╠════════════════════════════════════════════════════════════╣${NC}"
+            echo -e "${YELLOW}║${NC}  Task:            ${picked_task_name:-$picked_task_id}"
+            echo -e "${YELLOW}║${NC}  Files changed:   0"
+            echo -e "${YELLOW}║${NC}  Lines added:     0"
+            echo -e "${YELLOW}║${NC}  Lines removed:   0"
+            echo -e "${YELLOW}║${NC}  Result:          No implementation changes detected"
+            echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
+            # Revert in-progress marker back to unclaimed so the task can be retried
+            if [[ -n "$picked_line_num" ]]; then
+                local tmp_file="${RALPH_DIR}/fix_plan.md.tmp.$$"
+                awk -v ln="$picked_line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "$RALPH_DIR/fix_plan.md" > "$tmp_file" \
+                    && mv "$tmp_file" "$RALPH_DIR/fix_plan.md"
+            fi
+            if worktree_is_active; then
+                worktree_cleanup "true"
+            fi
+            update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "no_changes" "completed"
+            log_status "SUCCESS" "Ralph Codex complete (no changes)."
+            return 0
+        fi
+
+        # ── Worktree: quality gates + commit + push + PR + cleanup ───────
         if [[ "$WORKTREE_ENABLED" == "true" ]] && worktree_is_active; then
             log_status "INFO" "Running quality gates..."
             local gate_output gate_result
@@ -1066,6 +1176,19 @@ main() {
                 git commit -m "ralph-codex: update .ralph state" 2>/dev/null || true
             fi
         fi
+
+        # ── Feature 2: End summary with files changed + lines committed ──
+        echo ""
+        echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║                  Execution Summary                        ║${NC}"
+        echo -e "${GREEN}╠════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${GREEN}║${NC}  Task:            ${picked_task_name:-$picked_task_id}"
+        echo -e "${GREEN}║${NC}  Files changed:   ${files_changed}"
+        echo -e "${GREEN}║${NC}  Lines added:     +${lines_added}"
+        echo -e "${GREEN}║${NC}  Lines removed:   -${lines_removed}"
+        echo -e "${GREEN}║${NC}  Net change:      $((lines_added - lines_removed)) lines"
+        echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
 
         update_status 1 "$(cat "$CALL_COUNT_FILE")" "completed" "success"
         log_status "SUCCESS" "Ralph Codex complete."
@@ -1113,6 +1236,7 @@ Options:
     --no-worktree           Disable git worktree isolation
     --merge-strategy STR    Merge strategy: squash, merge, rebase (default: squash)
     --quality-gates GATES   Quality gates: auto, none, or "cmd1;cmd2" (default: auto)
+    --task NUM              Execute a specific task number from fix_plan.md (1-based)
 
 Examples:
     ralph-codex --calls 50 --timeout 30
@@ -1123,6 +1247,8 @@ Examples:
     ralph-codex --permission-mode dangerous
     ralph-codex --no-worktree
     ralph-codex --merge-strategy merge --quality-gates "npm test;npm run lint"
+    ralph-codex --task 3               # Execute the 3rd task in fix_plan.md
+    ralph-codex --task 5 --no-codex-auto-exit  # Interactively work on task 5
 
 Bash Aliases (rpx):
     Add to ~/.bashrc or ~/.zshrc: source ~/.ralph/codex/ALIASES.sh
@@ -1132,7 +1258,8 @@ Bash Aliases (rpx):
     rpx.gpt4         # Use GPT-4 model
     rpx.claude       # Use Claude model
     rpx.wt.full      # Full worktree mode
-    rpx.interactive  # Interactive with cleanup prompt
+    rpx.task 3       # Execute specific task #3 from fix_plan.md
+    rpx.task.int 3   # Interactive mode for task #3
     rpx.install      # Install Ralph for Codex
     
     See codex/ALIASES.sh for complete list of 65+ aliases
@@ -1255,6 +1382,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --quality-gates)
             WORKTREE_QUALITY_GATES="$2"
+            shift 2
+            ;;
+        --task)
+            if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: --task requires a positive integer (task number from fix_plan.md)"
+                exit 1
+            fi
+            SPECIFIC_TASK_NUM="$2"
             shift 2
             ;;
         --parallel)

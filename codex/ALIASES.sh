@@ -73,3 +73,9 @@ alias rpx.enable='ralph-codex-enable'
 alias rpx.plan='ralph-plan --engine codex'
 # Fix plan status (note: rpx.status is agent session status; rpx.plan.s is fix plan status)
 alias rpx.plan.s='ralph-plan --engine codex --status'
+
+# Task-specific execution (pass fix_plan.md task number)
+# Usage: rpx.task 3        -> non-interactive, execute task #3
+# Usage: rpx.task.int 3    -> interactive TUI, execute task #3
+rpx.task() { ralph-codex --task "${1:?Usage: rpx.task <task_number>}"; }
+rpx.task.int() { ralph-codex --no-codex-auto-exit --task "${1:?Usage: rpx.task.int <task_number>}"; }
