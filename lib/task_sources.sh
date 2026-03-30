@@ -848,6 +848,88 @@ mark_fix_plan_complete() {
     return $?
 }
 
+# pick_task_by_number - Select a specific task from fix_plan.md by its ordinal
+# number (1-based, counting only task lines: "- [ ]", "- [~]", "- [x]").
+#
+# If the task is already completed ([x]), returns error.
+# If the task is unclaimed ([ ]), marks it in-progress ([~]).
+# If the task is already in-progress ([~]), returns it as-is.
+#
+# Args:
+#   $1 - fix_plan_file: Path to fix_plan.md
+#   $2 - task_number: 1-based ordinal number of the task
+# Outputs: "task_id|line_num|bead_id" on stdout (same format as pick_next_task)
+# Returns:
+#   0 - Found the task (output on stdout)
+#   1 - Task not found, already completed, or invalid number
+pick_task_by_number() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local task_number="${2}"
+
+    if [[ -z "$task_number" || ! -f "$fix_plan_file" ]]; then
+        echo "ERROR: Missing task number or fix_plan.md not found" >&2
+        return 1
+    fi
+
+    if ! [[ "$task_number" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: Task number must be a positive integer, got: $task_number" >&2
+        return 1
+    fi
+
+    # Scan fix_plan.md for task lines and find the Nth one
+    local line_num=0
+    local task_count=0
+    local target_line=""
+    local target_line_num=0
+
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+
+        # Match any task line: "- [ ] ...", "- [~] ...", "- [x] ..."
+        if echo "$line" | grep -qE '^\s*- \[[ ~xX]\] '; then
+            task_count=$((task_count + 1))
+            if [[ $task_count -eq $task_number ]]; then
+                target_line="$line"
+                target_line_num=$line_num
+                break
+            fi
+        fi
+    done < "$fix_plan_file"
+
+    if [[ -z "$target_line" ]]; then
+        echo "ERROR: Task #$task_number not found (only $task_count tasks in fix_plan.md)" >&2
+        return 1
+    fi
+
+    # Check if already completed
+    if echo "$target_line" | grep -qE '^\s*- \[[xX]\] '; then
+        echo "ERROR: Task #$task_number is already completed" >&2
+        return 1
+    fi
+
+    # Extract bead ID if present
+    local bead_id=""
+    bead_id=$(echo "$target_line" | sed -n 's/.*\[[ ~]\] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
+
+    # Build task_id
+    local task_id=""
+    if [[ -n "$bead_id" ]]; then
+        task_id="$bead_id"
+    else
+        task_id=$(echo "$target_line" | sed 's/.*\[[ ~]\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+    fi
+
+    # Mark in-progress if currently unclaimed
+    if echo "$target_line" | grep -qE '^\s*- \[ \] '; then
+        local tmp_file="${fix_plan_file}.tmp.$$"
+        awk -v ln="$target_line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
+            && mv "$tmp_file" "$fix_plan_file"
+    fi
+
+    echo "${task_id}|${target_line_num}|${bead_id}"
+    return 0
+}
+
 mark_single_bead_in_progress() {
     local bead_id="${1}"
 

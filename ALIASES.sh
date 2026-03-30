@@ -71,6 +71,12 @@ alias rpc.plan.sup='ralph-plan --yolo --superpowers'
 # Fix plan status (note: rpc.status is agent session status; rpc.plan.s is fix plan status)
 alias rpc.plan.s='ralph-plan --status'
 
+# Task-specific execution (pass fix_plan.md task number)
+# Usage: rpc.task 3        -> execute task #3
+# Usage: rpc.task.int 3    -> interactive (live + monitor) for task #3
+rpc.task() { ralph --task "${1:?Usage: rpc.task <task_number>}"; }
+rpc.task.int() { ralph --live --monitor --task "${1:?Usage: rpc.task.int <task_number>}"; }
+
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'
 alias ralph.enable='ralph-enable'

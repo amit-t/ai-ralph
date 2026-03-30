@@ -25,6 +25,10 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Automatic PR creation** via `lib/pr_manager.sh` with quality-gate labels
 - **Parallel agent spawning** via `lib/parallel_spawn.sh` (iTerm2 tabs, IDE terminals, or background processes)
 - **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
+- **Task-specific execution** via `--task NUM` flag -- run a specific task from `fix_plan.md` by ordinal number
+- **Non-interactive directive injection** -- prevents "Shall I proceed?" stalls in headless loop mode
+- **Automatic dependency installation** in worktrees -- detects package manager and installs before quality gates
+- **Change detection with execution summary** -- shows files changed, lines added/removed after each run; no-change early exit reverts the task marker so it can be retried
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
 
@@ -43,6 +47,10 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - [Commands Reference](#commands-reference)
 - [Configuration](#configuration)
 - [How It Works](#how-it-works)
+  - [Task Selection](#task-selection)
+  - [Non-Interactive Directive](#non-interactive-directive)
+  - [Change Detection and Execution Summary](#change-detection-and-execution-summary)
+  - [Git Worktree Isolation](#git-worktree-isolation)
 - [System Requirements](#system-requirements)
 - [Uninstalling](#uninstalling)
 
@@ -238,6 +246,8 @@ ralph-devin --monitor        # Start the loop with tmux dashboard
 # Or use aliases:
 rpd.hitl                     # Human-in-the-loop (live + monitor)
 rpd.dev                      # Development mode (live + monitor + verbose)
+rpd.task 3                   # Execute specific task #3 from fix_plan.md
+rpd.task.int 3               # Interactive TUI mode for task #3
 rpd.p 3                      # Spawn 3 parallel Devin agents
 ```
 
@@ -251,6 +261,7 @@ ralph --monitor              # Start the loop
 # Or use aliases:
 rpc.hitl                     # Human-in-the-loop (live + monitor)
 rpc.dev                      # Development mode
+rpc.task 3                   # Execute specific task #3 from fix_plan.md
 ```
 
 ### With Codex
@@ -263,6 +274,7 @@ ralph-codex --monitor        # Start the loop
 # Or use aliases:
 rpx.hitl                     # Human-in-the-loop (live + monitor)
 rpx.gpt4                     # Use GPT-4 model
+rpx.task 3                   # Execute specific task #3 from fix_plan.md
 ```
 
 ---
@@ -356,6 +368,13 @@ Source: `devin/ALIASES.sh`
 | `rpd.p.b N` | `rpd.p.b 3` | Spawn N agents as background processes |
 | `rpd.int.p.b N` | `rpd.int.p.b 3` | Spawn N interactive agents in background |
 
+#### Task-Specific Execution
+
+| Alias | Usage | Description |
+|---|---|---|
+| `rpd.task N` | `rpd.task 3` | Execute task #N from fix_plan.md (non-interactive) |
+| `rpd.task.int N` | `rpd.task.int 3` | Execute task #N in interactive TUI mode |
+
 #### Workflow Presets
 
 | Alias | Expands To | Description |
@@ -448,6 +467,13 @@ Source: `ALIASES.sh`
 | `rpc.int` | `rpc.int` | Interactive mode (live + monitor) |
 | `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents |
 | `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N agents in background |
+
+#### Task-Specific Execution
+
+| Alias | Usage | Description |
+|---|---|---|
+| `rpc.task N` | `rpc.task 3` | Execute task #N from fix_plan.md |
+| `rpc.task.int N` | `rpc.task.int 3` | Execute task #N in interactive mode (live + monitor) |
 
 #### Workflow Presets
 
@@ -544,6 +570,13 @@ Source: `codex/ALIASES.sh`
 | `rpx.int.p N` | `rpx.int.p 3` | Spawn N parallel interactive agents |
 | `rpx.int.p.b N` | `rpx.int.p.b 3` | Spawn N interactive agents in background |
 
+#### Task-Specific Execution
+
+| Alias | Usage | Description |
+|---|---|---|
+| `rpx.task N` | `rpx.task 3` | Execute task #N from fix_plan.md (non-interactive) |
+| `rpx.task.int N` | `rpx.task.int 3` | Execute task #N in interactive TUI mode |
+
 #### Workflow Presets
 
 | Alias | Expands To | Description |
@@ -614,6 +647,7 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 --circuit-status        Show circuit breaker status
 --auto-reset-circuit    Auto-reset circuit breaker on startup
 --reset-session         Reset session state
+--task NUM              Execute a specific task number from fix_plan.md (1-based)
 ```
 
 ### Devin-Specific Options
@@ -732,12 +766,66 @@ WORKTREE_QUALITY_GATES=auto
 Ralph operates on a loop cycle:
 
 1. **Read instructions** -- Loads `.ralph/PROMPT.md` with your project goals
-2. **Execute AI agent** -- Runs the configured engine (Devin / Claude / Codex) with current context
-3. **Track progress** -- Updates task lists, logs results, detects file changes
-4. **Quality gates** -- Runs lint/test/build checks (when worktree isolation is enabled)
-5. **Merge and PR** -- Squash-merges changes back and optionally creates a PR
-6. **Evaluate completion** -- Checks exit conditions (all tasks done, circuit breaker, rate limits)
-7. **Repeat** -- Continues until the project is complete or limits are reached
+2. **Pick a task** -- Selects the next unclaimed `[ ]` task from `fix_plan.md` (or a specific task via `--task NUM`), marks it in-progress `[~]`
+3. **Inject directives** -- Prepends worktree constraints and a non-interactive directive to prevent "Shall I proceed?" stalls
+4. **Execute AI agent** -- Runs the configured engine (Devin / Claude / Codex) with current context
+5. **Detect changes** -- Compares git state before and after execution to count files changed, lines added/removed
+6. **Early exit on no changes** -- If zero files changed, prints a yellow summary, reverts the `[~]` marker back to `[ ]` so the task can be retried, and exits cleanly
+7. **Quality gates** -- Installs dependencies if needed, then runs lint/test/build checks (when worktree isolation is enabled)
+8. **Merge and PR** -- Squash-merges changes back and optionally creates a PR
+9. **Execution summary** -- Prints a green summary box with task name, files changed, lines added/removed, and net change
+10. **Evaluate completion** -- Checks exit conditions (all tasks done, circuit breaker, rate limits)
+11. **Repeat** -- Continues until the project is complete or limits are reached
+
+### Task Selection
+
+By default, Ralph picks the first unclaimed task (`- [ ]`) from `.ralph/fix_plan.md`. You can override this with the `--task` flag:
+
+```bash
+ralph-devin --task 3        # Execute the 3rd task in fix_plan.md
+ralph --task 5 --live       # Execute the 5th task with live output
+ralph-codex --task 1        # Execute the 1st task with Codex
+```
+
+Task numbers are 1-based ordinals counting only uncompleted tasks (`[ ]` and `[~]` markers). The corresponding aliases are:
+
+```bash
+rpd.task 3                  # Devin: non-interactive, task #3
+rpd.task.int 3              # Devin: interactive TUI, task #3
+rpc.task 3                  # Claude: task #3
+rpc.task.int 3              # Claude: interactive (live + monitor), task #3
+rpx.task 3                  # Codex: non-interactive, task #3
+rpx.task.int 3              # Codex: interactive TUI, task #3
+```
+
+### Non-Interactive Directive
+
+When running in autonomous mode (default for all engines), Ralph injects a **"NON-INTERACTIVE MODE -- ALWAYS EXECUTE"** directive at the top of the prompt. This tells the AI agent to:
+
+- Never ask for confirmation or approval
+- Pick the best approach and execute immediately
+- Make pragmatic decisions on ambiguities and document them
+
+This prevents stalls where the agent outputs "Shall I proceed?" and waits indefinitely for a human response that will never come.
+
+### Change Detection and Execution Summary
+
+After each execution, Ralph compares the git state before and after to detect what changed:
+
+- **Committed changes** -- `git diff --stat` between pre/post execution SHAs
+- **Uncommitted changes** -- `git status --porcelain` for staged and unstaged files
+
+If **no files changed** (committed or uncommitted), Ralph:
+1. Prints a yellow "No Changes Made" summary box
+2. Reverts the in-progress marker (`[~]`) back to unclaimed (`[ ]`) in `fix_plan.md`
+3. Cleans up the worktree
+4. Exits with status "no_changes"
+
+If **files were changed**, Ralph proceeds with quality gates and PR creation, then prints a green "Execution Summary" box showing:
+- Task name
+- Files changed count
+- Lines added / removed
+- Net line change
 
 ### Git Worktree Isolation
 
@@ -745,11 +833,23 @@ When enabled (default for Devin and Codex), each loop iteration runs on a dedica
 
 1. **Create** -- New worktree + branch (`ralph-devin/loop-<N>-<ts>`)
 2. **Execute** -- Agent works inside the isolated worktree
-3. **Quality gates** -- Auto-detected lint/test/build checks run
-4. **Merge** -- Squash merge back to main if gates pass
-5. **Cleanup** -- Worktree removed; branch deleted on success, preserved on failure
+3. **Install dependencies** -- Auto-detects package manager and runs install (worktrees lack `node_modules`)
+4. **Quality gates** -- Auto-detected lint/test/build checks run
+5. **Merge** -- Squash merge back to main if gates pass
+6. **Cleanup** -- Worktree removed; branch deleted on success, preserved on failure
 
-Auto-detected quality gates by project type:
+#### Automatic Dependency Installation
+
+Worktrees are created from a fresh git checkout and don't inherit `node_modules` from the main project. Tools like biome, eslint, jest, etc. live inside `node_modules/.bin` and will fail if dependencies aren't installed first.
+
+Before running quality gates, Ralph automatically:
+1. Checks if `package.json` exists and `node_modules` is missing or empty
+2. Detects the package manager from lock files (`pnpm-lock.yaml` -> pnpm, `bun.lockb` -> bun, `yarn.lock` -> yarn, default -> npm)
+3. Runs the appropriate install command (e.g., `pnpm install --frozen-lockfile`)
+
+This is a no-op if `node_modules` already exists or if the project isn't Node.js-based.
+
+#### Auto-Detected Quality Gates
 
 | Project Type | Gates |
 |---|---|
