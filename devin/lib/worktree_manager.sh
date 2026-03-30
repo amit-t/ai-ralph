@@ -186,6 +186,65 @@ worktree_is_active() {
 }
 
 # =============================================================================
+# DEPENDENCY INSTALLATION
+# =============================================================================
+
+# Install project dependencies in the worktree before running quality gates.
+# Worktrees share source files via git but node_modules/ is gitignored,
+# so a fresh worktree has no dependencies installed.
+# Detects the package manager from lock files and runs the appropriate install.
+# Args:
+#   $1 - workdir: Path to the worktree directory
+# Returns: 0 on success or no-op, 1 on install failure (non-fatal)
+_worktree_install_deps() {
+    local workdir="${1:-.}"
+
+    if [[ ! -f "$workdir/package.json" ]]; then
+        return 0
+    fi
+
+    # Skip if node_modules already exists and looks populated
+    if [[ -d "$workdir/node_modules" ]] && [[ -n "$(ls -A "$workdir/node_modules" 2>/dev/null)" ]]; then
+        return 0
+    fi
+
+    local pkg_manager="npm"
+    local install_cmd="npm install"
+
+    if [[ -f "$workdir/pnpm-lock.yaml" ]]; then
+        pkg_manager="pnpm"
+        install_cmd="pnpm install --frozen-lockfile"
+    elif [[ -f "$workdir/bun.lockb" ]] || [[ -f "$workdir/bun.lock" ]]; then
+        pkg_manager="bun"
+        install_cmd="bun install --frozen-lockfile"
+    elif [[ -f "$workdir/yarn.lock" ]]; then
+        pkg_manager="yarn"
+        install_cmd="yarn install --frozen-lockfile"
+    else
+        install_cmd="npm ci"
+    fi
+
+    if ! command -v "$pkg_manager" &>/dev/null; then
+        echo "DEPS_INSTALL: $pkg_manager not found — skipping dependency install" >&2
+        return 1
+    fi
+
+    echo "DEPS_INSTALL: Installing dependencies ($install_cmd) in worktree..." >&2
+    local install_output install_exit
+    install_output=$(cd "$workdir" && eval "$install_cmd" 2>&1) || install_exit=$?
+    install_exit=${install_exit:-0}
+
+    if [[ $install_exit -eq 0 ]]; then
+        echo "DEPS_INSTALL: Dependencies installed successfully" >&2
+    else
+        echo "DEPS_INSTALL: Install failed (exit $install_exit) — gates may still fail" >&2
+        echo "DEPS_INSTALL: Output: $(echo "$install_output" | tail -3)" >&2
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # QUALITY GATES
 # =============================================================================
 
@@ -269,6 +328,11 @@ worktree_run_quality_gates() {
         echo "QUALITY_GATES: Skipped (disabled)" >&2
         return 0
     fi
+
+    # ── Install dependencies in worktree before running gates ─────────
+    # Worktrees share source files via git but NOT node_modules (gitignored).
+    # Without installing, all JS/TS quality gates fail with "command not found".
+    _worktree_install_deps "$workdir"
 
     local gates_str
     if [[ "$WORKTREE_QUALITY_GATES" == "auto" ]]; then

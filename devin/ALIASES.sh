@@ -74,3 +74,9 @@ alias rpd.enable='ralph-devin-enable'
 alias rpd.plan='ralph-plan --engine devin'
 # Fix plan status (note: rpd.status is agent session status; rpd.plan.s is fix plan status)
 alias rpd.plan.s='ralph-plan --engine devin --status'
+
+# Task-specific execution (pass fix_plan.md task number)
+# Usage: rpd.task 3        -> non-interactive, execute task #3
+# Usage: rpd.task.int 3    -> interactive TUI, execute task #3
+rpd.task() { ralph-devin --task "${1:?Usage: rpd.task <task_number>}"; }
+rpd.task.int() { ralph-devin --no-devin-auto-exit --task "${1:?Usage: rpd.task.int <task_number>}"; }
