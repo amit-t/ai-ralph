@@ -930,6 +930,85 @@ pick_task_by_number() {
     return 0
 }
 
+# pick_task_by_id - Select a specific task from fix_plan.md by its bold-markdown
+# identifier (e.g. **R05**).  The match is case-insensitive so both "R05" and
+# "r05" resolve to a line containing **R05**.
+#
+# If the task is already completed ([x]), returns error.
+# If the task is unclaimed ([ ]), marks it in-progress ([~]).
+# If the task is already in-progress ([~]), returns it as-is.
+#
+# Args:
+#   $1 - fix_plan_file: Path to fix_plan.md
+#   $2 - task_id_query: The task identifier (e.g. "R05", "r05")
+# Outputs: "task_id|line_num|bead_id" on stdout (same format as pick_task_by_number)
+# Returns:
+#   0 - Found the task (output on stdout)
+#   1 - Task not found, already completed, or invalid ID
+pick_task_by_id() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local task_id_query="${2}"
+
+    if [[ -z "$task_id_query" || ! -f "$fix_plan_file" ]]; then
+        echo "ERROR: Missing task ID or fix_plan.md not found" >&2
+        return 1
+    fi
+
+    # Build case-insensitive pattern: **R05** or **r05**
+    local upper_id lower_id
+    upper_id=$(echo "$task_id_query" | tr '[:lower:]' '[:upper:]')
+    lower_id=$(echo "$task_id_query" | tr '[:upper:]' '[:lower:]')
+
+    # Scan fix_plan.md for a task line containing **<id>** (case-insensitive)
+    local line_num=0
+    local target_line=""
+    local target_line_num=0
+
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+
+        # Must be a task line
+        if ! echo "$line" | grep -qE '^\s*- \[[ ~xX]\] '; then
+            continue
+        fi
+
+        # Check for **ID** (case-insensitive) by testing both upper and lower
+        if echo "$line" | grep -qF "**${upper_id}**" || echo "$line" | grep -qF "**${lower_id}**"; then
+            target_line="$line"
+            target_line_num=$line_num
+            break
+        fi
+    done < "$fix_plan_file"
+
+    if [[ -z "$target_line" ]]; then
+        echo "ERROR: Task with ID '$task_id_query' not found in fix_plan.md" >&2
+        return 1
+    fi
+
+    # Check if already completed
+    if echo "$target_line" | grep -qE '^\s*- \[[xX]\] '; then
+        echo "ERROR: Task '$task_id_query' is already completed" >&2
+        return 1
+    fi
+
+    # Extract bead ID if present (e.g. [bead-id])
+    local bead_id=""
+    bead_id=$(echo "$target_line" | sed -n 's/.*\[[ ~]\] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
+
+    # Use the queried ID (uppercased) as the task_id for branch naming etc.
+    local task_id="$upper_id"
+
+    # Mark in-progress if currently unclaimed
+    if echo "$target_line" | grep -qE '^\s*- \[ \] '; then
+        local tmp_file="${fix_plan_file}.tmp.$$"
+        awk -v ln="$target_line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
+            && mv "$tmp_file" "$fix_plan_file"
+    fi
+
+    echo "${task_id}|${target_line_num}|${bead_id}"
+    return 0
+}
+
 mark_single_bead_in_progress() {
     local bead_id="${1}"
 
@@ -971,6 +1050,7 @@ export -f beads_post_sync
 export -f _acquire_task_lock
 export -f _release_task_lock
 export -f pick_next_task
+export -f pick_task_by_id
 export -f mark_fix_plan_in_progress
 export -f mark_fix_plan_complete
 export -f mark_single_bead_in_progress
