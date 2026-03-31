@@ -989,14 +989,17 @@ main() {
     # Pick one task (specific or next available)
     local picked_task_id="" picked_line_num="" picked_bead_id="" task_info="" picked_task_name=""
     if [[ -n "$SPECIFIC_TASK_NUM" ]]; then
-        if task_info=$(pick_task_by_number "$RALPH_DIR/fix_plan.md" "$SPECIFIC_TASK_NUM"); then
+        # Route: numeric → pick by ordinal, alphanumeric → pick by task ID (e.g. R05)
+        local _pick_cmd="pick_task_by_number"
+        [[ ! "$SPECIFIC_TASK_NUM" =~ ^[1-9][0-9]*$ ]] && _pick_cmd="pick_task_by_id"
+        if task_info=$($_pick_cmd "$RALPH_DIR/fix_plan.md" "$SPECIFIC_TASK_NUM"); then
             picked_task_id=$(echo "$task_info" | cut -d'|' -f1)
             picked_line_num=$(echo "$task_info" | cut -d'|' -f2)
             picked_bead_id=$(echo "$task_info" | cut -d'|' -f3)
             picked_task_name=$(sed -n "${picked_line_num}p" "$RALPH_DIR/fix_plan.md" 2>/dev/null | sed 's/.*\[.\] //' | tr -d '\n' || echo "")
-            log_status "SUCCESS" "Picked task #$SPECIFIC_TASK_NUM: $picked_task_id (line $picked_line_num)"
+            log_status "SUCCESS" "Picked task $SPECIFIC_TASK_NUM: $picked_task_id (line $picked_line_num)"
         else
-            log_status "ERROR" "Could not select task #$SPECIFIC_TASK_NUM from fix_plan.md"
+            log_status "ERROR" "Could not select task $SPECIFIC_TASK_NUM from fix_plan.md"
             exit 1
         fi
     elif task_info=$(pick_next_task "$RALPH_DIR/fix_plan.md"); then
@@ -1215,7 +1218,7 @@ Options:
     --no-worktree           Disable git worktree isolation
     --merge-strategy STR    Merge strategy: squash, merge, rebase (default: squash)
     --quality-gates GATES   Quality gates: auto, none, or "cmd1;cmd2" (default: auto)
-    --task NUM              Execute a specific task number from fix_plan.md (1-based)
+    --task NUM|ID           Execute a specific task by number (1-based) or bold ID (e.g. R05)
 
 Examples:
     ralph-devin --calls 50 --timeout 30
@@ -1226,6 +1229,7 @@ Examples:
     ralph-devin --no-worktree
     ralph-devin --merge-strategy merge --quality-gates "npm test;npm run lint"
     ralph-devin --task 3               # Execute the 3rd task in fix_plan.md
+    ralph-devin --task R05             # Execute task **R05** by its ID
     ralph-devin --task 5 --no-devin-auto-exit  # Interactively work on task 5
 
 Bash Aliases (rpd):
@@ -1362,8 +1366,8 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --task)
-            if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
-                echo "Error: --task requires a positive integer (task number from fix_plan.md)"
+            if [[ -z "$2" ]]; then
+                echo "Error: --task requires a task number (e.g. 3) or task ID (e.g. R05)"
                 exit 1
             fi
             SPECIFIC_TASK_NUM="$2"

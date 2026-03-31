@@ -25,7 +25,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Automatic PR creation** via `lib/pr_manager.sh` with quality-gate labels
 - **Parallel agent spawning** via `lib/parallel_spawn.sh` (iTerm2 tabs, IDE terminals, or background processes)
 - **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
-- **Task-specific execution** via `--task NUM` flag -- run a specific task from `fix_plan.md` by ordinal number
+- **Task-specific execution** via `--task NUM|ID` flag -- run a specific task from `fix_plan.md` by ordinal number or bold task ID (e.g. `--task R05`)
 - **Non-interactive directive injection** -- prevents "Shall I proceed?" stalls in headless loop mode
 - **Automatic dependency installation** in worktrees -- detects package manager and installs before quality gates
 - **Change detection with execution summary** -- shows files changed, lines added/removed after each run; no-change early exit reverts the task marker so it can be retried
@@ -247,6 +247,7 @@ ralph-devin --monitor        # Start the loop with tmux dashboard
 rpd.hitl                     # Human-in-the-loop (live + monitor)
 rpd.dev                      # Development mode (live + monitor + verbose)
 rpd.task 3                   # Execute specific task #3 from fix_plan.md
+rpd.task R05                 # Execute task **R05** by its ID
 rpd.task.int 3               # Interactive TUI mode for task #3
 rpd.p 3                      # Spawn 3 parallel Devin agents
 ```
@@ -262,6 +263,7 @@ ralph --monitor              # Start the loop
 rpc.hitl                     # Human-in-the-loop (live + monitor)
 rpc.dev                      # Development mode
 rpc.task 3                   # Execute specific task #3 from fix_plan.md
+rpc.task R05                 # Execute task **R05** by its ID
 ```
 
 ### With Codex
@@ -275,6 +277,7 @@ ralph-codex --monitor        # Start the loop
 rpx.hitl                     # Human-in-the-loop (live + monitor)
 rpx.gpt4                     # Use GPT-4 model
 rpx.task 3                   # Execute specific task #3 from fix_plan.md
+rpx.task R05                 # Execute task **R05** by its ID
 ```
 
 ---
@@ -372,8 +375,8 @@ Source: `devin/ALIASES.sh`
 
 | Alias | Usage | Description |
 |---|---|---|
-| `rpd.task N` | `rpd.task 3` | Execute task #N from fix_plan.md (non-interactive) |
-| `rpd.task.int N` | `rpd.task.int 3` | Execute task #N in interactive TUI mode |
+| `rpd.task N\|ID` | `rpd.task 3` or `rpd.task R05` | Execute task #N or task ID from fix_plan.md (non-interactive) |
+| `rpd.task.int N\|ID` | `rpd.task.int 3` or `rpd.task.int R05` | Execute task #N or task ID in interactive TUI mode |
 
 #### Workflow Presets
 
@@ -472,8 +475,8 @@ Source: `ALIASES.sh`
 
 | Alias | Usage | Description |
 |---|---|---|
-| `rpc.task N` | `rpc.task 3` | Execute task #N from fix_plan.md |
-| `rpc.task.int N` | `rpc.task.int 3` | Execute task #N in interactive mode (live + monitor) |
+| `rpc.task N\|ID` | `rpc.task 3` or `rpc.task R05` | Execute task #N or task ID from fix_plan.md |
+| `rpc.task.int N\|ID` | `rpc.task.int 3` or `rpc.task.int R05` | Execute task #N or task ID in interactive mode (live + monitor) |
 
 #### Workflow Presets
 
@@ -574,8 +577,8 @@ Source: `codex/ALIASES.sh`
 
 | Alias | Usage | Description |
 |---|---|---|
-| `rpx.task N` | `rpx.task 3` | Execute task #N from fix_plan.md (non-interactive) |
-| `rpx.task.int N` | `rpx.task.int 3` | Execute task #N in interactive TUI mode |
+| `rpx.task N\|ID` | `rpx.task 3` or `rpx.task R05` | Execute task #N or task ID from fix_plan.md (non-interactive) |
+| `rpx.task.int N\|ID` | `rpx.task.int 3` or `rpx.task.int R05` | Execute task #N or task ID in interactive TUI mode |
 
 #### Workflow Presets
 
@@ -647,7 +650,7 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 --circuit-status        Show circuit breaker status
 --auto-reset-circuit    Auto-reset circuit breaker on startup
 --reset-session         Reset session state
---task NUM              Execute a specific task number from fix_plan.md (1-based)
+--task NUM|ID           Execute a specific task by number (1-based) or bold ID (e.g. R05)
 ```
 
 ### Devin-Specific Options
@@ -766,7 +769,7 @@ WORKTREE_QUALITY_GATES=auto
 Ralph operates on a loop cycle:
 
 1. **Read instructions** -- Loads `.ralph/PROMPT.md` with your project goals
-2. **Pick a task** -- Selects the next unclaimed `[ ]` task from `fix_plan.md` (or a specific task via `--task NUM`), marks it in-progress `[~]`
+2. **Pick a task** -- Selects the next unclaimed `[ ]` task from `fix_plan.md` (or a specific task via `--task NUM` or `--task ID`), marks it in-progress `[~]`
 3. **Inject directives** -- Prepends worktree constraints and a non-interactive directive to prevent "Shall I proceed?" stalls
 4. **Execute AI agent** -- Runs the configured engine (Devin / Claude / Codex) with current context
 5. **Detect changes** -- Compares git state before and after execution to count files changed, lines added/removed
@@ -779,15 +782,16 @@ Ralph operates on a loop cycle:
 
 ### Task Selection
 
-By default, Ralph picks the first unclaimed task (`- [ ]`) from `.ralph/fix_plan.md`. You can override this with the `--task` flag:
+By default, Ralph picks the first unclaimed task (`- [ ]`) from `.ralph/fix_plan.md`. You can override this with the `--task` flag using either a 1-based ordinal number or a bold task ID (e.g. `**R05**`):
 
 ```bash
 ralph-devin --task 3        # Execute the 3rd task in fix_plan.md
+ralph --task R05 --live     # Execute task **R05** by its ID with live output
 ralph --task 5 --live       # Execute the 5th task with live output
-ralph-codex --task 1        # Execute the 1st task with Codex
+ralph-codex --task r05      # Case-insensitive: matches **R05**
 ```
 
-Task numbers are 1-based ordinals counting only uncompleted tasks (`[ ]` and `[~]` markers). The corresponding aliases are:
+Task numbers are 1-based ordinals counting all task lines (`[ ]`, `[~]`, and `[x]` markers). Task IDs match the bold `**ID**` prefix in the task line (case-insensitive). The corresponding aliases are:
 
 ```bash
 rpd.task 3                  # Devin: non-interactive, task #3
