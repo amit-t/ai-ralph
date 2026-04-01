@@ -598,8 +598,12 @@ run_ai_planning() {
             fi
             ;;
         codex)
-            log "PLAN" "Launching: $cli_cmd (interactive) --permission-mode dangerous"
-            if "$cli_cmd" --permission-mode dangerous "$prompt_content"; then
+            local -a codex_flags=(
+                "--dangerously-bypass-approvals-and-sandbox"
+                "--"
+            )
+            log "PLAN" "Launching: $cli_cmd (interactive) --dangerously-bypass-approvals-and-sandbox"
+            if "$cli_cmd" "${codex_flags[@]}" "$prompt_content"; then
                 cli_exit_code=0
             else
                 cli_exit_code=$?
