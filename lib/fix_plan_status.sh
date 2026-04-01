@@ -110,7 +110,7 @@ Please provide:
             fi
             ;;
         codex)
-            if "$cli_cmd" --permission-mode dangerous "$prompt"; then
+            if "$cli_cmd" --dangerously-bypass-approvals-and-sandbox -- "$prompt"; then
                 cli_exit_code=0
             else
                 cli_exit_code=$?

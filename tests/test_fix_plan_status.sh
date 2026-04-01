@@ -92,11 +92,38 @@ test_engine_cli_missing() {
         "1" "$exit_code"
 }
 
+# ── show_fix_plan_status: codex uses current dangerous flag ───────────────────
+test_codex_invocation_flags() {
+    local tmp_dir args_file exit_code
+    tmp_dir=$(mktemp -d)
+    args_file="$tmp_dir/codex_args.txt"
+    mkdir -p "$tmp_dir/.ralph"
+    echo "# Fix Plan" > "$tmp_dir/.ralph/fix_plan.md"
+
+    (
+        cd "$tmp_dir" || exit 1
+        codex() {
+            printf '%s\n' "$@" > "$args_file"
+            return 0
+        }
+        show_fix_plan_status "codex" >/dev/null 2>&1
+    ); exit_code=$?
+
+    run_test "show_fix_plan_status: codex exits 0 with mocked CLI" \
+        "0" "$exit_code"
+    run_test "show_fix_plan_status: codex uses dangerous bypass flag" \
+        "--dangerously-bypass-approvals-and-sandbox" "$(sed -n '1p' "$args_file")"
+    run_test "show_fix_plan_status: codex separates prompt with --" \
+        "--" "$(sed -n '2p' "$args_file")"
+    rm -rf "$tmp_dir"
+}
+
 test_find_in_cwd
 test_find_one_level_up
 test_find_not_found
 test_unknown_engine
 test_engine_cli_missing
+test_codex_invocation_flags
 
 echo ""
 echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
