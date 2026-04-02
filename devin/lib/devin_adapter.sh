@@ -167,22 +167,81 @@ devin_load_session() {
     return 0
 }
 
-# Save session ID from Devin JSON output
-# Extracts session ID from the output file and persists it
+# Save session ID from Devin output or CLI list
+# Tries two strategies:
+#   1. Extract session ID from JSON output file (structured output)
+#   2. Fall back to `devin list --format json` to get the most recent session
 # Args:
-#   $1 - output_file: Path to the Devin output file
+#   $1 - output_file: Path to the Devin output file (may be raw terminal text)
 devin_save_session() {
     local output_file=$1
+    local session_id=""
 
+    # Strategy 1: Try to extract from JSON output (works if Devin outputs structured JSON)
     if [[ -f "$output_file" ]]; then
-        local session_id
         session_id=$(jq -r '.metadata.session_id // .session_id // .sessionId // empty' "$output_file" 2>/dev/null)
-        if [[ -n "$session_id" && "$session_id" != "null" ]]; then
-            DEVIN_SESSION_ID="$session_id"
-            echo "$session_id" > "$DEVIN_SESSION_FILE"
-            return 0
-        fi
     fi
+
+    # Strategy 2: Query `devin list` for the most recent session
+    # The Devin CLI output is often raw terminal text (TUI), so JSON extraction fails.
+    # Fall back to querying the session list after execution completes.
+    if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+        session_id=$(devin_get_latest_session_id 2>/dev/null)
+    fi
+
+    if [[ -n "$session_id" && "$session_id" != "null" ]]; then
+        DEVIN_SESSION_ID="$session_id"
+        echo "$session_id" > "$DEVIN_SESSION_FILE"
+        return 0
+    fi
+
+    return 1
+}
+
+# Get the most recent session ID from `devin list`
+# Returns: Session ID on stdout, or empty if unavailable
+devin_get_latest_session_id() {
+    local list_json
+    list_json=$("$DEVIN_CMD" list --format json 2>/dev/null) || return 1
+
+    if [[ -z "$list_json" ]] || ! echo "$list_json" | jq empty 2>/dev/null; then
+        return 1
+    fi
+
+    # Try common JSON shapes: array of objects, or object with sessions array
+    local session_id=""
+
+    # Shape 1: Array of session objects — first element is most recent
+    session_id=$(echo "$list_json" | jq -r '
+        if type == "array" then
+            (sort_by(.created_at // .started_at // .timestamp // "") | reverse)[0] |
+            (.id // .session_id // .sessionId // empty)
+        else empty end
+    ' 2>/dev/null)
+
+    # Shape 2: Object with a .sessions array
+    if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+        session_id=$(echo "$list_json" | jq -r '
+            if type == "object" and .sessions then
+                (.sessions | sort_by(.created_at // .started_at // .timestamp // "") | reverse)[0] |
+                (.id // .session_id // .sessionId // empty)
+            else empty end
+        ' 2>/dev/null)
+    fi
+
+    # Shape 3: Simple first-element fallback (if list is already sorted most-recent-first)
+    if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+        session_id=$(echo "$list_json" | jq -r '
+            if type == "array" then .[0] | (.id // .session_id // .sessionId // empty)
+            else empty end
+        ' 2>/dev/null)
+    fi
+
+    if [[ -n "$session_id" && "$session_id" != "null" ]]; then
+        echo "$session_id"
+        return 0
+    fi
+
     return 1
 }
 

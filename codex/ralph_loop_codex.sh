@@ -1112,6 +1112,10 @@ main() {
             log_status "WARN" "No changes were made during this execution."
             local _summary_session_id=""
             _summary_session_id=$(cat "$CODEX_SESSION_FILE" 2>/dev/null || echo "")
+            # Fallback: query Codex CLI for latest session if file is empty
+            if [[ -z "$_summary_session_id" ]]; then
+                _summary_session_id=$(codex_get_latest_session_id 2>/dev/null || echo "")
+            fi
             echo ""
             echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
             echo -e "${YELLOW}║               Summary - No Changes Made                   ║${NC}"
@@ -1189,6 +1193,10 @@ main() {
         # ── Feature 2: End summary with files changed + lines committed ──
         local _summary_session_id=""
         _summary_session_id=$(cat "$CODEX_SESSION_FILE" 2>/dev/null || echo "")
+        # Fallback: query Codex CLI for latest session if file is empty
+        if [[ -z "$_summary_session_id" ]]; then
+            _summary_session_id=$(codex_get_latest_session_id 2>/dev/null || echo "")
+        fi
         echo ""
         echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
         echo -e "${GREEN}║                  Execution Summary                        ║${NC}"
