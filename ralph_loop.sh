@@ -2110,6 +2110,8 @@ main() {
         # ── Feature 1: Early exit if no changes were made ────────────────
         if [[ $files_changed -eq 0 ]]; then
             log_status "WARN" "No changes were made during this execution."
+            local _summary_session_id=""
+            _summary_session_id=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null || echo "")
             echo ""
             echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
             echo -e "${YELLOW}║               Summary - No Changes Made                   ║${NC}"
@@ -2119,6 +2121,10 @@ main() {
             echo -e "${YELLOW}║${NC}  Lines added:     0"
             echo -e "${YELLOW}║${NC}  Lines removed:   0"
             echo -e "${YELLOW}║${NC}  Result:          No implementation changes detected"
+            if [[ -n "$_summary_session_id" ]]; then
+                echo -e "${YELLOW}║${NC}  Session ID:      ${_summary_session_id}"
+                echo -e "${YELLOW}║${NC}  Resume with:     claude --resume ${_summary_session_id}"
+            fi
             echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
             echo ""
             # Revert in-progress marker back to unclaimed so the task can be retried
@@ -2181,6 +2187,8 @@ main() {
         fi
 
         # ── Feature 2: End summary with files changed + lines committed ──
+        local _summary_session_id=""
+        _summary_session_id=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null || echo "")
         echo ""
         echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
         echo -e "${GREEN}║                  Execution Summary                        ║${NC}"
@@ -2190,6 +2198,10 @@ main() {
         echo -e "${GREEN}║${NC}  Lines added:     +${lines_added}"
         echo -e "${GREEN}║${NC}  Lines removed:   -${lines_removed}"
         echo -e "${GREEN}║${NC}  Net change:      $((lines_added - lines_removed)) lines"
+        if [[ -n "$_summary_session_id" ]]; then
+            echo -e "${GREEN}║${NC}  Session ID:      ${_summary_session_id}"
+            echo -e "${GREEN}║${NC}  Resume with:     claude --resume ${_summary_session_id}"
+        fi
         echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
         echo ""
 

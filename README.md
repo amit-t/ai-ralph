@@ -53,6 +53,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
   - [Git Worktree Isolation](#git-worktree-isolation)
 - [System Requirements](#system-requirements)
 - [Uninstalling](#uninstalling)
+- [Project Status](#project-status-1)
 
 ---
 
@@ -912,6 +913,113 @@ rpc.uninstall
 ```
 
 Uninstalling one engine does not affect the others.
+
+---
+
+## Project Status
+
+**Upstream Base**: [frankbria/ralph-claude-code](https://github.com/frankbria/ralph-claude-code) v0.11.5 | **Fork Status**: Active Development | **Tests**: 602 tests, 100% pass rate
+
+### What's Working Now
+
+- **Multi-engine autonomous loop** -- Devin CLI, Claude Code, and Codex CLI under one unified interface
+- **Git worktree isolation** -- each loop iteration runs on a dedicated branch; changes merge back only after quality gates pass
+- **Automatic PR creation** via `lib/pr_manager.sh` with quality-gate labels
+- **Parallel agent spawning** -- iTerm2 tabs, IDE terminals, or background processes (`--parallel N`)
+- **Task-specific execution** -- `--task NUM` (ordinal) or `--task R05` (bold markdown ID)
+- **Change detection with execution summary** -- files changed, lines added/removed; no-change early exit reverts task marker for retry
+- **Non-interactive directive injection** -- prevents "Shall I proceed?" stalls in headless mode
+- **Automatic dependency installation** in worktrees -- detects package manager, installs before quality gates
+- **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
+- **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection and multi-engine support
+- **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
+- **Intelligent exit detection** -- dual-condition gate requiring BOTH completion indicators AND explicit EXIT_SIGNAL
+- **Circuit breaker** with cooldown timer, auto-recovery, and configurable thresholds
+- **Session continuity** with `--continue` / `--resume` and 24-hour expiration
+- **Rate limiting** with hourly reset (100 calls/hour, configurable)
+- **JSON output format** with automatic fallback to text parsing
+- **File protection** -- multi-layered strategy to prevent accidental deletion of `.ralph/` config
+- **`.gitignore` injection** -- auto-appends Ralph entries instead of overwriting
+- **Interactive `ralph-enable` wizard** with auto-detection of project type and framework
+- **CI/CD pipeline** with GitHub Actions for automated testing
+
+### Recent Changes
+
+**Task ID Selection** (latest)
+- Support task ID selection via `--task R05` with bold markdown ID matching
+- Case-insensitive matching for task IDs
+
+**Task Selection & Change Detection**
+- `--task NUM|ID` flag for executing specific tasks from `fix_plan.md`
+- Change detection comparing git state before and after execution
+- Execution summary with files changed, lines added/removed
+- No-change early exit reverts `[~]` marker back to `[ ]` for retry
+- Automatic dependency installation in worktrees (detects package manager from lock files)
+
+**Gitignore Injection**
+- Ralph injects `.gitignore` entries instead of copying a template file
+- Preserves existing `.gitignore` content
+
+**Fix Plan Status**
+- `ralph-plan --status` to show current fix_plan.md progress
+- `rpc.plan.s` / `rpd.plan.s` / `rpx.plan.s` aliases
+
+**Quality Gate Fixes**
+- Correct misleading ERROR message on quality gate failure
+- Auto-create quality-gate labels on PRs
+
+**PR Creation & Worktree Integration**
+- Automatic PR creation after successful quality gates
+- Worktree directive separated from loop context for correct branch targeting
+- Atomic file locking in `pick_next_task` for parallel safety
+
+**Parallel Agent Spawning**
+- iTerm2 tab-based parallel execution
+- Background process mode (`--parallel-bg N`)
+- Task claiming with in-progress tracking for parallel loop support
+
+**Planning Mode**
+- AI-powered `ralph-plan` for building `fix_plan.md` from PRDs
+- PM-OS / DoE-OS auto-detection (sibling/cousin directory search)
+- Multi-engine support (`--engine devin|codex|claude`)
+- `--yolo` and `--superpowers` flags (Claude only)
+
+**Codex CLI Engine**
+- Full feature parity with Claude Code engine
+- GPT-4, GPT-3.5, and Claude model selection
+- Auto-exit and interactive TUI modes
+
+**Devin CLI Engine**
+- Cloud session polling with ACU limits
+- Opus, Sonnet, SWE, and GPT model selection
+- Permission modes (auto, dangerous)
+
+### In Progress
+
+- Fix plan status reporting improvements
+- Expanded test coverage for new engines
+- Log rotation functionality
+- Dry-run mode
+- Desktop notifications
+- Metrics and analytics tracking
+
+### Upstream Features (inherited from frankbria/ralph-claude-code v0.11.5)
+
+- Autonomous development loops with intelligent exit detection
+- Rate limiting with hourly reset (100 calls/hour, configurable)
+- Circuit breaker with advanced error detection and auto-recovery
+- Response analyzer with semantic understanding and two-stage error filtering
+- JSON output format support with automatic fallback to text parsing
+- Session continuity with context preservation and 24-hour expiration
+- Modern CLI flags: `--output-format`, `--allowed-tools`, `--no-continue`
+- Interactive project enablement with `ralph-enable` wizard
+- `.ralphrc` configuration file for project settings
+- Live streaming output with `--live` flag
+- Multi-line error matching for accurate stuck loop detection
+- 5-hour API limit handling with three-layer detection
+- tmux integration for live monitoring
+- PRD import functionality
+- CI/CD pipeline with GitHub Actions
 
 ---
 
