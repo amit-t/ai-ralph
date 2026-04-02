@@ -156,24 +156,46 @@ codex_load_session() {
     return 1
 }
 
-# Save session ID to file
+# Save session ID from Codex output or CLI list
+# Tries multiple strategies to capture the session ID:
+#   1. Extract from JSON output file (structured output)
+#   2. Extract from text output (grep fallback)
+#   3. Query `codex list --format json` for the most recent session
+# Args:
+#   $1 - output_file: Path to the Codex output file (may be raw terminal text)
 codex_save_session() {
-    local session_id=$1
-    if [[ -n "$session_id" ]]; then
+    local output_file=$1
+    local session_id=""
+
+    # Strategy 1+2: Extract from output file (JSON then text grep)
+    if [[ -f "$output_file" ]]; then
+        session_id=$(codex_extract_session_id "$output_file" 2>/dev/null)
+    fi
+
+    # Strategy 3: Query `codex list` for the most recent session
+    # The Codex CLI output is often raw terminal text (TUI), so extraction may fail.
+    if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+        session_id=$(codex_get_latest_session_id 2>/dev/null)
+    fi
+
+    if [[ -n "$session_id" && "$session_id" != "null" ]]; then
         echo "$session_id" > "$CODEX_SESSION_FILE"
         CODEX_SESSION_ID="$session_id"
-        
+
         # Append to history with timestamp
         local timestamp
         timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ')
         echo "$timestamp $session_id" >> "$CODEX_SESSION_HISTORY_FILE"
-        
+
         # Keep only last 50 entries
         if [[ -f "$CODEX_SESSION_HISTORY_FILE" ]]; then
             tail -50 "$CODEX_SESSION_HISTORY_FILE" > "${CODEX_SESSION_HISTORY_FILE}.tmp"
             mv "${CODEX_SESSION_HISTORY_FILE}.tmp" "$CODEX_SESSION_HISTORY_FILE"
         fi
+        return 0
     fi
+
+    return 1
 }
 
 # Reset session state
@@ -204,6 +226,52 @@ codex_extract_session_id() {
         return 0
     fi
     
+    return 1
+}
+
+# Get the most recent session ID from `codex list`
+# Returns: Session ID on stdout, or empty if unavailable
+codex_get_latest_session_id() {
+    local list_json
+    list_json=$("$CODEX_CMD" list --format json 2>/dev/null) || return 1
+
+    if [[ -z "$list_json" ]] || ! echo "$list_json" | jq empty 2>/dev/null; then
+        return 1
+    fi
+
+    local session_id=""
+
+    # Shape 1: Array of session objects — sort by timestamp, take most recent
+    session_id=$(echo "$list_json" | jq -r '
+        if type == "array" then
+            (sort_by(.created_at // .started_at // .timestamp // "") | reverse)[0] |
+            (.id // .session_id // .sessionId // empty)
+        else empty end
+    ' 2>/dev/null)
+
+    # Shape 2: Object with a .sessions array
+    if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+        session_id=$(echo "$list_json" | jq -r '
+            if type == "object" and .sessions then
+                (.sessions | sort_by(.created_at // .started_at // .timestamp // "") | reverse)[0] |
+                (.id // .session_id // .sessionId // empty)
+            else empty end
+        ' 2>/dev/null)
+    fi
+
+    # Shape 3: Simple first-element fallback (if already sorted most-recent-first)
+    if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+        session_id=$(echo "$list_json" | jq -r '
+            if type == "array" then .[0] | (.id // .session_id // .sessionId // empty)
+            else empty end
+        ' 2>/dev/null)
+    fi
+
+    if [[ -n "$session_id" && "$session_id" != "null" ]]; then
+        echo "$session_id"
+        return 0
+    fi
+
     return 1
 }
 
