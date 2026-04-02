@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Ralph - Changelog</title>
+  <meta name="description" content="Complete changelog for AI Ralph - the multi-engine autonomous AI development loop system.">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-card: #161b22;
+      --bg-hover: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-purple: #bc8cff;
+      --accent-orange: #d29922;
+      --accent-red: #f85149;
+      --accent-cyan: #39d3ed;
+      --tag-feat: #1f6feb;
+      --tag-fix: #da3633;
+      --tag-docs: #8957e5;
+      --tag-refactor: #d29922;
+      --tag-test: #3fb950;
+      --tag-ci: #768390;
+      --tag-chore: #636c76;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .hero {
+      position: relative;
+      padding: 4rem 2rem 3rem;
+      text-align: center;
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1e2e 100%);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(88, 166, 255, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 50%, rgba(188, 140, 255, 0.06) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .hero-content { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; }
+
+    .hero h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero .subtitle {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-badges {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 2rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .badge-blue { border-color: rgba(88, 166, 255, 0.3); color: var(--accent-blue); }
+    .badge-green { border-color: rgba(63, 185, 80, 0.3); color: var(--accent-green); }
+    .badge-purple { border-color: rgba(188, 140, 255, 0.3); color: var(--accent-purple); }
+    .badge-orange { border-color: rgba(210, 153, 34, 0.3); color: var(--accent-orange); }
+
+    .badge svg { width: 14px; height: 14px; fill: currentColor; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      justify-content: center;
+      gap: 2.5rem;
+      padding: 1.25rem 2rem;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent-blue);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 2rem;
+      background: rgba(13, 17, 23, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .filter-bar label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-right: 0.25rem;
+    }
+
+    .filter-btn {
+      padding: 0.3rem 0.7rem;
+      border-radius: 2rem;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .filter-btn:hover { border-color: var(--text-muted); color: var(--text); }
+    .filter-btn.active { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
+
+    .search-input {
+      margin-left: auto;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text);
+      font-size: 0.85rem;
+      width: 220px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent-blue); }
+
+    /* Main content */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* Version section */
+    .version-section {
+      margin-bottom: 3rem;
+    }
+
+    .version-header {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .version-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .version-date {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .version-tag {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .tag-latest { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+    .tag-fork { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+    .tag-upstream { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); border: 1px solid rgba(88, 166, 255, 0.3); }
+
+    /* Change entries */
+    .change-list { list-style: none; }
+
+    .change-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+      transition: background 0.1s;
+    }
+
+    .change-item:hover { background: var(--bg-hover); margin: 0 -0.75rem; padding-left: 0.75rem; padding-right: 0.75rem; border-radius: 6px; }
+    .change-item:last-child { border-bottom: none; }
+
+    .change-type {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 60px;
+      padding: 0.15rem 0;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .type-feat { background: rgba(31, 111, 235, 0.15); color: #79c0ff; }
+    .type-fix { background: rgba(218, 54, 51, 0.15); color: #ff7b72; }
+    .type-docs { background: rgba(137, 87, 229, 0.15); color: #d2a8ff; }
+    .type-refactor { background: rgba(210, 153, 34, 0.15); color: #e3b341; }
+    .type-test { background: rgba(63, 185, 80, 0.15); color: #7ee787; }
+    .type-ci { background: rgba(118, 131, 144, 0.15); color: #a5b4c4; }
+    .type-chore { background: rgba(99, 108, 118, 0.15); color: #9aa5b0; }
+    .type-merge { background: rgba(57, 211, 237, 0.12); color: var(--accent-cyan); }
+
+    .change-text {
+      flex: 1;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    .change-scope {
+      color: var(--accent-purple);
+      font-weight: 600;
+    }
+
+    .change-issue {
+      color: var(--accent-blue);
+      font-size: 0.8rem;
+      text-decoration: none;
+    }
+
+    .change-issue:hover { text-decoration: underline; }
+
+    .change-hash {
+      flex-shrink: 0;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      opacity: 0.6;
+    }
+
+    /* Subsections within a version */
+    .change-group-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin: 1.25rem 0 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .change-group-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .footer a { color: var(--accent-blue); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2rem; }
+      .hero { padding: 2.5rem 1rem 2rem; }
+      .stats-bar { gap: 1.5rem; }
+      .filter-bar { padding: 0.75rem 1rem; }
+      .search-input { width: 100%; margin-left: 0; margin-top: 0.5rem; }
+      .container { padding: 1.5rem 1rem; }
+      .change-hash { display: none; }
+    }
+
+    /* Animate in */
+    .version-section {
+      animation: fadeSlideIn 0.4s ease-out both;
+    }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .no-results {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-muted);
+      display: none;
+    }
+
+    .no-results.visible { display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="hero-content">
+      <h1>AI Ralph</h1>
+      <p class="subtitle">Multi-engine autonomous AI development loop &mdash; Devin, Claude Code, and Codex under one roof.</p>
+      <div class="hero-badges">
+        <span class="badge badge-blue">
+          <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          amit-t/ai-ralph
+        </span>
+        <span class="badge badge-green">
+          <svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+          602 Tests Passing
+        </span>
+        <span class="badge badge-purple">
+          <svg viewBox="0 0 16 16"><path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75v-.878a2.25 2.25 0 111.5 0v.878a2.25 2.25 0 01-2.25 2.25h-1.5v2.128a2.251 2.251 0 11-1.5 0V8.5h-1.5A2.25 2.25 0 013.5 6.25v-.878a2.25 2.25 0 111.5 0zM5 3.25a.75.75 0 10-1.5 0 .75.75 0 001.5 0zm6.75.75a.75.75 0 10 0-1.5.75.75 0 000 1.5zM8 12.75a.75.75 0 10 0-1.5.75.75 0 000 1.5z"/></svg>
+          Fork of frankbria/ralph-claude-code
+        </span>
+        <span class="badge badge-orange">
+          <svg viewBox="0 0 16 16"><path d="M8.75 1.75a.75.75 0 00-1.5 0V5H4a.75.75 0 000 1.5h3.25v3.25a.75.75 0 001.5 0V6.5H12A.75.75 0 0012 5H8.75V1.75z"/></svg>
+          150+ Aliases
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">AI Engines</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">200+</div>
+      <div class="stat-label">Commits</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">17</div>
+      <div class="stat-label">Pull Requests</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">8</div>
+      <div class="stat-label">Libraries</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">602</div>
+      <div class="stat-label">Tests</div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <label>Filter:</label>
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="feat">Features</button>
+    <button class="filter-btn" data-filter="fix">Fixes</button>
+    <button class="filter-btn" data-filter="docs">Docs</button>
+    <button class="filter-btn" data-filter="refactor">Refactor</button>
+    <button class="filter-btn" data-filter="test">Tests</button>
+    <input type="text" class="search-input" placeholder="Search changelog..." id="searchInput">
+  </div>
+
+  <!-- Changelog -->
+  <main class="container" id="changelog">
+
+    <!-- Latest: Fork Development -->
+    <section class="version-section" data-version="latest">
+      <div class="version-header">
+        <span class="version-name">Latest on dev</span>
+        <span class="version-date">April 2026</span>
+        <span class="version-tag tag-latest">latest</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">summary:</span> Display session/conversation ID in execution summary</span><span class="change-hash">71c7aac</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Update Codex CLI flags to <code>--dangerously-bypass-approvals-and-sandbox</code></span><span class="change-hash">75084be</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="task-id-selection">
+      <div class="version-header">
+        <span class="version-name">Task ID Selection</span>
+        <span class="version-date">March 31, 2026</span>
+        <span class="version-tag tag-fork">PR #16</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Support task ID selection via <code>--task R05</code> with bold markdown ID matching (case-insensitive)</span><span class="change-hash">ae9d303</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="task-selection">
+      <div class="version-header">
+        <span class="version-name">Task Selection & Change Detection</span>
+        <span class="version-date">March 30-31, 2026</span>
+        <span class="version-tag tag-fork">PR #15</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add <code>--task NUM|ID</code> flag for specific task execution from <code>fix_plan.md</code></span><span class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Change detection comparing git state before and after execution</span><span class="change-hash">a15b271</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Execution summary with files changed, lines added/removed</span><span class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">No-change early exit reverts <code>[~]</code> marker back to <code>[ ]</code> for retry</span><span class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Automatic dependency installation in worktrees (detects package manager from lock files)</span><span class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="docs"><span class="change-type type-docs">docs</span><span class="change-text">Add task-specific execution, change detection, and dependency installation features to README</span><span class="change-hash">bab0f66</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="gitignore">
+      <div class="version-header">
+        <span class="version-name">Gitignore Injection</span>
+        <span class="version-date">March 27, 2026</span>
+        <span class="version-tag tag-fork">PR #14</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Inject Ralph <code>.gitignore</code> entries instead of copying template &mdash; preserves existing content</span><span class="change-hash">331c2fc</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="fix-plan-status">
+      <div class="version-header">
+        <span class="version-name">Fix Plan Status & README Rewrite</span>
+        <span class="version-date">March 25, 2026</span>
+        <span class="version-tag tag-fork">PR #12, #13</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add <code>lib/fix_plan_status.sh</code> with <code>find_fix_plan</code> and <code>show_fix_plan_status</code></span><span class="change-hash">942a031</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">ralph_plan:</span> Add <code>--status</code> flag to display fix_plan.md progress</span><span class="change-hash">32fb7f6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add <code>rpc.plan.s</code> / <code>rpx.plan.s</code> / <code>rpd.plan.s</code> aliases for fix plan status</span><span class="change-hash">7800bb6</span></li>
+        <li class="change-item" data-type="docs"><span class="change-type type-docs">docs</span><span class="change-text">Comprehensive README rewrite for multi-engine fork with full aliases reference</span><span class="change-hash">11732e2</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text">Add failing tests for fix_plan_status lib (TDD approach)</span><span class="change-hash">baccd71</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="quality-gates">
+      <div class="version-header">
+        <span class="version-name">Quality Gate Fixes</span>
+        <span class="version-date">March 24, 2026</span>
+        <span class="version-tag tag-fork">PR #11</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">pr:</span> Correct misleading ERROR message on quality gate failure and auto-create labels</span><span class="change-hash">3951b9c</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="pr-creation">
+      <div class="version-header">
+        <span class="version-name">Automatic PR Creation & Worktree Integration</span>
+        <span class="version-date">March 22-24, 2026</span>
+        <span class="version-tag tag-fork">PR #7, #8, #10</span>
+      </div>
+
+      <div class="change-group-title">Features</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Add <code>pr_manager.sh</code> with preflight check, title builder, description builder</span><span class="change-hash">b7bf8fb</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Add <code>worktree_commit_and_pr</code> for end-to-end PR creation</span><span class="change-hash">c81a3f6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Add <code>worktree_fallback_branch_pr</code> for failed quality gate branches</span><span class="change-hash">ae26bb2</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Wire auto-PR flow into Codex and Devin variants with config templates</span><span class="change-hash">9570ff2</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Auto-PR replaces merge prompt in main loop</span><span class="change-hash">2bfc56e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Fallback to compare URL when <code>gh</code> not available or not authenticated</span><span class="change-hash">d5ac0d7</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">interactive:</span> Restore interactive TUI mode for Devin and Codex</span><span class="change-hash">f3ddc72</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin,codex:</span> Auto-exit interactive session on RALPH_STATUS detection</span><span class="change-hash">b89d2ab</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">aliases:</span> Add engine-specific enable aliases and <code>rp.install</code> meta-alias</span><span class="change-hash">f5a573d</span></li>
+      </ul>
+
+      <div class="change-group-title">Fixes</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">pr:</span> Surface push errors and add remote reachability check</span><span class="change-hash">5b718f4</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">devin,codex:</span> Survive Ctrl+C in interactive mode and always run PR+cleanup</span><span class="change-hash">8888f3d</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">enable:</span> Preserve <code>fix_plan.md</code> on re-enable to protect work progress</span><span class="change-hash">2e04bcb</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">install:</span> Always create <code>~/.ralph/lib</code> before copying shared libs</span><span class="change-hash">c928edf</span></li>
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">loop:</span> Replace while loop with single-run architecture for all engines</span><span class="change-hash">cc65616</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="parallel-worktree">
+      <div class="version-header">
+        <span class="version-name">Parallel Agents & Worktree Isolation</span>
+        <span class="version-date">March 2026</span>
+        <span class="version-tag tag-fork">fork</span>
+      </div>
+
+      <div class="change-group-title">Features</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add parallel agent spawning and worktree integration for all engines</span><span class="change-hash">65ede1e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add IDE terminal tab support for VS Code, Windsurf, and Cursor</span><span class="change-hash">03337a4</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add <code>--parallel-bg</code> flag for background mode in any terminal</span><span class="change-hash">11c4bed</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add task claiming and in-progress tracking for parallel loop support</span><span class="change-hash">261f64a</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">worktree:</span> Sync full <code>.ralph/</code> directory and add worktree mode context injection</span><span class="change-hash">8509ca5</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">worktree:</span> Auto-mark tasks complete after merge and sync <code>fix_plan.md</code> state</span><span class="change-hash">eaabde9</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">worktree:</span> Interactive merge prompt &mdash; ask user yes/no before merging to main</span><span class="change-hash">e13188f</span></li>
+      </ul>
+
+      <div class="change-group-title">Fixes</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Worktree agents editing main branch instead of worktree &mdash; separate worktree directive from loop context</span><span class="change-hash">1816719</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Atomic file locking in <code>pick_next_task</code> for parallel safety</span><span class="change-hash">1816719</span></li>
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">parallel:</span> Use iTerm2 tabs instead of separate windows</span><span class="change-hash">e7e985a</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="planning-mode">
+      <div class="version-header">
+        <span class="version-name">Planning Mode</span>
+        <span class="version-date">March 2026</span>
+        <span class="version-tag tag-fork">fork</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add <code>ralph-plan</code> command for PRD-driven <code>fix_plan.md</code> generation</span><span class="change-hash">be04a78</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add PM-OS / DoE-OS auto-detection and integration for <code>ralph-plan</code></span><span class="change-hash">6744c55</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Switch to interactive AI mode for better user visibility</span><span class="change-hash">c47856e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add permission bypass flags (<code>--yolo</code>, <code>--superpowers</code>) for Claude</span><span class="change-hash">149432a</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add timeout protection and improve Claude CLI error handling</span><span class="change-hash">e0a85d6</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="codex-engine">
+      <div class="version-header">
+        <span class="version-name">Codex CLI Engine</span>
+        <span class="version-date">March 2026</span>
+        <span class="version-tag tag-fork">fork</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">codex:</span> Complete Ralph for Codex implementation with full feature parity</span><span class="change-hash">34d4090</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">GPT-4, GPT-3.5, and Claude model selection</span><span class="change-hash">34d4090</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Auto-exit and interactive TUI modes (<code>--no-codex-auto-exit</code>)</span><span class="change-hash">34d4090</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">aliases:</span> Create <code>rpx.*</code> aliases for Codex engine</span><span class="change-hash">05635e9</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="devin-engine">
+      <div class="version-header">
+        <span class="version-name">Devin CLI Engine</span>
+        <span class="version-date">February-March 2026</span>
+        <span class="version-tag tag-fork">fork</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add Devin CLI support with parallel command structure</span><span class="change-hash">3a16332</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Add git worktree isolation for parallel development</span><span class="change-hash">0131d5b</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Add interactive live mode support and max loops limit</span><span class="change-hash">c38f3a1</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Cloud session polling with ACU limits</span><span class="change-hash">3a16332</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Opus, Sonnet, SWE, and GPT model selection</span><span class="change-hash">3a16332</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Permission modes (auto, dangerous)</span><span class="change-hash">69fa73f</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">beads:</span> Bidirectional sync between beads and <code>fix_plan.md</code></span><span class="change-hash">3575af1</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Add <code>--no-devin-auto-exit</code> flag for interactive TUI mode</span><span class="change-hash">d316a5c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">aliases:</span> Create <code>rpd.*</code> aliases for Devin engine</span><span class="change-hash">05635e9</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="upstream-sync">
+      <div class="version-header">
+        <span class="version-name">Upstream Sync &mdash; frankbria/ralph-claude-code</span>
+        <span class="version-date">March 2026</span>
+        <span class="version-tag tag-fork">PR #5, #6</span>
+      </div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">skills:</span> Add fork-sync agent workflow for upstream synchronization</span><span class="change-hash">1fb10d2</span></li>
+        <li class="change-item" data-type="merge"><span class="change-type type-merge">merge</span><span class="change-text">Sync main with upstream frankbria/ralph-claude-code (v0.11.5)</span><span class="change-hash">3bd7bb6</span></li>
+      </ul>
+    </section>
+
+    <!-- Upstream features (inherited) -->
+    <section class="version-section" data-version="v0.11.5">
+      <div class="version-header">
+        <span class="version-name">v0.11.5</span>
+        <span class="version-date">Early 2026</span>
+        <span class="version-tag tag-upstream">upstream</span>
+      </div>
+
+      <div class="change-group-title">Features</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">live:</span> Show sub-agent progress in tmux live output <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/pull/216">#216</a></span><span class="change-hash">f702543</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">monitor:</span> Suppress I/O errors on broken tmux pty <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/188">#188</a></span><span class="change-hash">3fe66f6</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Detect Claude Extra Usage quota exhaustion <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/100">#100</a></span><span class="change-hash">f1298b8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Prevent stale exit signals from causing premature exit <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/194">#194</a></span><span class="change-hash">12e4710</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Detect productive work on timeout instead of blanket failure <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/198">#198</a></span><span class="change-hash">13e35c4</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Detect <code>is_error:true</code> in JSON output when CLI exits with code 0 <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/134">#134</a>, <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/199">#199</a></span><span class="change-hash">2cf2bf3</span></li>
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">loop:</span> Remove <code>set -e</code> in favor of explicit error handling <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/208">#208</a></span><span class="change-hash">8237aa3</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="v0.11.0">
+      <div class="version-header">
+        <span class="version-name">v0.11.0 &mdash; Question Detection & Session Fixes</span>
+        <span class="version-date">2025-2026</span>
+        <span class="version-tag tag-upstream">upstream</span>
+      </div>
+
+      <div class="change-group-title">Features</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">analyzer:</span> Add question pattern detection for headless mode <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">7fb4ed7</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">enable:</span> Add <code>ralph-enable</code> wizard for existing projects <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/124">#124</a></span><span class="change-hash">910f794</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">loop:</span> Validate Claude Code CLI command at startup <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/97">#97</a></span><span class="change-hash">4383e99</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">loop:</span> Add version check and auto-update at startup <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">170c530</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">diagnostic:</span> Add <code>ralph-check-beads</code> command for beads integration verification</span><span class="change-hash">7d0f337</span></li>
+      </ul>
+
+      <div class="change-group-title">Fixes</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Inject corrective guidance when previous loop asked questions <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">d69b652</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Suppress no-progress counter on question loops <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">ffbc034</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Separate stderr from live mode JSON stream to fix jq parsing <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">13b2413</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Persist API call counter immediately, not only on success <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/196">#196</a></span><span class="change-hash">6ff27b4</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Prevent <code>set -e</code> from killing script on API limit prompt timeout <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/185">#185</a></span><span class="change-hash">117fed7</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">enable:</span> Avoid early wizard exit when GitHub/beads checks return non-zero</span><span class="change-hash">2f64c45</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="v0.10">
+      <div class="version-header">
+        <span class="version-name">v0.10.x &mdash; File Protection, Circuit Breaker Recovery, Live Mode</span>
+        <span class="version-date">2025</span>
+        <span class="version-tag tag-upstream">upstream</span>
+      </div>
+
+      <div class="change-group-title">Features</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">protection:</span> Prevent Ralph from deleting its own <code>.ralph/</code> directory <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/149">#149</a></span><span class="change-hash">5ae0d21</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Add auto-recovery from OPEN state with cooldown timer <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/160">#160</a></span><span class="change-hash">b4b9db6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add live streaming output mode with real-time Claude Code visibility <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/125">#125</a></span><span class="change-hash">9aa2fef</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">exit:</span> Detect permission denials and halt loop <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/101">#101</a></span><span class="change-hash">3282948</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">structure:</span> Migrate Ralph files to <code>.ralph/</code> subfolder <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/109">#109</a></span><span class="change-hash">9b19d70</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add timeout command support for macOS <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/108">#108</a></span><span class="change-hash">0e95f67</span></li>
+      </ul>
+
+      <div class="change-group-title">Fixes</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">setup:</span> Generate <code>.gitignore</code> for new projects, enable dotglob so template is copied <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/174">#174</a></span><span class="change-hash">3b22c0e</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Prevent silent script death on Claude timeout <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/175">#175</a></span><span class="change-hash">fe64f2b</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">live-mode:</span> Crash with text output format <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/164">#164</a></span><span class="change-hash">4027ac9</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">wizard:</span> Redirect prompts to stderr for clean command substitution <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/130">#130</a></span><span class="change-hash">05c5720</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Improve permission denial display to show tool names</span><span class="change-hash">6dc1c2c</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Progress detection improvements <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/141">#141</a>, <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/144">#144</a></span><span class="change-hash">aa753c9</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Auto-terminate tmux session when Ralph loop exits <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/176">#176</a></span><span class="change-hash">1233995</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="v0.9">
+      <div class="version-header">
+        <span class="version-name">v0.9.x &mdash; EXIT_SIGNAL Gate, JSON Parsing, Session Management</span>
+        <span class="version-date">2025</span>
+        <span class="version-tag tag-upstream">upstream</span>
+      </div>
+
+      <div class="change-group-title">Features</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">exit:</span> Use explicit EXIT_SIGNAL instead of confidence threshold &mdash; dual-condition gate <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/132">#132</a></span><span class="change-hash">f6fde67</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">session:</span> Implement session expiration with configurable timeout (24h default) <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/84">#84</a></span><span class="change-hash">3dc3479</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">session:</span> Add session lifecycle management with auto-reset triggers</span><span class="change-hash">d3310d1</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">analyzer:</span> Add Claude CLI JSON format support and session management</span><span class="change-hash">fdff095</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">cli:</span> Add modern CLI commands with JSON output support (Phase 1.1)</span><span class="change-hash">da5640e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">import:</span> Modernize <code>ralph_import.sh</code> with JSON output parsing</span><span class="change-hash">4b1ca9b</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add dedicated <code>uninstall.sh</code> script <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/45">#45</a></span><span class="change-hash">3e8d3fd</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">loop:</span> Support for non-zero first-window tmux configs</span><span class="change-hash">da84dbc</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Allow configuring thresholds via environment variables</span><span class="change-hash">c05499c</span></li>
+      </ul>
+
+      <div class="change-group-title">Fixes</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">session:</span> Clear exit signals on session reset <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/91">#91</a></span><span class="change-hash">d63f300</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">analyzer:</span> Respect explicit EXIT_SIGNAL:false with STATUS:COMPLETE</span><span class="change-hash">43bba1b</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">analyzer:</span> Handle Claude CLI JSON array output format</span><span class="change-hash">5ce9bc8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Prevent session hijacking and improve reliability</span><span class="change-hash">42f5df6</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">import:</span> Add <code>--print</code> flag to prevent <code>ralph-import</code> hanging</span><span class="change-hash">fe94cbd</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">monitor:</span> Forward all CLI parameters to inner ralph loop <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/120">#120</a></span><span class="change-hash">83672d3</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">setup:</span> Create <code>.ralphrc</code> with consistent tool permissions <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/137">#137</a></span><span class="change-hash">dbb27d8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Extract denied commands from correct JSON path <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/143">#143</a></span><span class="change-hash">627ad7d</span></li>
+      </ul>
+
+      <div class="change-group-title">Testing</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">cli:</span> Add comprehensive CLI argument parsing tests</span><span class="change-hash">fffcc26</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">install:</span> Add 14 comprehensive installation tests</span><span class="change-hash">6688c27</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">setup:</span> Add 36 comprehensive tests for <code>setup.sh</code></span><span class="change-hash">c68e484</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">import:</span> Add 22 comprehensive tests for <code>ralph_import.sh</code></span><span class="change-hash">b06d979</span></li>
+      </ul>
+    </section>
+
+    <section class="version-section" data-version="foundation">
+      <div class="version-header">
+        <span class="version-name">Foundation &mdash; Core Loop & Infrastructure</span>
+        <span class="version-date">Oct-Dec 2025</span>
+        <span class="version-tag tag-upstream">upstream</span>
+      </div>
+
+      <div class="change-group-title">Features</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Autonomous AI development loop with intelligent exit detection</span><span class="change-hash">5e1d873</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Rate limiting with hourly reset (100 calls/hour, configurable)</span><span class="change-hash">5e1d873</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Circuit breaker with advanced error detection and two-stage filtering</span><span class="change-hash">2cf06b0</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Response analyzer with semantic understanding</span><span class="change-hash">2cf06b0</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Cross-platform date utilities for macOS and Linux</span><span class="change-hash">3d7db2c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">tmux integration for live monitoring</span><span class="change-hash">d815195</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Global command system &mdash; <code>ralph</code>, <code>ralph-monitor</code>, <code>ralph-setup</code></span><span class="change-hash">6d64be9</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">PRD import command (<code>ralph-import</code>) using Claude Code</span><span class="change-hash">76a8022</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Configurable timeout for Claude Code execution</span><span class="change-hash">7b6f71f</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Verbose option with separated progress updates</span><span class="change-hash">d480c1e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Comprehensive test infrastructure with BATS</span><span class="change-hash">8ad49e6</span></li>
+      </ul>
+
+      <div class="change-group-title">Critical Bug Fixes</div>
+      <ul class="change-list">
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix infinite retry loop when Claude API 5-hour limit is reached</span><span class="change-hash">08fe93e</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix silent exit bug and improve error messages</span><span class="change-hash">738e91a</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix exit condition logic in <code>ralph_loop.sh</code></span><span class="change-hash">dac9629</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix <code>loop_count</code> increment syntax for bash compatibility</span><span class="change-hash">6bf8cd8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Eliminate JSON field false positives in error detection</span><span class="change-hash">8fc5375</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Fix multi-line error matching in <code>detect_stuck_loop</code></span><span class="change-hash">63590b3</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">install:</span> Add <code>lib/</code> directory copy for <code>response_analyzer.sh</code></span><span class="change-hash">a98a167</span></li>
+      </ul>
+    </section>
+
+    <div class="no-results" id="noResults">
+      <p>No changelog entries match your search.</p>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>
+      <a href="https://github.com/amit-t/ai-ralph">AI Ralph</a> &mdash;
+      Fork of <a href="https://github.com/frankbria/ralph-claude-code">frankbria/ralph-claude-code</a>
+      &middot; Inspired by the <a href="https://ghuntley.com/ralph/">Ralph technique</a> by Geoffrey Huntley
+    </p>
+    <p style="margin-top: 0.5rem; opacity: 0.6;">Last updated: April 2, 2026</p>
+  </footer>
+
+  <script>
+    // Filter functionality
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const changeItems = document.querySelectorAll('.change-item');
+    const searchInput = document.getElementById('searchInput');
+    const noResults = document.getElementById('noResults');
+    const sections = document.querySelectorAll('.version-section');
+
+    let activeFilter = 'all';
+
+    function applyFilters() {
+      const query = searchInput.value.toLowerCase().trim();
+      let totalVisible = 0;
+
+      sections.forEach(section => {
+        const items = section.querySelectorAll('.change-item');
+        let sectionVisible = 0;
+
+        items.forEach(item => {
+          const type = item.getAttribute('data-type');
+          const text = item.textContent.toLowerCase();
+          const typeMatch = activeFilter === 'all' || type === activeFilter;
+          const searchMatch = !query || text.includes(query);
+          const visible = typeMatch && searchMatch;
+
+          item.style.display = visible ? '' : 'none';
+          if (visible) sectionVisible++;
+        });
+
+        // Show/hide group titles based on visible children
+        section.querySelectorAll('.change-group-title').forEach(title => {
+          let next = title.nextElementSibling;
+          let hasVisible = false;
+          if (next && next.classList.contains('change-list')) {
+            next.querySelectorAll('.change-item').forEach(i => {
+              if (i.style.display !== 'none') hasVisible = true;
+            });
+          }
+          title.style.display = hasVisible ? '' : 'none';
+        });
+
+        section.style.display = sectionVisible > 0 ? '' : 'none';
+        totalVisible += sectionVisible;
+      });
+
+      noResults.classList.toggle('visible', totalVisible === 0);
+    }
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeFilter = btn.getAttribute('data-filter');
+        applyFilters();
+      });
+    });
+
+    searchInput.addEventListener('input', applyFilters);
+
+    // Stagger animation
+    sections.forEach((s, i) => {
+      s.style.animationDelay = `${i * 0.06}s`;
+    });
+  </script>
+</body>
+</html>
