@@ -645,9 +645,303 @@
 
     .no-results.visible { display: block; }
 
+    /* ===== COMMANDS & ALIASES SECTION ===== */
+    .cmd-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      align-items: center;
+    }
+
+    .cmd-search {
+      flex: 1;
+      min-width: 200px;
+      padding: 0.6rem 0.85rem;
+      border: var(--border-w) solid var(--border-light);
+      background: var(--surface-light);
+      color: var(--text-light);
+      font-family: inherit;
+      font-size: 0.85rem;
+      box-shadow: var(--shadow-sm) var(--border-light);
+      outline: none;
+    }
+
+    body.dark .cmd-search {
+      border-color: var(--border-dark);
+      background: var(--surface-dark);
+      color: var(--text-dark);
+      box-shadow: var(--shadow-sm) var(--border-dark);
+    }
+
+    .cmd-search:focus { box-shadow: var(--shadow-md) var(--electric-blue); }
+
+    .engine-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .engine-btn {
+      padding: 0.35rem 0.7rem;
+      border: var(--border-w) solid var(--border-light);
+      background: var(--surface-light);
+      color: var(--text-light);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm) var(--border-light);
+      transition: transform 0.14s, box-shadow 0.14s;
+    }
+
+    body.dark .engine-btn {
+      border-color: var(--border-dark);
+      background: var(--surface-dark);
+      color: var(--text-dark);
+      box-shadow: var(--shadow-sm) var(--border-dark);
+    }
+
+    .engine-btn:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: var(--shadow-md) var(--border-light);
+    }
+
+    body.dark .engine-btn:hover { box-shadow: var(--shadow-md) var(--border-dark); }
+
+    .engine-btn.active {
+      background: var(--cyan-accent);
+      color: #000;
+    }
+
+    body.dark .engine-btn.active {
+      background: #007a8a;
+      color: #fff;
+    }
+
+    .cmd-category {
+      margin-bottom: 2rem;
+    }
+
+    .cmd-category-title {
+      display: inline-block;
+      padding: 0.3rem 0.65rem;
+      border: var(--border-w) solid var(--border-light);
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.75rem;
+    }
+
+    body.dark .cmd-category-title { border-color: var(--border-dark); }
+
+    .cat-basic { background: var(--electric-blue); color: #fff; }
+    body.dark .cat-basic { background: #1e3a5c; color: #fff; }
+
+    .cat-session { background: var(--purple-accent); color: #fff; }
+    body.dark .cat-session { background: #341797; color: #fff; }
+
+    .cat-circuit { background: var(--warm-coral); color: #000; }
+    body.dark .cat-circuit { background: #b2432e; color: #fff; }
+
+    .cat-config { background: var(--yellow-accent); color: #000; }
+    body.dark .cat-config { background: #bba701; color: #fff; }
+
+    .cat-model { background: var(--hot-pink); color: #000; }
+    body.dark .cat-model { background: #b3004b; color: #fff; }
+
+    .cat-worktree { background: var(--cyan-accent); color: #000; }
+    body.dark .cat-worktree { background: #007a8a; color: #fff; }
+
+    .cat-interactive { background: var(--lime-green); color: #000; }
+    body.dark .cat-interactive { background: #3d6600; color: #fff; }
+
+    .cat-workflow { background: var(--vibrant-orange); color: #fff; }
+    body.dark .cat-workflow { background: #b25a00; color: #fff; }
+
+    .cat-management { background: var(--electric-blue); color: #fff; }
+    body.dark .cat-management { background: #1e3a5c; color: #fff; }
+
+    .cat-planning { background: var(--hot-pink); color: #000; }
+    body.dark .cat-planning { background: #b3004b; color: #fff; }
+
+    .cat-task { background: var(--lime-green); color: #000; }
+    body.dark .cat-task { background: #3d6600; color: #fff; }
+
+    .cat-shared { background: var(--yellow-accent); color: #000; }
+    body.dark .cat-shared { background: #bba701; color: #fff; }
+
+    .cat-permission { background: var(--warm-coral); color: #000; }
+    body.dark .cat-permission { background: #b2432e; color: #fff; }
+
+    .cat-output { background: var(--cyan-accent); color: #000; }
+    body.dark .cat-output { background: #007a8a; color: #fff; }
+
+    .cmd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .cmd-table th,
+    .cmd-table td {
+      padding: 0.6rem 0.75rem;
+      border: var(--border-w) solid var(--border-light);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    body.dark .cmd-table th,
+    body.dark .cmd-table td {
+      border-color: var(--border-dark);
+    }
+
+    .cmd-table th {
+      background: var(--surface-light);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      color: var(--muted-light);
+    }
+
+    body.dark .cmd-table th {
+      background: var(--surface-dark);
+      color: var(--muted-dark);
+    }
+
+    .cmd-table td {
+      background: var(--surface-light);
+    }
+
+    body.dark .cmd-table td {
+      background: var(--surface-dark);
+    }
+
+    .cmd-table tr {
+      transition: transform 0.1s;
+    }
+
+    .cmd-table tr:hover td {
+      background: var(--bg-light);
+    }
+
+    body.dark .cmd-table tr:hover td {
+      background: var(--bg-dark);
+    }
+
+    .cmd-alias {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .cmd-expands {
+      font-size: 0.8rem;
+      color: var(--muted-light);
+      word-break: break-all;
+    }
+
+    body.dark .cmd-expands { color: var(--muted-dark); }
+
+    .cmd-copy-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border: 2px solid var(--border-light);
+      background: var(--surface-light);
+      cursor: pointer;
+      font-size: 0.75rem;
+      box-shadow: 2px 2px 0 var(--border-light);
+      transition: transform 0.14s, box-shadow 0.14s, background 0.2s;
+      flex-shrink: 0;
+    }
+
+    body.dark .cmd-copy-btn {
+      border-color: var(--border-dark);
+      background: var(--surface-dark);
+      box-shadow: 2px 2px 0 var(--border-dark);
+      color: var(--text-dark);
+    }
+
+    .cmd-copy-btn:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: var(--shadow-sm) var(--border-light);
+    }
+
+    body.dark .cmd-copy-btn:hover {
+      box-shadow: var(--shadow-sm) var(--border-dark);
+    }
+
+    .cmd-copy-btn.copied {
+      background: var(--lime-green);
+      color: #000;
+    }
+
+    body.dark .cmd-copy-btn.copied {
+      background: #3d6600;
+      color: #fff;
+    }
+
+    .cmd-engine-tag {
+      display: inline-block;
+      padding: 0.15rem 0.4rem;
+      border: 2px solid var(--border-light);
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    body.dark .cmd-engine-tag { border-color: var(--border-dark); }
+
+    .engine-claude { background: var(--purple-accent); color: #fff; }
+    body.dark .engine-claude { background: #341797; color: #fff; }
+
+    .engine-codex { background: var(--electric-blue); color: #fff; }
+    body.dark .engine-codex { background: #1e3a5c; color: #fff; }
+
+    .engine-devin { background: var(--vibrant-orange); color: #fff; }
+    body.dark .engine-devin { background: #b25a00; color: #fff; }
+
+    .engine-all { background: var(--lime-green); color: #000; }
+    body.dark .engine-all { background: #3d6600; color: #fff; }
+
+    .cmd-no-results {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--muted-light);
+      border: var(--border-w) solid var(--border-light);
+      background: var(--surface-light);
+      font-weight: 700;
+      display: none;
+    }
+
+    body.dark .cmd-no-results {
+      color: var(--muted-dark);
+      border-color: var(--border-dark);
+      background: var(--surface-dark);
+    }
+
+    .cmd-no-results.visible { display: block; }
+
+    .cmd-count {
+      font-size: 0.82rem;
+      color: var(--muted-light);
+      font-weight: 700;
+    }
+
+    body.dark .cmd-count { color: var(--muted-dark); }
+
+    .eyebrow-cmd { background: var(--cyan-accent); color: #000; }
+    body.dark .eyebrow-cmd { background: #007a8a; color: #fff; }
+
     /* ===== RESPONSIVE ===== */
     @media (max-width: 860px) {
       .hero-stats { grid-template-columns: repeat(3, 1fr); }
+      .cmd-table { font-size: 0.8rem; }
     }
 
     @media (max-width: 640px) {
@@ -667,6 +961,12 @@
         width: 100%;
         justify-content: center;
       }
+
+      .cmd-controls { flex-direction: column; }
+      .cmd-search { min-width: 0; width: 100%; }
+      .cmd-table { font-size: 0.78rem; }
+      .cmd-table th:nth-child(3),
+      .cmd-table td:nth-child(3) { display: none; }
     }
   </style>
 </head>
@@ -691,10 +991,6 @@
           <svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
           602 Tests Passing
         </span>
-        <span class="badge badge-purple">
-          <svg viewBox="0 0 16 16"><path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75v-.878a2.25 2.25 0 111.5 0v.878a2.25 2.25 0 01-2.25 2.25h-1.5v2.128a2.251 2.251 0 11-1.5 0V8.5h-1.5A2.25 2.25 0 013.5 6.25v-.878a2.25 2.25 0 111.5 0zM5 3.25a.75.75 0 10-1.5 0 .75.75 0 001.5 0zm6.75.75a.75.75 0 10 0-1.5.75.75 0 000 1.5zM8 12.75a.75.75 0 10 0-1.5.75.75 0 000 1.5z"/></svg>
-          Fork of frankbria/ralph-claude-code
-        </span>
         <span class="badge badge-orange">
           <svg viewBox="0 0 16 16"><path d="M8.75 1.75a.75.75 0 00-1.5 0V5H4a.75.75 0 000 1.5h3.25v3.25a.75.75 0 001.5 0V6.5H12A.75.75 0 0012 5H8.75V1.75z"/></svg>
           150+ Aliases
@@ -704,6 +1000,7 @@
       <div class="hero-actions">
         <a class="neo-btn neo-btn-primary" href="https://github.com/amit-t/ai-ralph" target="_blank" rel="noreferrer">Open Repo</a>
         <a class="neo-btn neo-btn-accent" href="https://github.com/amit-t/ai-ralph/blob/main/README.md" target="_blank" rel="noreferrer">README</a>
+        <a class="neo-btn" href="#commands-section">Commands</a>
         <a class="neo-btn" href="#changelog">Changelog</a>
       </div>
     </div>
@@ -731,6 +1028,33 @@
       </div>
     </div>
   </header>
+
+  <hr class="divider container">
+
+  <!-- ===== COMMANDS & ALIASES ===== -->
+  <section class="container section" id="commands-section">
+    <div class="section-header">
+      <div>
+        <span class="section-eyebrow eyebrow-cmd">Commands & Aliases</span>
+        <h2>Every alias, every engine.</h2>
+      </div>
+      <span class="cmd-count" id="cmdCount"></span>
+    </div>
+
+    <div class="cmd-controls">
+      <div class="engine-filters">
+        <button class="engine-btn active" data-engine="all">All</button>
+        <button class="engine-btn" data-engine="claude">Claude (rpc)</button>
+        <button class="engine-btn" data-engine="codex">Codex (rpx)</button>
+        <button class="engine-btn" data-engine="devin">Devin (rpd)</button>
+        <button class="engine-btn" data-engine="shared">Shared</button>
+      </div>
+      <input type="search" class="cmd-search" id="cmdSearch" placeholder="Search aliases...">
+    </div>
+
+    <div id="cmdContent"></div>
+    <div class="cmd-no-results" id="cmdNoResults"><p>No aliases match your search.</p></div>
+  </section>
 
   <hr class="divider container">
 
@@ -1111,8 +1435,7 @@
   <footer class="container footer">
     <p>
       <a href="https://github.com/amit-t/ai-ralph">AI Ralph</a> &mdash;
-      Fork of <a href="https://github.com/frankbria/ralph-claude-code">frankbria/ralph-claude-code</a>
-      &middot; Inspired by the <a href="https://ghuntley.com/ralph/">Ralph technique</a> by Geoffrey Huntley
+      Inspired by the <a href="https://ghuntley.com/ralph/">Ralph technique</a> by Geoffrey Huntley
     </p>
     <p style="margin-top: 0.5rem; opacity: 0.6;">Last updated: April 2, 2026</p>
   </footer>
@@ -1210,6 +1533,285 @@
     sections.forEach((s, i) => {
       s.style.animationDelay = `${i * 0.06}s`;
     });
+
+    /* ===== COMMANDS & ALIASES DATA + RENDERING ===== */
+    const CMD_DATA = [
+      // ── Claude Code (rpc.*) ──────────────────────────────
+      // Basic execution
+      { alias: 'rpc',            cmd: 'ralph',                                                     desc: 'Start the Claude Code loop',          engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.live',       cmd: 'ralph --live',                                              desc: 'Live streaming output',                engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.monitor',    cmd: 'ralph --monitor',                                           desc: 'tmux monitoring dashboard',            engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.verbose',    cmd: 'ralph --verbose',                                           desc: 'Verbose progress updates',             engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.hitl',       cmd: 'ralph --live --monitor',                                    desc: 'Human-in-the-loop (live + monitor)',   engine: 'claude', cat: 'basic' },
+      // Session
+      { alias: 'rpc.continue',   cmd: 'ralph --continue',                                          desc: 'Resume previous session',              engine: 'claude', cat: 'session' },
+      { alias: 'rpc.reset',      cmd: 'ralph --reset-session',                                     desc: 'Reset session state',                  engine: 'claude', cat: 'session' },
+      { alias: 'rpc.status',     cmd: 'ralph --status',                                            desc: 'Show current loop status',             engine: 'claude', cat: 'session' },
+      // Circuit breaker
+      { alias: 'rpc.cb.reset',   cmd: 'ralph --reset-circuit',                                     desc: 'Reset circuit breaker',                engine: 'claude', cat: 'circuit' },
+      { alias: 'rpc.cb.status',  cmd: 'ralph --circuit-status',                                    desc: 'Show circuit breaker status',          engine: 'claude', cat: 'circuit' },
+      { alias: 'rpc.cb.auto',    cmd: 'ralph --auto-reset-circuit',                                desc: 'Auto-reset circuit on startup',        engine: 'claude', cat: 'circuit' },
+      // Config
+      { alias: 'rpc.fast',       cmd: 'ralph --calls 200',                                         desc: '200 calls/hour rate limit',            engine: 'claude', cat: 'config' },
+      { alias: 'rpc.slow',       cmd: 'ralph --calls 50',                                          desc: '50 calls/hour rate limit',             engine: 'claude', cat: 'config' },
+      { alias: 'rpc.test',       cmd: 'ralph --max-loops 1',                                       desc: 'Single loop iteration (test)',         engine: 'claude', cat: 'config' },
+      { alias: 'rpc.5',          cmd: 'ralph --max-loops 5',                                       desc: 'Run 5 loops',                          engine: 'claude', cat: 'config' },
+      { alias: 'rpc.10',         cmd: 'ralph --max-loops 10',                                      desc: 'Run 10 loops',                         engine: 'claude', cat: 'config' },
+      // Model
+      { alias: 'rpc.opus',       cmd: 'ralph --model opus',                                        desc: 'Use Opus model',                       engine: 'claude', cat: 'model' },
+      { alias: 'rpc.sonnet',     cmd: 'ralph --model sonnet',                                      desc: 'Use Sonnet model',                     engine: 'claude', cat: 'model' },
+      // Output
+      { alias: 'rpc.json',       cmd: 'ralph --output-format json',                                desc: 'JSON output mode',                     engine: 'claude', cat: 'output' },
+      { alias: 'rpc.text',       cmd: 'ralph --output-format text',                                desc: 'Text output mode',                     engine: 'claude', cat: 'output' },
+      // Worktree
+      { alias: 'rpc.nowt',       cmd: 'ralph --no-worktree',                                       desc: 'Disable worktree isolation',           engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.squash',  cmd: 'ralph --merge-strategy squash',                             desc: 'Squash merge strategy',                engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.merge',   cmd: 'ralph --merge-strategy merge',                              desc: 'Merge commit strategy',                engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.rebase',  cmd: 'ralph --merge-strategy rebase',                             desc: 'Rebase strategy',                      engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.nogate',  cmd: 'ralph --quality-gates none',                                desc: 'Skip quality gates',                   engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.full',    cmd: 'ralph --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode',          engine: 'claude', cat: 'worktree' },
+      // Interactive / Parallel
+      { alias: 'rpc.int',        cmd: 'ralph --live --monitor',                                    desc: 'Interactive mode (live + monitor)',     engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p N',    cmd: 'ralph --live --monitor --parallel N',                       desc: 'Spawn N parallel agents',              engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p.b N',  cmd: 'ralph --live --monitor --parallel-bg N',                    desc: 'Spawn N agents in background',         engine: 'claude', cat: 'interactive' },
+      // Workflow
+      { alias: 'rpc.dev',        cmd: 'ralph --live --monitor --verbose',                          desc: 'Development mode',                     engine: 'claude', cat: 'workflow' },
+      { alias: 'rpc.prod',       cmd: 'ralph --calls 50 --auto-reset-circuit',                     desc: 'Production / unattended mode',         engine: 'claude', cat: 'workflow' },
+      { alias: 'rpc.debug',      cmd: 'ralph --live --verbose --max-loops 1',                      desc: 'Debug mode (single loop)',              engine: 'claude', cat: 'workflow' },
+      // Task
+      { alias: 'rpc.task N',     cmd: 'ralph --task N',                                            desc: 'Execute task #N from fix_plan.md',     engine: 'claude', cat: 'task' },
+      { alias: 'rpc.task.int N', cmd: 'ralph --live --monitor --task N',                            desc: 'Task #N in interactive mode',          engine: 'claude', cat: 'task' },
+      // Management
+      { alias: 'rpc.install',    cmd: './install.sh',                                               desc: 'Install/reinstall Claude engine',      engine: 'claude', cat: 'management' },
+      { alias: 'rpc.uninstall',  cmd: './uninstall.sh',                                             desc: 'Uninstall Claude engine',              engine: 'claude', cat: 'management' },
+      // Planning
+      { alias: 'rpc.plan',       cmd: 'ralph-plan',                                                desc: 'AI-powered planning mode',             engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.plan.sup',   cmd: 'ralph-plan --yolo --superpowers',                           desc: 'Planning with yolo + superpowers',     engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.plan.s',     cmd: 'ralph-plan --status',                                       desc: 'Fix plan status',                      engine: 'claude', cat: 'planning' },
+
+      // ── Codex (rpx.*) ───────────────────────────────────
+      // Basic execution
+      { alias: 'rpx',            cmd: 'ralph-codex',                                               desc: 'Start the Codex loop',                 engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.live',       cmd: 'ralph-codex --live',                                        desc: 'Live streaming output',                engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.monitor',    cmd: 'ralph-codex --monitor',                                     desc: 'tmux monitoring dashboard',            engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.verbose',    cmd: 'ralph-codex --verbose',                                     desc: 'Verbose progress updates',             engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.hitl',       cmd: 'ralph-codex --live --monitor',                              desc: 'Human-in-the-loop (live + monitor)',   engine: 'codex', cat: 'basic' },
+      // Session
+      { alias: 'rpx.continue',   cmd: 'ralph-codex --continue',                                    desc: 'Resume previous session',              engine: 'codex', cat: 'session' },
+      { alias: 'rpx.reset',      cmd: 'ralph-codex --reset-session',                               desc: 'Reset session state',                  engine: 'codex', cat: 'session' },
+      { alias: 'rpx.status',     cmd: 'ralph-codex --status',                                      desc: 'Show current loop status',             engine: 'codex', cat: 'session' },
+      // Circuit breaker
+      { alias: 'rpx.cb.reset',   cmd: 'ralph-codex --reset-circuit',                               desc: 'Reset circuit breaker',                engine: 'codex', cat: 'circuit' },
+      { alias: 'rpx.cb.status',  cmd: 'ralph-codex --circuit-status',                              desc: 'Show circuit breaker status',          engine: 'codex', cat: 'circuit' },
+      { alias: 'rpx.cb.auto',    cmd: 'ralph-codex --auto-reset-circuit',                          desc: 'Auto-reset circuit on startup',        engine: 'codex', cat: 'circuit' },
+      // Config
+      { alias: 'rpx.fast',       cmd: 'ralph-codex --calls 200',                                   desc: '200 calls/hour rate limit',            engine: 'codex', cat: 'config' },
+      { alias: 'rpx.slow',       cmd: 'ralph-codex --calls 50',                                    desc: '50 calls/hour rate limit',             engine: 'codex', cat: 'config' },
+      { alias: 'rpx.test',       cmd: 'ralph-codex --max-loops 1',                                 desc: 'Single loop iteration (test)',         engine: 'codex', cat: 'config' },
+      { alias: 'rpx.5',          cmd: 'ralph-codex --max-loops 5',                                 desc: 'Run 5 loops',                          engine: 'codex', cat: 'config' },
+      { alias: 'rpx.10',         cmd: 'ralph-codex --max-loops 10',                                desc: 'Run 10 loops',                         engine: 'codex', cat: 'config' },
+      // Model
+      { alias: 'rpx.gpt4',       cmd: 'ralph-codex --model gpt-4',                                 desc: 'Use GPT-4',                            engine: 'codex', cat: 'model' },
+      { alias: 'rpx.gpt35',      cmd: 'ralph-codex --model gpt-3.5',                               desc: 'Use GPT-3.5',                          engine: 'codex', cat: 'model' },
+      { alias: 'rpx.claude',     cmd: 'ralph-codex --model claude',                                desc: 'Use Claude model',                     engine: 'codex', cat: 'model' },
+      // Permission
+      { alias: 'rpx.safe',       cmd: 'ralph-codex --permission-mode auto',                        desc: 'Safe auto-permission mode',            engine: 'codex', cat: 'permission' },
+      { alias: 'rpx.danger',     cmd: 'ralph-codex --permission-mode dangerous',                   desc: 'Dangerous mode (skip permissions)',     engine: 'codex', cat: 'permission' },
+      // Worktree
+      { alias: 'rpx.nowt',       cmd: 'ralph-codex --no-worktree',                                 desc: 'Disable worktree isolation',           engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.squash',  cmd: 'ralph-codex --merge-strategy squash',                       desc: 'Squash merge strategy',                engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.merge',   cmd: 'ralph-codex --merge-strategy merge',                        desc: 'Merge commit strategy',                engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.rebase',  cmd: 'ralph-codex --merge-strategy rebase',                       desc: 'Rebase strategy',                      engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.nogate',  cmd: 'ralph-codex --quality-gates none',                          desc: 'Skip quality gates',                   engine: 'codex', cat: 'worktree' },
+      // Interactive / Parallel
+      { alias: 'rpx.autoexit',   cmd: 'ralph-codex --codex-auto-exit',                             desc: 'Force auto-exit mode',                 engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.int',        cmd: 'ralph-codex --no-codex-auto-exit',                          desc: 'Interactive mode (no auto-exit)',       engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.wt.int',     cmd: 'ralph-codex --no-codex-auto-exit --live --monitor',         desc: 'Interactive + live + monitor',          engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.int.p N',    cmd: 'ralph-codex --no-codex-auto-exit --parallel N',             desc: 'Spawn N parallel interactive agents',  engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.int.p.b N',  cmd: 'ralph-codex --no-codex-auto-exit --parallel-bg N',          desc: 'Spawn N interactive agents in bg',     engine: 'codex', cat: 'interactive' },
+      // Workflow
+      { alias: 'rpx.dev',        cmd: 'ralph-codex --live --monitor --verbose',                    desc: 'Development mode',                     engine: 'codex', cat: 'workflow' },
+      { alias: 'rpx.prod',       cmd: 'ralph-codex --calls 50 --auto-reset-circuit --permission-mode dangerous', desc: 'Production / unattended', engine: 'codex', cat: 'workflow' },
+      { alias: 'rpx.debug',      cmd: 'ralph-codex --live --verbose --max-loops 1',                desc: 'Debug mode (single loop)',              engine: 'codex', cat: 'workflow' },
+      { alias: 'rpx.wt.full',    cmd: 'ralph-codex --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode',    engine: 'codex', cat: 'workflow' },
+      // Task
+      { alias: 'rpx.task N',     cmd: 'ralph-codex --task N',                                      desc: 'Execute task #N from fix_plan.md',     engine: 'codex', cat: 'task' },
+      { alias: 'rpx.task.int N', cmd: 'ralph-codex --no-codex-auto-exit --task N',                  desc: 'Task #N in interactive TUI',           engine: 'codex', cat: 'task' },
+      // Management
+      { alias: 'rpx.install',    cmd: './install_codex.sh',                                         desc: 'Install/reinstall Codex engine',       engine: 'codex', cat: 'management' },
+      { alias: 'rpx.uninstall',  cmd: './uninstall_codex.sh',                                       desc: 'Uninstall Codex engine',               engine: 'codex', cat: 'management' },
+      { alias: 'rpx.enable',     cmd: 'ralph-codex-enable',                                        desc: 'Enable Ralph+Codex in project',        engine: 'codex', cat: 'management' },
+      // Planning
+      { alias: 'rpx.plan',       cmd: 'ralph-plan --engine codex',                                 desc: 'Planning mode with Codex',             engine: 'codex', cat: 'planning' },
+      { alias: 'rpx.plan.s',     cmd: 'ralph-plan --engine codex --status',                        desc: 'Fix plan status (Codex)',               engine: 'codex', cat: 'planning' },
+
+      // ── Devin (rpd.*) ───────────────────────────────────
+      // Basic execution
+      { alias: 'rpd',            cmd: 'ralph-devin',                                               desc: 'Start the Devin loop',                 engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.live',       cmd: 'ralph-devin --live',                                        desc: 'Live streaming output',                engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.monitor',    cmd: 'ralph-devin --monitor',                                     desc: 'tmux monitoring dashboard',            engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.verbose',    cmd: 'ralph-devin --verbose',                                     desc: 'Verbose progress updates',             engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.hitl',       cmd: 'ralph-devin --live --monitor',                              desc: 'Human-in-the-loop (live + monitor)',   engine: 'devin', cat: 'basic' },
+      // Session
+      { alias: 'rpd.continue',   cmd: 'ralph-devin --continue',                                    desc: 'Resume previous session',              engine: 'devin', cat: 'session' },
+      { alias: 'rpd.reset',      cmd: 'ralph-devin --reset-session',                               desc: 'Reset session state',                  engine: 'devin', cat: 'session' },
+      { alias: 'rpd.status',     cmd: 'ralph-devin --status',                                      desc: 'Show current loop status',             engine: 'devin', cat: 'session' },
+      // Circuit breaker
+      { alias: 'rpd.cb.reset',   cmd: 'ralph-devin --reset-circuit',                               desc: 'Reset circuit breaker',                engine: 'devin', cat: 'circuit' },
+      { alias: 'rpd.cb.status',  cmd: 'ralph-devin --circuit-status',                              desc: 'Show circuit breaker status',          engine: 'devin', cat: 'circuit' },
+      { alias: 'rpd.cb.auto',    cmd: 'ralph-devin --auto-reset-circuit',                          desc: 'Auto-reset circuit on startup',        engine: 'devin', cat: 'circuit' },
+      // Config
+      { alias: 'rpd.fast',       cmd: 'ralph-devin --calls 200',                                   desc: '200 calls/hour rate limit',            engine: 'devin', cat: 'config' },
+      { alias: 'rpd.slow',       cmd: 'ralph-devin --calls 50',                                    desc: '50 calls/hour rate limit',             engine: 'devin', cat: 'config' },
+      // Model
+      { alias: 'rpd.opus',       cmd: 'ralph-devin --model opus',                                  desc: 'Use Opus model',                       engine: 'devin', cat: 'model' },
+      { alias: 'rpd.sonnet',     cmd: 'ralph-devin --model sonnet',                                desc: 'Use Sonnet model',                     engine: 'devin', cat: 'model' },
+      { alias: 'rpd.swe',        cmd: 'ralph-devin --model swe',                                   desc: 'Use SWE model',                        engine: 'devin', cat: 'model' },
+      { alias: 'rpd.gpt',        cmd: 'ralph-devin --model gpt',                                   desc: 'Use GPT model',                        engine: 'devin', cat: 'model' },
+      // Permission
+      { alias: 'rpd.safe',       cmd: 'ralph-devin --permission-mode auto',                        desc: 'Safe auto-permission mode',            engine: 'devin', cat: 'permission' },
+      { alias: 'rpd.danger',     cmd: 'ralph-devin --permission-mode dangerous',                   desc: 'Dangerous mode (skip permissions)',     engine: 'devin', cat: 'permission' },
+      // Worktree
+      { alias: 'rpd.nowt',       cmd: 'ralph-devin --no-worktree',                                 desc: 'Disable worktree isolation',           engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.squash',  cmd: 'ralph-devin --merge-strategy squash',                       desc: 'Squash merge strategy',                engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.merge',   cmd: 'ralph-devin --merge-strategy merge',                        desc: 'Merge commit strategy',                engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.rebase',  cmd: 'ralph-devin --merge-strategy rebase',                       desc: 'Rebase strategy',                      engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.nogate',  cmd: 'ralph-devin --quality-gates none',                          desc: 'Skip quality gates',                   engine: 'devin', cat: 'worktree' },
+      // Interactive / Parallel
+      { alias: 'rpd.int',        cmd: 'ralph-devin --no-devin-auto-exit',                          desc: 'Interactive TUI mode (no auto-exit)',   engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.wt.int',     cmd: 'ralph-devin --no-devin-auto-exit --live --monitor',         desc: 'Interactive + live + monitor',          engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.p N',        cmd: 'ralph-devin --parallel N',                                  desc: 'Spawn N parallel agents (auto-exit)',   engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.int.p N',    cmd: 'ralph-devin --no-devin-auto-exit --parallel N',             desc: 'Spawn N parallel agents (TUI)',         engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.p.b N',      cmd: 'ralph-devin --parallel-bg N',                               desc: 'Spawn N agents in background',          engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.int.p.b N',  cmd: 'ralph-devin --no-devin-auto-exit --parallel-bg N',          desc: 'Spawn N interactive agents in bg',      engine: 'devin', cat: 'interactive' },
+      // Workflow
+      { alias: 'rpd.dev',        cmd: 'ralph-devin --live --monitor --verbose',                    desc: 'Development mode',                     engine: 'devin', cat: 'workflow' },
+      { alias: 'rpd.prod',       cmd: 'ralph-devin --calls 50 --auto-reset-circuit --permission-mode dangerous', desc: 'Production / unattended', engine: 'devin', cat: 'workflow' },
+      { alias: 'rpd.wt.full',    cmd: 'ralph-devin --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode',    engine: 'devin', cat: 'workflow' },
+      // Task
+      { alias: 'rpd.task N',     cmd: 'ralph-devin --task N',                                      desc: 'Execute task #N from fix_plan.md',     engine: 'devin', cat: 'task' },
+      { alias: 'rpd.task.int N', cmd: 'ralph-devin --no-devin-auto-exit --task N',                  desc: 'Task #N in interactive TUI',           engine: 'devin', cat: 'task' },
+      // Management
+      { alias: 'rpd.install',    cmd: './install_devin.sh',                                         desc: 'Install/reinstall Devin engine',       engine: 'devin', cat: 'management' },
+      { alias: 'rpd.uninstall',  cmd: './uninstall_devin.sh',                                       desc: 'Uninstall Devin engine',               engine: 'devin', cat: 'management' },
+      { alias: 'rpd.enable',     cmd: 'ralph-devin-enable',                                        desc: 'Enable Ralph+Devin in project',        engine: 'devin', cat: 'management' },
+      // Planning
+      { alias: 'rpd.plan',       cmd: 'ralph-plan --engine devin',                                 desc: 'Planning mode with Devin',             engine: 'devin', cat: 'planning' },
+      { alias: 'rpd.plan.s',     cmd: 'ralph-plan --engine devin --status',                        desc: 'Fix plan status (Devin)',               engine: 'devin', cat: 'planning' },
+
+      // ── Shared (ralph.*, rp.*) ──────────────────────────
+      { alias: 'ralph.setup',       cmd: 'ralph-setup',                                            desc: 'Create a new Ralph project',           engine: 'shared', cat: 'management' },
+      { alias: 'ralph.enable',      cmd: 'ralph-enable',                                           desc: 'Enable Ralph in existing project',     engine: 'shared', cat: 'management' },
+      { alias: 'ralph.enable.ci',   cmd: 'ralph-enable-ci',                                        desc: 'Non-interactive enable for CI',        engine: 'shared', cat: 'management' },
+      { alias: 'ralph.migrate',     cmd: 'ralph-migrate',                                          desc: 'Migrate to .ralph/ structure',         engine: 'shared', cat: 'management' },
+      { alias: 'ralph.import',      cmd: 'ralph-import',                                           desc: 'Import PRD/spec document',             engine: 'shared', cat: 'management' },
+      { alias: 'ralph.check.beads', cmd: 'ralph-check-beads',                                      desc: 'Beads integration diagnostic',         engine: 'shared', cat: 'management' },
+      { alias: 'ralph.plan',        cmd: 'ralph-plan',                                             desc: 'AI-powered planning mode',             engine: 'shared', cat: 'planning' },
+      { alias: 'rp.install',        cmd: 'rpc.install;rpd.install;rpx.install',                    desc: 'Install all three engines at once',    engine: 'shared', cat: 'management' },
+    ];
+
+    const CAT_LABELS = {
+      basic: 'Basic Execution',
+      session: 'Session Management',
+      circuit: 'Circuit Breaker',
+      config: 'Rate Limiting / Loops',
+      model: 'Model Selection',
+      output: 'Output Format',
+      permission: 'Permission Modes',
+      worktree: 'Git Worktree',
+      interactive: 'Interactive / Parallel',
+      workflow: 'Workflow Presets',
+      task: 'Task Execution',
+      management: 'Setup & Management',
+      planning: 'Planning Mode',
+    };
+
+    const CAT_ORDER = Object.keys(CAT_LABELS);
+
+    const ENGINE_LABELS = { claude: 'Claude', codex: 'Codex', devin: 'Devin', shared: 'All' };
+
+    const cmdContent = document.getElementById('cmdContent');
+    const cmdSearch = document.getElementById('cmdSearch');
+    const cmdCount = document.getElementById('cmdCount');
+    const cmdNoResults = document.getElementById('cmdNoResults');
+    const engineBtns = document.querySelectorAll('.engine-btn');
+
+    let activeEngine = 'all';
+
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    function renderCommands() {
+      const query = cmdSearch.value.toLowerCase().trim();
+      const filtered = CMD_DATA.filter(c => {
+        const engineMatch = activeEngine === 'all' || c.engine === activeEngine;
+        const searchMatch = !query || c.alias.toLowerCase().includes(query) || c.cmd.toLowerCase().includes(query) || c.desc.toLowerCase().includes(query);
+        return engineMatch && searchMatch;
+      });
+
+      cmdCount.textContent = filtered.length + ' alias' + (filtered.length !== 1 ? 'es' : '');
+
+      if (filtered.length === 0) {
+        cmdContent.innerHTML = '';
+        cmdNoResults.classList.add('visible');
+        return;
+      }
+      cmdNoResults.classList.remove('visible');
+
+      // Group by category
+      const grouped = {};
+      filtered.forEach(c => {
+        if (!grouped[c.cat]) grouped[c.cat] = [];
+        grouped[c.cat].push(c);
+      });
+
+      let html = '';
+      CAT_ORDER.forEach(cat => {
+        if (!grouped[cat]) return;
+        const catClass = 'cat-' + cat;
+        html += '<div class="cmd-category" data-cat="' + cat + '">';
+        html += '<div class="cmd-category-title ' + catClass + '">' + escHtml(CAT_LABELS[cat]) + '</div>';
+        html += '<table class="cmd-table"><thead><tr><th>Alias</th><th>Description</th><th>Expands To</th><th>Engine</th><th></th></tr></thead><tbody>';
+        grouped[cat].forEach(c => {
+          const engineClass = 'engine-' + (c.engine === 'shared' ? 'all' : c.engine);
+          html += '<tr data-engine="' + c.engine + '">'
+            + '<td class="cmd-alias">' + escHtml(c.alias) + '</td>'
+            + '<td>' + escHtml(c.desc) + '</td>'
+            + '<td class="cmd-expands">' + escHtml(c.cmd) + '</td>'
+            + '<td><span class="cmd-engine-tag ' + engineClass + '">' + escHtml(ENGINE_LABELS[c.engine]) + '</span></td>'
+            + '<td><button class="cmd-copy-btn" type="button" data-copy="' + escHtml(c.alias.replace(/ N$/, '')) + '" aria-label="Copy alias" title="Copy alias">\u2398</button></td>'
+            + '</tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+
+      cmdContent.innerHTML = html;
+    }
+
+    // Copy handler (event delegation)
+    cmdContent.addEventListener('click', function(e) {
+      const btn = e.target.closest('.cmd-copy-btn');
+      if (!btn) return;
+      const text = btn.getAttribute('data-copy');
+      navigator.clipboard.writeText(text).then(() => {
+        btn.classList.add('copied');
+        btn.textContent = '\u2713';
+        setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '\u2398'; }, 1200);
+      });
+    });
+
+    engineBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        engineBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeEngine = btn.getAttribute('data-engine');
+        renderCommands();
+      });
+    });
+
+    cmdSearch.addEventListener('input', renderCommands);
+
+    // Initial render
+    renderCommands();
   </script>
 </body>
 </html>
