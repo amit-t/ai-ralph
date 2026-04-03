@@ -972,14 +972,14 @@ Uninstalling one engine does not affect the others.
 - `ralph-plan --status` to show current fix_plan.md progress
 - `rpc.plan.s` / `rpd.plan.s` / `rpx.plan.s` aliases
 
-**Quality Gate Retry**
-- When quality gates fail, Ralph re-invokes the AI engine with **subagent instructions** to fix failures before creating a PR
-- The fix prompt instructs the AI to spawn one subagent per failing gate for parallel fixing
+**Quality Gate Mode (`ralph --qg`)**
+- Standalone mode to run quality gates and invoke AI to fix failures
+- Run with `ralph --qg` (auto-detects gates) or `ralph --qg --quality-gates "cmd1;cmd2"`
+- Uses `worktree_build_qg_fix_prompt()` with subagent strategy for parallel fixing
 - For Claude: `Task` tool is temporarily enabled during QG fix invocations
-- Up to `MAX_QG_RETRIES` (default: 3) fix attempts per execution
-- Full error output from failed gates is included in the fix prompt
-- PR is only created after gates pass or all retries are exhausted
-- Failed PRs get `quality-gates-failed` label
+- Up to `MAX_QG_RETRIES` (default: 3) fix attempts
+- Auto-commits fixes on success
+- Main loop always creates PR regardless of gate status (`quality-gates-failed` label on failure)
 
 **PR Creation & Worktree Integration**
 - Automatic PR creation after successful quality gates
