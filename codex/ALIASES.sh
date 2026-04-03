@@ -44,6 +44,9 @@ alias rpx.wt.merge='ralph-codex --merge-strategy merge'
 alias rpx.wt.rebase='ralph-codex --merge-strategy rebase'
 alias rpx.wt.nogate='ralph-codex --quality-gates none'
 
+# Quality gate fix mode (retry loop to fix failing gates)
+alias rpx.qg='ralph-codex --qg'
+
 # Auto-exit control
 alias rpx.autoexit='ralph-codex --codex-auto-exit'
 alias rpx.int='ralph-codex --no-codex-auto-exit'
@@ -78,6 +81,14 @@ alias rpx.plan.s='ralph-plan --engine codex --status'
 # Usage: rpx.adhoc                        -> prompts for task description
 # Usage: rpx.adhoc "Login broken on iOS"  -> inline description
 alias rpx.adhoc='ralph-plan --engine codex --adhoc'
+
+# Compress fix plan (reduce token consumption, archive original, uses codex engine)
+alias rpx.compress='ralph-plan --engine codex --compress'
+
+# File-based planning (pass a specific MD, JSON, or text file, uses codex engine)
+# Usage: rpx.plan.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpx.plan.file ./tasks.json             -> plan from a JSON task list
+rpx.plan.file() { ralph-plan --engine codex --file "${1:?Usage: rpx.plan.file <file_path>}"; }
 
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpx.task 3        -> non-interactive, execute task #3

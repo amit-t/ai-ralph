@@ -44,6 +44,9 @@ alias rpc.wt.rebase='ralph --merge-strategy rebase'
 alias rpc.wt.nogate='ralph --quality-gates none'
 alias rpc.wt.full='ralph --live --monitor --merge-strategy squash --quality-gates auto'
 
+# Quality gate fix mode (retry loop to fix failing gates)
+alias rpc.qg='ralph --qg'
+
 # Interactive mode
 alias rpc.int='ralph --live --monitor'
 
@@ -75,6 +78,14 @@ alias rpc.plan.s='ralph-plan --status'
 # Usage: rpc.adhoc                        -> prompts for task description
 # Usage: rpc.adhoc "Login broken on iOS"  -> inline description
 alias rpc.adhoc='ralph-plan --adhoc'
+
+# Compress fix plan (reduce token consumption, archive original)
+alias rpc.compress='ralph-plan --compress'
+
+# File-based planning (pass a specific MD, JSON, or text file)
+# Usage: rpc.plan.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpc.plan.file ./tasks.json             -> plan from a JSON task list
+rpc.plan.file() { ralph-plan --file "${1:?Usage: rpc.plan.file <file_path>}"; }
 
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpc.task 3        -> execute task #3

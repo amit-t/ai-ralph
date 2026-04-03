@@ -31,6 +31,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Change detection with execution summary** -- shows files changed, lines added/removed after each run; no-change early exit reverts the task marker so it can be retried
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
+- **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
 
 ---
 
@@ -396,6 +397,8 @@ Source: `devin/ALIASES.sh`
 | `rpd.uninstall` | *(runs uninstall_devin.sh)* | Uninstall Devin engine |
 | `rpd.enable` | `ralph-devin-enable` | Enable Ralph+Devin in current project |
 | `rpd.plan` | `ralph-plan --engine devin` | Planning mode with Devin |
+| `rpd.plan.file <path>` | `ralph-plan --engine devin --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpd.compress` | `ralph-plan --engine devin --compress` | Compress fix plan to reduce token usage |
 
 ---
 
@@ -496,6 +499,8 @@ Source: `ALIASES.sh`
 | `rpc.uninstall` | *(runs uninstall.sh)* | Uninstall Claude engine |
 | `rpc.plan` | `ralph-plan` | Planning mode (Claude engine) |
 | `rpc.plan.sup` | `ralph-plan --yolo --superpowers` | Planning with yolo + superpowers plugin |
+| `rpc.plan.file <path>` | `ralph-plan --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpc.compress` | `ralph-plan --compress` | Compress fix plan to reduce token usage |
 
 ---
 
@@ -599,6 +604,8 @@ Source: `codex/ALIASES.sh`
 | `rpx.uninstall` | *(runs uninstall_codex.sh)* | Uninstall Codex engine |
 | `rpx.enable` | `ralph-codex-enable` | Enable Ralph+Codex in current project |
 | `rpx.plan` | `ralph-plan --engine codex` | Planning mode with Codex |
+| `rpx.plan.file <path>` | `ralph-plan --engine codex --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpx.compress` | `ralph-plan --engine codex --compress` | Compress fix plan to reduce token usage |
 
 ---
 
@@ -933,6 +940,8 @@ Uninstalling one engine does not affect the others.
 - **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection and multi-engine support
 - **Ad-hoc task mode** (`ralph-plan --adhoc`) for quick bug/task entry into `fix_plan.md` via AI
+- **Fix plan compression** (`ralph-plan --compress`) to reduce token consumption while preserving progress
+- **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Intelligent exit detection** -- dual-condition gate requiring BOTH completion indicators AND explicit EXIT_SIGNAL
 - **Circuit breaker** with cooldown timer, auto-recovery, and configurable thresholds
@@ -946,7 +955,22 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Ad-hoc Task Mode** (latest)
+**Fix Plan Compression Mode** (latest)
+- `ralph-plan --compress` to compress `fix_plan.md` and reduce token consumption
+- Archives current plan before compression (timestamped backup in `.ralph/logs/`)
+- AI collapses completed items into summary lines, shortens verbose descriptions
+- Preserves all task IDs, checkbox states, and progress tracking
+- Works across all 3 engines: `rpc.compress`, `rpd.compress`, `rpx.compress`
+- Supports `--yolo` and `--superpowers` flags (Claude only)
+
+**File-based Planning Mode**
+- `ralph-plan --file <path>` to generate fix_plan from a specific document
+- Accepts Markdown (.md), JSON (.json), YAML (.yaml), or plain text (.txt) files
+- AI reads the document, analyzes the codebase, and creates prioritized fix_plan.md
+- Works across all 3 engines: `rpc.plan.file`, `rpx.plan.file`, `rpd.plan.file`
+- Supports `--yolo` and `--superpowers` flags (Claude only)
+
+**Ad-hoc Task Mode**
 - `ralph-plan --adhoc` for quick one-liner bug/task entry into `fix_plan.md`
 - Interactive prompt or inline description: `rpc.adhoc "Login broken on iOS"`
 - AI analyzes codebase and creates structured `fix_plan.md` entry with subtasks

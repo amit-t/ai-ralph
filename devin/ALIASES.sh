@@ -42,6 +42,9 @@ alias rpd.wt.merge='ralph-devin --merge-strategy merge'
 alias rpd.wt.rebase='ralph-devin --merge-strategy rebase'
 alias rpd.wt.nogate='ralph-devin --quality-gates none'
 
+# Quality gate fix mode (retry loop to fix failing gates)
+alias rpd.qg='ralph-devin --qg'
+
 # Interactive (TUI) mode - Devin runs without -p flag, shows its TUI
 alias rpd.int='ralph-devin --no-devin-auto-exit'
 alias rpd.wt.int='ralph-devin --no-devin-auto-exit --live --monitor'
@@ -79,6 +82,14 @@ alias rpd.plan.s='ralph-plan --engine devin --status'
 # Usage: rpd.adhoc                        -> prompts for task description
 # Usage: rpd.adhoc "Login broken on iOS"  -> inline description
 alias rpd.adhoc='ralph-plan --engine devin --adhoc'
+
+# Compress fix plan (reduce token consumption, archive original, uses devin engine)
+alias rpd.compress='ralph-plan --engine devin --compress'
+
+# File-based planning (pass a specific MD, JSON, or text file, uses devin engine)
+# Usage: rpd.plan.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpd.plan.file ./tasks.json             -> plan from a JSON task list
+rpd.plan.file() { ralph-plan --engine devin --file "${1:?Usage: rpd.plan.file <file_path>}"; }
 
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpd.task 3        -> non-interactive, execute task #3
