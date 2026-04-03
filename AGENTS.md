@@ -107,6 +107,34 @@ The system uses a modular architecture with reusable components in the `lib/` di
    - `get_integrity_report()`: human-readable report with missing files and recovery instructions
    - Lightweight validation that runs every loop iteration
 
+9. **lib/worktree_manager.sh** - Git worktree lifecycle management
+   - Creates isolated worktrees per loop iteration
+   - `worktree_run_quality_gates()`: auto-detects and runs lint/test/build gates
+   - `worktree_build_qg_fix_prompt()`: builds a focused prompt for the AI to fix quality gate failures
+   - Includes full error output from failed commands (last 80 lines per command)
+
+10. **lib/pr_manager.sh** - PR lifecycle management
+    - `pr_preflight_check()`: validates git remote, gh CLI, authentication
+    - `worktree_commit_and_pr()`: commit, push, and create PR from worktree
+    - `worktree_fallback_branch_pr()`: non-worktree fallback for PR creation
+    - Adds `quality-gates-failed` label when gates fail after all retries
+
+### Quality Gate Retry Behaviour
+
+When quality gates fail, Ralph re-invokes the AI engine to fix the failures before creating a PR. The retry loop:
+
+1. Quality gates fail after initial AI execution
+2. `worktree_build_qg_fix_prompt()` generates a focused prompt with the failed gate commands and their full error output
+3. The AI engine (Claude/Codex/Devin) is re-invoked with this fix prompt in the same worktree
+4. Quality gates are re-run after each fix attempt
+5. If gates pass → PR is created with success status
+6. If gates still fail after `MAX_QG_RETRIES` (default: 3) → PR is created with `quality-gates-failed` label
+
+**Configuration:**
+```bash
+MAX_QG_RETRIES=3    # max quality gate fix attempts before creating failure PR (in .ralphrc)
+```
+
 ## Key Commands
 
 ### Installation
@@ -603,7 +631,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (584 tests total)
+### Test Files (623 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -625,6 +653,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_wizard_utils.bats` | 20 | Wizard utility functions (stdout/stderr separation, prompt functions) |
 | `test_file_protection.bats` | 15 | File integrity validation (RALPH_REQUIRED_PATHS, validate_ralph_integrity, get_integrity_report) (Issue #149) |
 | `test_integrity_check.bats` | 10 | Pre-loop integrity check in ralph_loop.sh (startup + in-loop validation) (Issue #149) |
+| `test_qg_retry.bats` | 28 | Quality gate retry behaviour (worktree_build_qg_fix_prompt, MAX_QG_RETRIES, retry loop structure) |
 
 ### Running Tests
 ```bash

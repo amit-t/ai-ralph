@@ -105,6 +105,9 @@ EXIT_SIGNALS_FILE="$RALPH_DIR/.exit_signals"
 RESPONSE_ANALYSIS_FILE="$RALPH_DIR/.response_analysis"
 MAX_CONSECUTIVE_TEST_LOOPS=3
 MAX_CONSECUTIVE_DONE_SIGNALS=2
+
+# Quality gate retry configuration
+MAX_QG_RETRIES="${MAX_QG_RETRIES:-3}"
 TEST_PERCENTAGE_THRESHOLD=30  # If more than 30% of recent loops are test-only, flag it
 
 # .ralphrc configuration file
@@ -2141,7 +2144,7 @@ main() {
             return 0
         fi
 
-        # ── Worktree: quality gates + commit + push + PR + cleanup ───────
+        # ── Worktree: quality gates + retry loop + commit + push + PR + cleanup ───────
         if [[ "$WORKTREE_ENABLED" == "true" ]] && worktree_is_active; then
             log_status "INFO" "Running quality gates..."
             local gate_output gate_result
@@ -2149,13 +2152,81 @@ main() {
             gate_result=$?
             while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
 
+            # ── QG retry loop: re-invoke AI to fix failures ──────────────
+            local qg_attempt=0
+            while [[ $gate_result -ne 0 && $qg_attempt -lt $MAX_QG_RETRIES ]]; do
+                qg_attempt=$((qg_attempt + 1))
+                log_status "WARN" "Quality gates failed — invoking AI to fix (attempt $qg_attempt/$MAX_QG_RETRIES)..."
+
+                # Build a focused fix prompt from the gate failures
+                local qg_fix_prompt
+                qg_fix_prompt=$(worktree_build_qg_fix_prompt "$qg_attempt" "$MAX_QG_RETRIES")
+
+                # Auto-commit current state before retry so AI sees latest code
+                if [[ -n "$(cd "$work_dir" && git status --porcelain 2>/dev/null)" ]]; then
+                    (cd "$work_dir" && git add -A && git commit -m "ralph: pre-QG-retry auto-commit (attempt $qg_attempt)") 2>/dev/null || true
+                fi
+
+                # Re-invoke Claude with the QG fix prompt
+                local qg_fix_session=""
+                [[ -f "$CLAUDE_SESSION_FILE" ]] && qg_fix_session=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null || echo "")
+
+                local qg_worktree_directive=""
+                if [[ "$work_dir" != "$(pwd)" ]]; then
+                    qg_worktree_directive="# WORKING DIRECTORY CONSTRAINT
+You are operating inside an isolated git worktree.
+- Your working directory: \`${work_dir}\`
+- DO NOT navigate to or modify files outside this directory."
+                fi
+
+                build_claude_command "$PROMPT_FILE" "" "$qg_fix_session" "$qg_worktree_directive"
+                # Override the prompt with the QG fix prompt
+                CLAUDE_CMD_ARGS=("${CLAUDE_CMD_ARGS[@]/%"-p"*/}")
+                # Rebuild: remove last two elements (-p and the prompt content) and replace
+                local _qg_args=()
+                local _skip_next=false
+                for _arg in "${CLAUDE_CMD_ARGS[@]}"; do
+                    if [[ "$_skip_next" == "true" ]]; then
+                        _skip_next=false
+                        continue
+                    fi
+                    if [[ "$_arg" == "-p" ]]; then
+                        _skip_next=true
+                        continue
+                    fi
+                    _qg_args+=("$_arg")
+                done
+                _qg_args+=("-p" "$qg_fix_prompt")
+                CLAUDE_CMD_ARGS=("${_qg_args[@]}")
+
+                log_status "INFO" "QG fix command: ${CLAUDE_CMD_ARGS[*]:0:5}..."
+                local qg_timestamp
+                qg_timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
+                local qg_output_file="$LOG_DIR/claude_qg_fix_${qg_timestamp}.log"
+
+                set +e
+                (cd "$work_dir" && "${CLAUDE_CMD_ARGS[@]}" > "$qg_output_file" 2>&1)
+                local qg_exec_result=$?
+                set -e
+
+                if [[ $qg_exec_result -ne 0 ]]; then
+                    log_status "WARN" "QG fix execution failed (exit $qg_exec_result)"
+                fi
+
+                # Re-run quality gates
+                log_status "INFO" "Re-running quality gates after fix attempt $qg_attempt..."
+                gate_output=$(worktree_run_quality_gates 2>&1)
+                gate_result=$?
+                while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+            done
+
             local wt_branch_for_log pr_result=0
             wt_branch_for_log="$(worktree_get_branch)"
             if [[ $gate_result -eq 0 ]]; then
                 log_status "SUCCESS" "Quality gates passed."
                 worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "true" "1" || pr_result=$?
             else
-                log_status "WARN" "Quality gates failed — creating PR with failure details."
+                log_status "WARN" "Quality gates still failing after $MAX_QG_RETRIES fix attempts — creating PR with failure details."
                 worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "false" "1" || pr_result=$?
             fi
             worktree_cleanup "false"

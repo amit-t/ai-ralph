@@ -388,6 +388,83 @@ worktree_run_quality_gates() {
     return 0
 }
 
+# Build a focused prompt for the AI agent to fix quality gate failures.
+# Reads the gate results file and the full output of failed commands,
+# then produces a markdown prompt on stdout.
+# Args:
+#   $1 - attempt: Current retry attempt number (e.g. 1, 2, 3)
+#   $2 - max_attempts: Maximum retry attempts (e.g. 3)
+# Outputs: Markdown prompt string on stdout
+# Returns: 0 always
+worktree_build_qg_fix_prompt() {
+    local attempt="${1:-1}"
+    local max_attempts="${2:-3}"
+    local workdir="${_WT_CURRENT_PATH}"
+    local results_file="${workdir}/.ralph/.quality_gate_results"
+
+    cat <<QGEOF
+# QUALITY GATE FIX — Attempt ${attempt}/${max_attempts}
+
+**Quality gates failed after your previous changes.** You MUST fix them before a PR can be created.
+Do NOT ask questions — investigate the errors and fix them immediately.
+
+## Failed Gates
+QGEOF
+
+    if [[ -f "$results_file" ]]; then
+        while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            [[ -z "$line" ]] && continue
+            if [[ "$line" == FAIL:\ * ]]; then
+                local rest="${line#FAIL: }"
+                echo "- \`${rest}\`"
+            fi
+        done < "$results_file"
+    else
+        echo "- (no gate results file found)"
+    fi
+
+    # Re-run failed commands to capture full error output for the prompt
+    echo ""
+    echo "## Full Error Output"
+    echo ""
+
+    if [[ -f "$results_file" ]]; then
+        while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            [[ -z "$line" ]] && continue
+            if [[ "$line" == FAIL:\ * ]]; then
+                local rest="${line#FAIL: }"
+                local cmd
+                if [[ "$rest" =~ ^(.*)" (exit "[0-9]+")" ]]; then
+                    cmd="${BASH_REMATCH[1]}"
+                else
+                    cmd="$rest"
+                fi
+                echo "### \`${cmd}\`"
+                echo '```'
+                local full_output
+                full_output=$(cd "$workdir" && eval "$cmd" 2>&1 | tail -80) || true
+                echo "$full_output"
+                echo '```'
+                echo ""
+            fi
+        done < "$results_file"
+    fi
+
+    cat <<QGEOF2
+
+## Instructions
+
+1. Read the error output above carefully.
+2. Fix ALL errors — do not leave any quality gate failing.
+3. After fixing, the gates will be re-run automatically.
+4. Focus on the code changes needed — do not modify quality gate configuration or skip tests.
+QGEOF2
+
+    return 0
+}
+
 # =============================================================================
 # AUTO-COMMIT
 # =============================================================================

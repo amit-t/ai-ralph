@@ -964,9 +964,12 @@ Uninstalling one engine does not affect the others.
 - `ralph-plan --status` to show current fix_plan.md progress
 - `rpc.plan.s` / `rpd.plan.s` / `rpx.plan.s` aliases
 
-**Quality Gate Fixes**
-- Correct misleading ERROR message on quality gate failure
-- Auto-create quality-gate labels on PRs
+**Quality Gate Retry**
+- When quality gates fail, Ralph re-invokes the AI engine to fix failures before creating a PR
+- Up to `MAX_QG_RETRIES` (default: 3) fix attempts per execution
+- Full error output from failed gates is included in the fix prompt
+- PR is only created after gates pass or all retries are exhausted
+- Failed PRs get `quality-gates-failed` label
 
 **PR Creation & Worktree Integration**
 - Automatic PR creation after successful quality gates
