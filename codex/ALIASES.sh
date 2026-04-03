@@ -74,6 +74,11 @@ alias rpx.plan='ralph-plan --engine codex'
 # Fix plan status (note: rpx.status is agent session status; rpx.plan.s is fix plan status)
 alias rpx.plan.s='ralph-plan --engine codex --status'
 
+# Ad-hoc task mode (interactive one-liner to fix_plan entry, uses codex engine)
+# Usage: rpx.adhoc                        -> prompts for task description
+# Usage: rpx.adhoc "Login broken on iOS"  -> inline description
+alias rpx.adhoc='ralph-plan --engine codex --adhoc'
+
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpx.task 3        -> non-interactive, execute task #3
 # Usage: rpx.task.int 3    -> interactive TUI, execute task #3
