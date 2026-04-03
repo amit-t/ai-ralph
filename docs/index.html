@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Ralph - Changelog</title>
-  <meta name="description" content="Complete changelog for AI Ralph - the multi-engine autonomous AI development loop system.">
+  <meta name="description"
+    content="Complete changelog for AI Ralph - the multi-engine autonomous AI development loop system.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
   <style>
     /* ===== DESIGN TOKENS ===== */
     :root {
@@ -43,7 +46,11 @@
     }
 
     /* ===== BASE ===== */
-    *, *::before, *::after { box-sizing: border-box; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
 
     html {
       scroll-behavior: smooth;
@@ -67,7 +74,9 @@
       background-color: var(--bg-dark);
     }
 
-    a { color: inherit; }
+    a {
+      color: inherit;
+    }
 
     /* ===== LAYOUT ===== */
     .container {
@@ -77,29 +86,43 @@
     }
 
     /* ===== TYPOGRAPHY ===== */
-    h1, h2, h3, h4 {
+    h1,
+    h2,
+    h3,
+    h4 {
       margin: 0;
       line-height: 1.1;
       font-weight: 700;
       letter-spacing: -0.03em;
     }
 
-    h1 { font-size: clamp(2.2rem, 5vw, 3.8rem); }
-    h2 { font-size: clamp(1.5rem, 3.5vw, 2.2rem); }
-    h3 { font-size: clamp(1rem, 2vw, 1.3rem); }
-    p { margin: 0; }
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+    }
+
+    h2 {
+      font-size: clamp(1.5rem, 3.5vw, 2.2rem);
+    }
+
+    h3 {
+      font-size: clamp(1rem, 2vw, 1.3rem);
+    }
+
+    p {
+      margin: 0;
+    }
 
     code {
       font-family: inherit;
       font-size: 0.85em;
-      background: rgba(0,0,0,0.06);
+      background: rgba(0, 0, 0, 0.06);
       padding: 0.1rem 0.3rem;
-      border: 1px solid rgba(0,0,0,0.1);
+      border: 1px solid rgba(0, 0, 0, 0.1);
     }
 
     body.dark code {
-      background: rgba(255,255,255,0.08);
-      border-color: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.1);
     }
 
     /* ===== THEME TOGGLE ===== */
@@ -143,7 +166,9 @@
       margin: 0;
     }
 
-    body.dark .divider { border-color: var(--border-dark); }
+    body.dark .divider {
+      border-color: var(--border-dark);
+    }
 
     /* ===== HERO ===== */
     .hero {
@@ -172,7 +197,9 @@
       box-shadow: var(--shadow-sm) var(--border-dark);
     }
 
-    .hero h1 { margin-top: 1rem; }
+    .hero h1 {
+      margin-top: 1rem;
+    }
 
     .hero-desc {
       max-width: 60ch;
@@ -180,7 +207,9 @@
       color: var(--muted-light);
     }
 
-    body.dark .hero-desc { color: var(--muted-dark); }
+    body.dark .hero-desc {
+      color: var(--muted-dark);
+    }
 
     .hero-actions {
       display: flex;
@@ -222,7 +251,9 @@
       letter-spacing: 0.05em;
     }
 
-    body.dark .stat-label { color: var(--muted-dark); }
+    body.dark .stat-label {
+      color: var(--muted-dark);
+    }
 
     /* ===== BUTTONS ===== */
     .neo-btn {
@@ -249,12 +280,14 @@
       box-shadow: var(--shadow-md) var(--border-dark);
     }
 
-    .neo-btn:hover, .neo-btn:focus-visible {
+    .neo-btn:hover,
+    .neo-btn:focus-visible {
       transform: translate(-2px, -2px);
       box-shadow: var(--shadow-lg) var(--border-light);
     }
 
-    body.dark .neo-btn:hover, body.dark .neo-btn:focus-visible {
+    body.dark .neo-btn:hover,
+    body.dark .neo-btn:focus-visible {
       box-shadow: var(--shadow-lg) var(--border-dark);
     }
 
@@ -267,11 +300,25 @@
       box-shadow: 1px 1px 0 var(--border-dark);
     }
 
-    .neo-btn-primary { background: var(--hot-pink); color: #000; }
-    body.dark .neo-btn-primary { background: #b3004b; color: #fff; }
+    .neo-btn-primary {
+      background: var(--hot-pink);
+      color: #000;
+    }
 
-    .neo-btn-accent { background: var(--electric-blue); color: #fff; }
-    body.dark .neo-btn-accent { background: #1e3a5c; color: #fff; }
+    body.dark .neo-btn-primary {
+      background: #b3004b;
+      color: #fff;
+    }
+
+    .neo-btn-accent {
+      background: var(--electric-blue);
+      color: #fff;
+    }
+
+    body.dark .neo-btn-accent {
+      background: #1e3a5c;
+      color: #fff;
+    }
 
     /* ===== BADGES (hero) ===== */
     .badge-row {
@@ -291,24 +338,60 @@
       font-weight: 700;
     }
 
-    body.dark .badge { border-color: var(--border-dark); }
+    body.dark .badge {
+      border-color: var(--border-dark);
+    }
 
-    .badge svg { width: 14px; height: 14px; fill: currentColor; }
+    .badge svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
 
-    .badge-blue { background: var(--electric-blue); color: #fff; }
-    body.dark .badge-blue { background: #1e3a5c; color: #fff; }
+    .badge-blue {
+      background: var(--electric-blue);
+      color: #fff;
+    }
 
-    .badge-green { background: var(--lime-green); color: #000; }
-    body.dark .badge-green { background: #3d6600; color: #fff; }
+    body.dark .badge-blue {
+      background: #1e3a5c;
+      color: #fff;
+    }
 
-    .badge-purple { background: var(--purple-accent); color: #fff; }
-    body.dark .badge-purple { background: #341797; color: #fff; }
+    .badge-green {
+      background: var(--lime-green);
+      color: #000;
+    }
 
-    .badge-orange { background: var(--vibrant-orange); color: #fff; }
-    body.dark .badge-orange { background: #b25a00; color: #fff; }
+    body.dark .badge-green {
+      background: #3d6600;
+      color: #fff;
+    }
+
+    .badge-purple {
+      background: var(--purple-accent);
+      color: #fff;
+    }
+
+    body.dark .badge-purple {
+      background: #341797;
+      color: #fff;
+    }
+
+    .badge-orange {
+      background: var(--vibrant-orange);
+      color: #fff;
+    }
+
+    body.dark .badge-orange {
+      background: #b25a00;
+      color: #fff;
+    }
 
     /* ===== SECTIONS ===== */
-    .section { padding: 3rem 0; }
+    .section {
+      padding: 3rem 0;
+    }
 
     .section-header {
       display: flex;
@@ -330,10 +413,19 @@
       margin-bottom: 0.5rem;
     }
 
-    body.dark .section-eyebrow { border-color: var(--border-dark); }
+    body.dark .section-eyebrow {
+      border-color: var(--border-dark);
+    }
 
-    .eyebrow-changelog { background: var(--hot-pink); color: #000; }
-    body.dark .eyebrow-changelog { background: #b3004b; color: #fff; }
+    .eyebrow-changelog {
+      background: var(--hot-pink);
+      color: #000;
+    }
+
+    body.dark .eyebrow-changelog {
+      background: #b3004b;
+      color: #fff;
+    }
 
     /* ===== FILTER BAR ===== */
     .filter-bar {
@@ -366,7 +458,9 @@
       letter-spacing: 0.05em;
     }
 
-    body.dark .filter-bar label { color: var(--muted-dark); }
+    body.dark .filter-bar label {
+      color: var(--muted-dark);
+    }
 
     .filter-btn {
       padding: 0.35rem 0.7rem;
@@ -427,8 +521,13 @@
       box-shadow: var(--shadow-sm) var(--border-dark);
     }
 
-    .search-input::placeholder { color: var(--muted-light); }
-    body.dark .search-input::placeholder { color: var(--muted-dark); }
+    .search-input::placeholder {
+      color: var(--muted-light);
+    }
+
+    body.dark .search-input::placeholder {
+      color: var(--muted-dark);
+    }
 
     .search-input:focus {
       box-shadow: var(--shadow-md) var(--electric-blue);
@@ -441,8 +540,15 @@
     }
 
     @keyframes fadeSlideIn {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .version-header {
@@ -455,7 +561,9 @@
       flex-wrap: wrap;
     }
 
-    body.dark .version-header { border-color: var(--border-dark); }
+    body.dark .version-header {
+      border-color: var(--border-dark);
+    }
 
     .version-name {
       font-size: 1.4rem;
@@ -467,7 +575,9 @@
       color: var(--muted-light);
     }
 
-    body.dark .version-date { color: var(--muted-dark); }
+    body.dark .version-date {
+      color: var(--muted-dark);
+    }
 
     .version-tag {
       padding: 0.2rem 0.55rem;
@@ -478,19 +588,45 @@
       letter-spacing: 0.04em;
     }
 
-    body.dark .version-tag { border-color: var(--border-dark); }
+    body.dark .version-tag {
+      border-color: var(--border-dark);
+    }
 
-    .tag-latest { background: var(--lime-green); color: #000; }
-    body.dark .tag-latest { background: #3d6600; color: #fff; }
+    .tag-latest {
+      background: var(--lime-green);
+      color: #000;
+    }
 
-    .tag-fork { background: var(--purple-accent); color: #fff; }
-    body.dark .tag-fork { background: #341797; color: #fff; }
+    body.dark .tag-latest {
+      background: #3d6600;
+      color: #fff;
+    }
 
-    .tag-upstream { background: var(--electric-blue); color: #fff; }
-    body.dark .tag-upstream { background: #1e3a5c; color: #fff; }
+    .tag-fork {
+      background: var(--purple-accent);
+      color: #fff;
+    }
+
+    body.dark .tag-fork {
+      background: #341797;
+      color: #fff;
+    }
+
+    .tag-upstream {
+      background: var(--electric-blue);
+      color: #fff;
+    }
+
+    body.dark .tag-upstream {
+      background: #1e3a5c;
+      color: #fff;
+    }
 
     /* ===== CHANGE ENTRIES ===== */
-    .change-list { list-style: none; padding: 0; }
+    .change-list {
+      list-style: none;
+      padding: 0;
+    }
 
     .change-item {
       display: flex;
@@ -501,16 +637,22 @@
       transition: background 0.1s, transform 0.1s;
     }
 
-    body.dark .change-item { border-color: var(--border-dark); }
+    body.dark .change-item {
+      border-color: var(--border-dark);
+    }
 
     .change-item:hover {
       background: var(--surface-light);
       transform: translateX(3px);
     }
 
-    body.dark .change-item:hover { background: var(--surface-dark); }
+    body.dark .change-item:hover {
+      background: var(--surface-dark);
+    }
 
-    .change-item:last-child { border-bottom: none; }
+    .change-item:last-child {
+      border-bottom: none;
+    }
 
     .change-type {
       flex-shrink: 0;
@@ -526,31 +668,89 @@
       letter-spacing: 0.03em;
     }
 
-    body.dark .change-type { border-color: var(--border-dark); }
+    body.dark .change-type {
+      border-color: var(--border-dark);
+    }
 
-    .type-feat { background: var(--electric-blue); color: #fff; }
-    body.dark .type-feat { background: #1e3a5c; color: #fff; }
+    .type-feat {
+      background: var(--electric-blue);
+      color: #fff;
+    }
 
-    .type-fix { background: var(--warm-coral); color: #000; }
-    body.dark .type-fix { background: #b2432e; color: #fff; }
+    body.dark .type-feat {
+      background: #1e3a5c;
+      color: #fff;
+    }
 
-    .type-docs { background: var(--purple-accent); color: #fff; }
-    body.dark .type-docs { background: #341797; color: #fff; }
+    .type-fix {
+      background: var(--warm-coral);
+      color: #000;
+    }
 
-    .type-refactor { background: var(--yellow-accent); color: #000; }
-    body.dark .type-refactor { background: #bba701; color: #fff; }
+    body.dark .type-fix {
+      background: #b2432e;
+      color: #fff;
+    }
 
-    .type-test { background: var(--lime-green); color: #000; }
-    body.dark .type-test { background: #3d6600; color: #fff; }
+    .type-docs {
+      background: var(--purple-accent);
+      color: #fff;
+    }
 
-    .type-ci { background: var(--cyan-accent); color: #000; }
-    body.dark .type-ci { background: #007a8a; color: #fff; }
+    body.dark .type-docs {
+      background: #341797;
+      color: #fff;
+    }
 
-    .type-chore { background: var(--surface-light); color: var(--muted-light); }
-    body.dark .type-chore { background: var(--surface-dark); color: var(--muted-dark); }
+    .type-refactor {
+      background: var(--yellow-accent);
+      color: #000;
+    }
 
-    .type-merge { background: var(--cyan-accent); color: #000; }
-    body.dark .type-merge { background: #007a8a; color: #fff; }
+    body.dark .type-refactor {
+      background: #bba701;
+      color: #fff;
+    }
+
+    .type-test {
+      background: var(--lime-green);
+      color: #000;
+    }
+
+    body.dark .type-test {
+      background: #3d6600;
+      color: #fff;
+    }
+
+    .type-ci {
+      background: var(--cyan-accent);
+      color: #000;
+    }
+
+    body.dark .type-ci {
+      background: #007a8a;
+      color: #fff;
+    }
+
+    .type-chore {
+      background: var(--surface-light);
+      color: var(--muted-light);
+    }
+
+    body.dark .type-chore {
+      background: var(--surface-dark);
+      color: var(--muted-dark);
+    }
+
+    .type-merge {
+      background: var(--cyan-accent);
+      color: #000;
+    }
+
+    body.dark .type-merge {
+      background: #007a8a;
+      color: #fff;
+    }
 
     .change-text {
       flex: 1;
@@ -562,7 +762,9 @@
       color: var(--hot-pink);
     }
 
-    body.dark .change-scope { color: #ff66f9; }
+    body.dark .change-scope {
+      color: #ff66f9;
+    }
 
     .change-issue {
       color: var(--electric-blue);
@@ -571,9 +773,13 @@
       font-weight: 700;
     }
 
-    body.dark .change-issue { color: #6ea8ff; }
+    body.dark .change-issue {
+      color: #6ea8ff;
+    }
 
-    .change-issue:hover { text-decoration: underline; }
+    .change-issue:hover {
+      text-decoration: underline;
+    }
 
     .change-hash {
       flex-shrink: 0;
@@ -582,7 +788,9 @@
       opacity: 0.6;
     }
 
-    body.dark .change-hash { color: var(--muted-dark); }
+    body.dark .change-hash {
+      color: var(--muted-dark);
+    }
 
     /* ===== COLLAPSIBLE CHANGE DETAILS ===== */
     .change-item[data-has-detail] {
@@ -601,7 +809,9 @@
       line-height: 1.6;
     }
 
-    body.dark .change-toggle { color: var(--muted-dark); }
+    body.dark .change-toggle {
+      color: var(--muted-dark);
+    }
 
     .change-item.expanded .change-toggle {
       transform: rotate(90deg);
@@ -640,9 +850,13 @@
       color: var(--hot-pink);
     }
 
-    body.dark .change-detail h4 { color: #ff66f9; }
+    body.dark .change-detail h4 {
+      color: #ff66f9;
+    }
 
-    .change-detail h4:first-child { margin-top: 0; }
+    .change-detail h4:first-child {
+      margin-top: 0;
+    }
 
     .change-detail ul {
       margin: 0;
@@ -664,7 +878,7 @@
     .change-detail pre {
       margin: 0.4rem 0 0;
       padding: 0.55rem 0.75rem;
-      background: rgba(0,0,0,0.04);
+      background: rgba(0, 0, 0, 0.04);
       border: 2px solid var(--border-light);
       overflow-x: auto;
       font-size: 0.76rem;
@@ -673,13 +887,18 @@
     }
 
     body.dark .change-detail pre {
-      background: rgba(255,255,255,0.05);
+      background: rgba(255, 255, 255, 0.05);
       border-color: var(--border-dark);
     }
 
     @media (max-width: 640px) {
-      .change-detail { padding-left: 0; }
-      .change-detail-inner { padding-left: 0.75rem; }
+      .change-detail {
+        padding-left: 0;
+      }
+
+      .change-detail-inner {
+        padding-left: 0.75rem;
+      }
     }
 
     /* ===== GROUP TITLES ===== */
@@ -722,7 +941,9 @@
       text-underline-offset: 0.2em;
     }
 
-    .footer a:hover { color: var(--hot-pink); }
+    .footer a:hover {
+      color: var(--hot-pink);
+    }
 
     /* ===== NO RESULTS ===== */
     .no-results {
@@ -741,7 +962,9 @@
       background: var(--surface-dark);
     }
 
-    .no-results.visible { display: block; }
+    .no-results.visible {
+      display: block;
+    }
 
     /* ===== COMMANDS & ALIASES SECTION ===== */
     .cmd-controls {
@@ -772,7 +995,9 @@
       box-shadow: var(--shadow-sm) var(--border-dark);
     }
 
-    .cmd-search:focus { box-shadow: var(--shadow-md) var(--electric-blue); }
+    .cmd-search:focus {
+      box-shadow: var(--shadow-md) var(--electric-blue);
+    }
 
     .engine-filters {
       display: flex;
@@ -805,7 +1030,9 @@
       box-shadow: var(--shadow-md) var(--border-light);
     }
 
-    body.dark .engine-btn:hover { box-shadow: var(--shadow-md) var(--border-dark); }
+    body.dark .engine-btn:hover {
+      box-shadow: var(--shadow-md) var(--border-dark);
+    }
 
     .engine-btn.active {
       background: var(--cyan-accent);
@@ -832,49 +1059,149 @@
       margin-bottom: 0.75rem;
     }
 
-    body.dark .cmd-category-title { border-color: var(--border-dark); }
+    body.dark .cmd-category-title {
+      border-color: var(--border-dark);
+    }
 
-    .cat-basic { background: var(--electric-blue); color: #fff; }
-    body.dark .cat-basic { background: #1e3a5c; color: #fff; }
+    .cat-basic {
+      background: var(--electric-blue);
+      color: #fff;
+    }
 
-    .cat-session { background: var(--purple-accent); color: #fff; }
-    body.dark .cat-session { background: #341797; color: #fff; }
+    body.dark .cat-basic {
+      background: #1e3a5c;
+      color: #fff;
+    }
 
-    .cat-circuit { background: var(--warm-coral); color: #000; }
-    body.dark .cat-circuit { background: #b2432e; color: #fff; }
+    .cat-session {
+      background: var(--purple-accent);
+      color: #fff;
+    }
 
-    .cat-config { background: var(--yellow-accent); color: #000; }
-    body.dark .cat-config { background: #bba701; color: #fff; }
+    body.dark .cat-session {
+      background: #341797;
+      color: #fff;
+    }
 
-    .cat-model { background: var(--hot-pink); color: #000; }
-    body.dark .cat-model { background: #b3004b; color: #fff; }
+    .cat-circuit {
+      background: var(--warm-coral);
+      color: #000;
+    }
 
-    .cat-worktree { background: var(--cyan-accent); color: #000; }
-    body.dark .cat-worktree { background: #007a8a; color: #fff; }
+    body.dark .cat-circuit {
+      background: #b2432e;
+      color: #fff;
+    }
 
-    .cat-interactive { background: var(--lime-green); color: #000; }
-    body.dark .cat-interactive { background: #3d6600; color: #fff; }
+    .cat-config {
+      background: var(--yellow-accent);
+      color: #000;
+    }
 
-    .cat-workflow { background: var(--vibrant-orange); color: #fff; }
-    body.dark .cat-workflow { background: #b25a00; color: #fff; }
+    body.dark .cat-config {
+      background: #bba701;
+      color: #fff;
+    }
 
-    .cat-management { background: var(--electric-blue); color: #fff; }
-    body.dark .cat-management { background: #1e3a5c; color: #fff; }
+    .cat-model {
+      background: var(--hot-pink);
+      color: #000;
+    }
 
-    .cat-planning { background: var(--hot-pink); color: #000; }
-    body.dark .cat-planning { background: #b3004b; color: #fff; }
+    body.dark .cat-model {
+      background: #b3004b;
+      color: #fff;
+    }
 
-    .cat-task { background: var(--lime-green); color: #000; }
-    body.dark .cat-task { background: #3d6600; color: #fff; }
+    .cat-worktree {
+      background: var(--cyan-accent);
+      color: #000;
+    }
 
-    .cat-shared { background: var(--yellow-accent); color: #000; }
-    body.dark .cat-shared { background: #bba701; color: #fff; }
+    body.dark .cat-worktree {
+      background: #007a8a;
+      color: #fff;
+    }
 
-    .cat-permission { background: var(--warm-coral); color: #000; }
-    body.dark .cat-permission { background: #b2432e; color: #fff; }
+    .cat-interactive {
+      background: var(--lime-green);
+      color: #000;
+    }
 
-    .cat-output { background: var(--cyan-accent); color: #000; }
-    body.dark .cat-output { background: #007a8a; color: #fff; }
+    body.dark .cat-interactive {
+      background: #3d6600;
+      color: #fff;
+    }
+
+    .cat-workflow {
+      background: var(--vibrant-orange);
+      color: #fff;
+    }
+
+    body.dark .cat-workflow {
+      background: #b25a00;
+      color: #fff;
+    }
+
+    .cat-management {
+      background: var(--electric-blue);
+      color: #fff;
+    }
+
+    body.dark .cat-management {
+      background: #1e3a5c;
+      color: #fff;
+    }
+
+    .cat-planning {
+      background: var(--hot-pink);
+      color: #000;
+    }
+
+    body.dark .cat-planning {
+      background: #b3004b;
+      color: #fff;
+    }
+
+    .cat-task {
+      background: var(--lime-green);
+      color: #000;
+    }
+
+    body.dark .cat-task {
+      background: #3d6600;
+      color: #fff;
+    }
+
+    .cat-shared {
+      background: var(--yellow-accent);
+      color: #000;
+    }
+
+    body.dark .cat-shared {
+      background: #bba701;
+      color: #fff;
+    }
+
+    .cat-permission {
+      background: var(--warm-coral);
+      color: #000;
+    }
+
+    body.dark .cat-permission {
+      background: #b2432e;
+      color: #fff;
+    }
+
+    .cat-output {
+      background: var(--cyan-accent);
+      color: #000;
+    }
+
+    body.dark .cat-output {
+      background: #007a8a;
+      color: #fff;
+    }
 
     .cmd-table {
       width: 100%;
@@ -940,7 +1267,9 @@
       word-break: break-all;
     }
 
-    body.dark .cmd-expands { color: var(--muted-dark); }
+    body.dark .cmd-expands {
+      color: var(--muted-dark);
+    }
 
     .cmd-copy-btn {
       display: inline-flex;
@@ -993,19 +1322,49 @@
       letter-spacing: 0.03em;
     }
 
-    body.dark .cmd-engine-tag { border-color: var(--border-dark); }
+    body.dark .cmd-engine-tag {
+      border-color: var(--border-dark);
+    }
 
-    .engine-claude { background: var(--purple-accent); color: #fff; }
-    body.dark .engine-claude { background: #341797; color: #fff; }
+    .engine-claude {
+      background: var(--purple-accent);
+      color: #fff;
+    }
 
-    .engine-codex { background: var(--electric-blue); color: #fff; }
-    body.dark .engine-codex { background: #1e3a5c; color: #fff; }
+    body.dark .engine-claude {
+      background: #341797;
+      color: #fff;
+    }
 
-    .engine-devin { background: var(--vibrant-orange); color: #fff; }
-    body.dark .engine-devin { background: #b25a00; color: #fff; }
+    .engine-codex {
+      background: var(--electric-blue);
+      color: #fff;
+    }
 
-    .engine-all { background: var(--lime-green); color: #000; }
-    body.dark .engine-all { background: #3d6600; color: #fff; }
+    body.dark .engine-codex {
+      background: #1e3a5c;
+      color: #fff;
+    }
+
+    .engine-devin {
+      background: var(--vibrant-orange);
+      color: #fff;
+    }
+
+    body.dark .engine-devin {
+      background: #b25a00;
+      color: #fff;
+    }
+
+    .engine-all {
+      background: var(--lime-green);
+      color: #000;
+    }
+
+    body.dark .engine-all {
+      background: #3d6600;
+      color: #fff;
+    }
 
     .cmd-no-results {
       text-align: center;
@@ -1023,7 +1382,9 @@
       background: var(--surface-dark);
     }
 
-    .cmd-no-results.visible { display: block; }
+    .cmd-no-results.visible {
+      display: block;
+    }
 
     .cmd-count {
       font-size: 0.82rem;
@@ -1031,15 +1392,29 @@
       font-weight: 700;
     }
 
-    body.dark .cmd-count { color: var(--muted-dark); }
+    body.dark .cmd-count {
+      color: var(--muted-dark);
+    }
 
-    .eyebrow-cmd { background: var(--cyan-accent); color: #000; }
-    body.dark .eyebrow-cmd { background: #007a8a; color: #fff; }
+    .eyebrow-cmd {
+      background: var(--cyan-accent);
+      color: #000;
+    }
+
+    body.dark .eyebrow-cmd {
+      background: #007a8a;
+      color: #fff;
+    }
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 860px) {
-      .hero-stats { grid-template-columns: repeat(3, 1fr); }
-      .cmd-table { font-size: 0.8rem; }
+      .hero-stats {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .cmd-table {
+        font-size: 0.8rem;
+      }
     }
 
     @media (max-width: 640px) {
@@ -1048,26 +1423,54 @@
         padding: 0 0.5rem;
       }
 
-      .hero { padding: 2.5rem 0 2rem; }
-      .hero-stats { grid-template-columns: repeat(2, 1fr); }
+      .hero {
+        padding: 2.5rem 0 2rem;
+      }
 
-      .filter-bar-inner { flex-direction: column; align-items: stretch; }
-      .search-input { width: 100%; margin-left: 0; }
-      .change-hash { display: none; }
+      .hero-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .filter-bar-inner {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .search-input {
+        width: 100%;
+        margin-left: 0;
+      }
+
+      .change-hash {
+        display: none;
+      }
 
       .neo-btn {
         width: 100%;
         justify-content: center;
       }
 
-      .cmd-controls { flex-direction: column; }
-      .cmd-search { min-width: 0; width: 100%; }
-      .cmd-table { font-size: 0.78rem; }
+      .cmd-controls {
+        flex-direction: column;
+      }
+
+      .cmd-search {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .cmd-table {
+        font-size: 0.78rem;
+      }
+
       .cmd-table th:nth-child(3),
-      .cmd-table td:nth-child(3) { display: none; }
+      .cmd-table td:nth-child(3) {
+        display: none;
+      }
     }
   </style>
 </head>
+
 <body>
 
   <!-- Theme toggle -->
@@ -1078,26 +1481,38 @@
     <div>
       <span class="hero-eyebrow">AMIT TIWARI</span>
       <h1>AI Ralph</h1>
-      <p class="hero-desc">Multi-engine autonomous AI development loop &mdash; Devin, Claude Code, and Codex under one roof.</p>
+      <p class="hero-desc">Multi-engine autonomous AI development loop &mdash; Devin, Claude Code, and Codex under one
+        roof.</p>
 
       <div class="badge-row">
         <span class="badge badge-blue">
-          <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <svg viewBox="0 0 16 16">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+          </svg>
           amit-t/ai-ralph
         </span>
         <span class="badge badge-green">
-          <svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+          <svg viewBox="0 0 16 16">
+            <path
+              d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
+          </svg>
           649 Tests Passing
         </span>
         <span class="badge badge-orange">
-          <svg viewBox="0 0 16 16"><path d="M8.75 1.75a.75.75 0 00-1.5 0V5H4a.75.75 0 000 1.5h3.25v3.25a.75.75 0 001.5 0V6.5H12A.75.75 0 0012 5H8.75V1.75z"/></svg>
+          <svg viewBox="0 0 16 16">
+            <path
+              d="M8.75 1.75a.75.75 0 00-1.5 0V5H4a.75.75 0 000 1.5h3.25v3.25a.75.75 0 001.5 0V6.5H12A.75.75 0 0012 5H8.75V1.75z" />
+          </svg>
           150+ Aliases
         </span>
       </div>
 
       <div class="hero-actions">
-        <a class="neo-btn neo-btn-primary" href="https://github.com/amit-t/ai-ralph" target="_blank" rel="noreferrer">Open Repo</a>
-        <a class="neo-btn neo-btn-accent" href="https://github.com/amit-t/ai-ralph/blob/main/README.md" target="_blank" rel="noreferrer">README</a>
+        <a class="neo-btn neo-btn-primary" href="https://github.com/amit-t/ai-ralph" target="_blank"
+          rel="noreferrer">Open Repo</a>
+        <a class="neo-btn neo-btn-accent" href="https://github.com/amit-t/ai-ralph/blob/main/README.md" target="_blank"
+          rel="noreferrer">README</a>
         <a class="neo-btn" href="#commands-section">Commands</a>
         <a class="neo-btn" href="#changelog">Changelog</a>
       </div>
@@ -1151,7 +1566,9 @@
     </div>
 
     <div id="cmdContent"></div>
-    <div class="cmd-no-results" id="cmdNoResults"><p>No aliases match your search.</p></div>
+    <div class="cmd-no-results" id="cmdNoResults">
+      <p>No aliases match your search.</p>
+    </div>
   </section>
 
   <hr class="divider container">
@@ -1183,18 +1600,38 @@
     <!-- Latest: Fork Development -->
     <section class="version-section" data-version="latest">
       <div class="version-header">
-        <span class="version-name">Latest on dev</span>
+        <span class="version-name">Latest on Ralph</span>
         <span class="version-date">April 2026</span>
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">qg:</span> Extract QG retry into standalone <code>ralph --qg</code> mode &mdash; main loop now always creates PR (with <code>quality-gates-failed</code> label on failure); dedicated mode runs retry loop with subagent support</span><span class="change-hash">c47b700</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Ad-hoc mode returns task ID (e.g. <strong>AH01</strong>) for use with <code>--task</code> flag; stdout-only output enables piping</span><span class="change-hash">32f7cae</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Ad-hoc task mode &mdash; <code>ralph-plan --adhoc</code> for quick bug/task entry into <code>fix_plan.md</code> via AI across all 3 engines</span><span class="change-hash">47a6c49</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> <s>Quality gate retry uses subagents</s> &mdash; superseded by <code>ralph --qg</code> standalone mode (<code>c47b700</code>)</span><span class="change-hash">514bff8</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> <s>Quality gate retry loop</s> &mdash; superseded by <code>ralph --qg</code> standalone mode (<code>c47b700</code>)</span><span class="change-hash">47a3a02</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">summary:</span> Display session/conversation ID in execution summary</span><span class="change-hash">71c7aac</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Update Codex CLI flags to <code>--dangerously-bypass-approvals-and-sandbox</code></span><span class="change-hash">75084be</span></li>
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span
+            class="change-text"><span class="change-scope">qg:</span> Extract QG retry into standalone
+            <code>ralph --qg</code> mode &mdash; main loop now always creates PR (with <code>quality-gates-failed</code>
+            label on failure); dedicated mode runs retry loop with subagent support</span><span
+            class="change-hash">c47b700</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">planning:</span> Ad-hoc mode returns task ID (e.g.
+            <strong>AH01</strong>) for use with <code>--task</code> flag; stdout-only output enables piping</span><span
+            class="change-hash">32f7cae</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">planning:</span> Ad-hoc task mode &mdash;
+            <code>ralph-plan --adhoc</code> for quick bug/task entry into <code>fix_plan.md</code> via AI across all 3
+            engines</span><span class="change-hash">47a6c49</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">qg:</span> <s>Quality gate retry uses subagents</s> &mdash;
+            superseded by <code>ralph --qg</code> standalone mode (<code>c47b700</code>)</span><span
+            class="change-hash">514bff8</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">qg:</span> <s>Quality gate retry loop</s> &mdash; superseded
+            by <code>ralph --qg</code> standalone mode (<code>c47b700</code>)</span><span
+            class="change-hash">47a3a02</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">summary:</span> Display session/conversation ID in execution
+            summary</span><span class="change-hash">71c7aac</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Update Codex CLI flags to
+            <code>--dangerously-bypass-approvals-and-sandbox</code></span><span class="change-hash">75084be</span></li>
       </ul>
     </section>
 
@@ -1205,7 +1642,9 @@
         <span class="version-tag tag-fork">PR #16</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Support task ID selection via <code>--task R05</code> with bold markdown ID matching (case-insensitive)</span><span class="change-hash">ae9d303</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Support task ID selection via <code>--task R05</code> with bold markdown ID matching
+            (case-insensitive)</span><span class="change-hash">ae9d303</span></li>
       </ul>
     </section>
 
@@ -1216,12 +1655,24 @@
         <span class="version-tag tag-fork">PR #15</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add <code>--task NUM|ID</code> flag for specific task execution from <code>fix_plan.md</code></span><span class="change-hash">ce7232c</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Change detection comparing git state before and after execution</span><span class="change-hash">a15b271</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Execution summary with files changed, lines added/removed</span><span class="change-hash">ce7232c</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">No-change early exit reverts <code>[~]</code> marker back to <code>[ ]</code> for retry</span><span class="change-hash">ce7232c</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Automatic dependency installation in worktrees (detects package manager from lock files)</span><span class="change-hash">ce7232c</span></li>
-        <li class="change-item" data-type="docs"><span class="change-type type-docs">docs</span><span class="change-text">Add task-specific execution, change detection, and dependency installation features to README</span><span class="change-hash">bab0f66</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Add <code>--task NUM|ID</code> flag for specific task execution from
+            <code>fix_plan.md</code></span><span class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Change detection comparing git state before and after execution</span><span
+            class="change-hash">a15b271</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Execution summary with files changed, lines added/removed</span><span
+            class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">No-change early exit reverts <code>[~]</code> marker back to <code>[ ]</code> for
+            retry</span><span class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Automatic dependency installation in worktrees (detects package manager from lock
+            files)</span><span class="change-hash">ce7232c</span></li>
+        <li class="change-item" data-type="docs"><span class="change-type type-docs">docs</span><span
+            class="change-text">Add task-specific execution, change detection, and dependency installation features to
+            README</span><span class="change-hash">bab0f66</span></li>
       </ul>
     </section>
 
@@ -1232,7 +1683,9 @@
         <span class="version-tag tag-fork">PR #14</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Inject Ralph <code>.gitignore</code> entries instead of copying template &mdash; preserves existing content</span><span class="change-hash">331c2fc</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Inject Ralph <code>.gitignore</code> entries instead of copying template &mdash;
+            preserves existing content</span><span class="change-hash">331c2fc</span></li>
       </ul>
     </section>
 
@@ -1243,11 +1696,21 @@
         <span class="version-tag tag-fork">PR #12, #13</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add <code>lib/fix_plan_status.sh</code> with <code>find_fix_plan</code> and <code>show_fix_plan_status</code></span><span class="change-hash">942a031</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">ralph_plan:</span> Add <code>--status</code> flag to display fix_plan.md progress</span><span class="change-hash">32fb7f6</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add <code>rpc.plan.s</code> / <code>rpx.plan.s</code> / <code>rpd.plan.s</code> aliases for fix plan status</span><span class="change-hash">7800bb6</span></li>
-        <li class="change-item" data-type="docs"><span class="change-type type-docs">docs</span><span class="change-text">Comprehensive README rewrite for multi-engine fork with full aliases reference</span><span class="change-hash">11732e2</span></li>
-        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text">Add failing tests for fix_plan_status lib (TDD approach)</span><span class="change-hash">baccd71</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Add <code>lib/fix_plan_status.sh</code> with <code>find_fix_plan</code> and
+            <code>show_fix_plan_status</code></span><span class="change-hash">942a031</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">ralph_plan:</span> Add <code>--status</code> flag to display
+            fix_plan.md progress</span><span class="change-hash">32fb7f6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Add <code>rpc.plan.s</code> / <code>rpx.plan.s</code> / <code>rpd.plan.s</code> aliases
+            for fix plan status</span><span class="change-hash">7800bb6</span></li>
+        <li class="change-item" data-type="docs"><span class="change-type type-docs">docs</span><span
+            class="change-text">Comprehensive README rewrite for multi-engine fork with full aliases
+            reference</span><span class="change-hash">11732e2</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span
+            class="change-text">Add failing tests for fix_plan_status lib (TDD approach)</span><span
+            class="change-hash">baccd71</span></li>
       </ul>
     </section>
 
@@ -1258,7 +1721,9 @@
         <span class="version-tag tag-fork">PR #11</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">pr:</span> Correct misleading ERROR message on quality gate failure and auto-create labels</span><span class="change-hash">3951b9c</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">pr:</span> Correct misleading ERROR message on quality gate
+            failure and auto-create labels</span><span class="change-hash">3951b9c</span></li>
       </ul>
     </section>
 
@@ -1271,24 +1736,52 @@
 
       <div class="change-group-title">Features</div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Add <code>pr_manager.sh</code> with preflight check, title builder, description builder</span><span class="change-hash">b7bf8fb</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Add <code>worktree_commit_and_pr</code> for end-to-end PR creation</span><span class="change-hash">c81a3f6</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Add <code>worktree_fallback_branch_pr</code> for failed quality gate branches</span><span class="change-hash">ae26bb2</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Wire auto-PR flow into Codex and Devin variants with config templates</span><span class="change-hash">9570ff2</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Auto-PR replaces merge prompt in main loop</span><span class="change-hash">2bfc56e</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">pr:</span> Fallback to compare URL when <code>gh</code> not available or not authenticated</span><span class="change-hash">d5ac0d7</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">interactive:</span> Restore interactive TUI mode for Devin and Codex</span><span class="change-hash">f3ddc72</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin,codex:</span> Auto-exit interactive session on RALPH_STATUS detection</span><span class="change-hash">b89d2ab</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">aliases:</span> Add engine-specific enable aliases and <code>rp.install</code> meta-alias</span><span class="change-hash">f5a573d</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">pr:</span> Add <code>pr_manager.sh</code> with preflight
+            check, title builder, description builder</span><span class="change-hash">b7bf8fb</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">pr:</span> Add <code>worktree_commit_and_pr</code> for
+            end-to-end PR creation</span><span class="change-hash">c81a3f6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">pr:</span> Add <code>worktree_fallback_branch_pr</code> for
+            failed quality gate branches</span><span class="change-hash">ae26bb2</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">pr:</span> Wire auto-PR flow into Codex and Devin variants
+            with config templates</span><span class="change-hash">9570ff2</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">pr:</span> Auto-PR replaces merge prompt in main
+            loop</span><span class="change-hash">2bfc56e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">pr:</span> Fallback to compare URL when <code>gh</code> not
+            available or not authenticated</span><span class="change-hash">d5ac0d7</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">interactive:</span> Restore interactive TUI mode for Devin
+            and Codex</span><span class="change-hash">f3ddc72</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">devin,codex:</span> Auto-exit interactive session on
+            RALPH_STATUS detection</span><span class="change-hash">b89d2ab</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">aliases:</span> Add engine-specific enable aliases and
+            <code>rp.install</code> meta-alias</span><span class="change-hash">f5a573d</span></li>
       </ul>
 
       <div class="change-group-title">Fixes</div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">pr:</span> Surface push errors and add remote reachability check</span><span class="change-hash">5b718f4</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">devin,codex:</span> Survive Ctrl+C in interactive mode and always run PR+cleanup</span><span class="change-hash">8888f3d</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">enable:</span> Preserve <code>fix_plan.md</code> on re-enable to protect work progress</span><span class="change-hash">2e04bcb</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">install:</span> Always create <code>~/.ralph/lib</code> before copying shared libs</span><span class="change-hash">c928edf</span></li>
-        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">loop:</span> Replace while loop with single-run architecture for all engines</span><span class="change-hash">cc65616</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">pr:</span> Surface push errors and add remote reachability
+            check</span><span class="change-hash">5b718f4</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">devin,codex:</span> Survive Ctrl+C in interactive mode and
+            always run PR+cleanup</span><span class="change-hash">8888f3d</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">enable:</span> Preserve <code>fix_plan.md</code> on re-enable
+            to protect work progress</span><span class="change-hash">2e04bcb</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">install:</span> Always create <code>~/.ralph/lib</code>
+            before copying shared libs</span><span class="change-hash">c928edf</span></li>
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span
+            class="change-text"><span class="change-scope">loop:</span> Replace while loop with single-run architecture
+            for all engines</span><span class="change-hash">cc65616</span></li>
       </ul>
     </section>
 
@@ -1301,20 +1794,40 @@
 
       <div class="change-group-title">Features</div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add parallel agent spawning and worktree integration for all engines</span><span class="change-hash">65ede1e</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add IDE terminal tab support for VS Code, Windsurf, and Cursor</span><span class="change-hash">03337a4</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add <code>--parallel-bg</code> flag for background mode in any terminal</span><span class="change-hash">11c4bed</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">parallel:</span> Add task claiming and in-progress tracking for parallel loop support</span><span class="change-hash">261f64a</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">worktree:</span> Sync full <code>.ralph/</code> directory and add worktree mode context injection</span><span class="change-hash">8509ca5</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">worktree:</span> Auto-mark tasks complete after merge and sync <code>fix_plan.md</code> state</span><span class="change-hash">eaabde9</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">worktree:</span> Interactive merge prompt &mdash; ask user yes/no before merging to main</span><span class="change-hash">e13188f</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">parallel:</span> Add parallel agent spawning and worktree
+            integration for all engines</span><span class="change-hash">65ede1e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">parallel:</span> Add IDE terminal tab support for VS Code,
+            Windsurf, and Cursor</span><span class="change-hash">03337a4</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">parallel:</span> Add <code>--parallel-bg</code> flag for
+            background mode in any terminal</span><span class="change-hash">11c4bed</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">parallel:</span> Add task claiming and in-progress tracking
+            for parallel loop support</span><span class="change-hash">261f64a</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">worktree:</span> Sync full <code>.ralph/</code> directory and
+            add worktree mode context injection</span><span class="change-hash">8509ca5</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">worktree:</span> Auto-mark tasks complete after merge and
+            sync <code>fix_plan.md</code> state</span><span class="change-hash">eaabde9</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">worktree:</span> Interactive merge prompt &mdash; ask user
+            yes/no before merging to main</span><span class="change-hash">e13188f</span></li>
       </ul>
 
       <div class="change-group-title">Fixes</div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Worktree agents editing main branch instead of worktree &mdash; separate worktree directive from loop context</span><span class="change-hash">1816719</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Atomic file locking in <code>pick_next_task</code> for parallel safety</span><span class="change-hash">1816719</span></li>
-        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">parallel:</span> Use iTerm2 tabs instead of separate windows</span><span class="change-hash">e7e985a</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Worktree agents editing main branch instead of worktree &mdash; separate worktree
+            directive from loop context</span><span class="change-hash">1816719</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Atomic file locking in <code>pick_next_task</code> for parallel safety</span><span
+            class="change-hash">1816719</span></li>
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span
+            class="change-text"><span class="change-scope">parallel:</span> Use iTerm2 tabs instead of separate
+            windows</span><span class="change-hash">e7e985a</span></li>
       </ul>
     </section>
 
@@ -1325,11 +1838,22 @@
         <span class="version-tag tag-fork">fork</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add <code>ralph-plan</code> command for PRD-driven <code>fix_plan.md</code> generation</span><span class="change-hash">be04a78</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add PM-OS / DoE-OS auto-detection and integration for <code>ralph-plan</code></span><span class="change-hash">6744c55</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Switch to interactive AI mode for better user visibility</span><span class="change-hash">c47856e</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add permission bypass flags (<code>--yolo</code>, <code>--superpowers</code>) for Claude</span><span class="change-hash">149432a</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Add timeout protection and improve Claude CLI error handling</span><span class="change-hash">e0a85d6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">planning:</span> Add <code>ralph-plan</code> command for
+            PRD-driven <code>fix_plan.md</code> generation</span><span class="change-hash">be04a78</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">planning:</span> Add PM-OS / DoE-OS auto-detection and
+            integration for <code>ralph-plan</code></span><span class="change-hash">6744c55</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">planning:</span> Switch to interactive AI mode for better
+            user visibility</span><span class="change-hash">c47856e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">planning:</span> Add permission bypass flags
+            (<code>--yolo</code>, <code>--superpowers</code>) for Claude</span><span class="change-hash">149432a</span>
+        </li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">planning:</span> Add timeout protection and improve Claude
+            CLI error handling</span><span class="change-hash">e0a85d6</span></li>
       </ul>
     </section>
 
@@ -1340,10 +1864,18 @@
         <span class="version-tag tag-fork">fork</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">codex:</span> Complete Ralph for Codex implementation with full feature parity</span><span class="change-hash">34d4090</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">GPT-4, GPT-3.5, and Claude model selection</span><span class="change-hash">34d4090</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Auto-exit and interactive TUI modes (<code>--no-codex-auto-exit</code>)</span><span class="change-hash">34d4090</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">aliases:</span> Create <code>rpx.*</code> aliases for Codex engine</span><span class="change-hash">05635e9</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">codex:</span> Complete Ralph for Codex implementation with
+            full feature parity</span><span class="change-hash">34d4090</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">GPT-4, GPT-3.5, and Claude model selection</span><span
+            class="change-hash">34d4090</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Auto-exit and interactive TUI modes (<code>--no-codex-auto-exit</code>)</span><span
+            class="change-hash">34d4090</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">aliases:</span> Create <code>rpx.*</code> aliases for Codex
+            engine</span><span class="change-hash">05635e9</span></li>
       </ul>
     </section>
 
@@ -1354,15 +1886,33 @@
         <span class="version-tag tag-fork">fork</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add Devin CLI support with parallel command structure</span><span class="change-hash">3a16332</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Add git worktree isolation for parallel development</span><span class="change-hash">0131d5b</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Add interactive live mode support and max loops limit</span><span class="change-hash">c38f3a1</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Cloud session polling with ACU limits</span><span class="change-hash">3a16332</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Opus, Sonnet, SWE, and GPT model selection</span><span class="change-hash">3a16332</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Permission modes (auto, dangerous)</span><span class="change-hash">69fa73f</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">beads:</span> Bidirectional sync between beads and <code>fix_plan.md</code></span><span class="change-hash">3575af1</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">devin:</span> Add <code>--no-devin-auto-exit</code> flag for interactive TUI mode</span><span class="change-hash">d316a5c</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">aliases:</span> Create <code>rpd.*</code> aliases for Devin engine</span><span class="change-hash">05635e9</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Add Devin CLI support with parallel command structure</span><span
+            class="change-hash">3a16332</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">devin:</span> Add git worktree isolation for parallel
+            development</span><span class="change-hash">0131d5b</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">devin:</span> Add interactive live mode support and max loops
+            limit</span><span class="change-hash">c38f3a1</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">devin:</span> Cloud session polling with ACU
+            limits</span><span class="change-hash">3a16332</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">devin:</span> Opus, Sonnet, SWE, and GPT model
+            selection</span><span class="change-hash">3a16332</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">devin:</span> Permission modes (auto, dangerous)</span><span
+            class="change-hash">69fa73f</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">beads:</span> Bidirectional sync between beads and
+            <code>fix_plan.md</code></span><span class="change-hash">3575af1</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">devin:</span> Add <code>--no-devin-auto-exit</code> flag for
+            interactive TUI mode</span><span class="change-hash">d316a5c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">aliases:</span> Create <code>rpd.*</code> aliases for Devin
+            engine</span><span class="change-hash">05635e9</span></li>
       </ul>
     </section>
 
@@ -1373,8 +1923,12 @@
         <span class="version-tag tag-fork">PR #5, #6</span>
       </div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">skills:</span> Add fork-sync agent workflow for upstream synchronization</span><span class="change-hash">1fb10d2</span></li>
-        <li class="change-item" data-type="merge"><span class="change-type type-merge">merge</span><span class="change-text">Sync main with upstream frankbria/ralph-claude-code (v0.11.5)</span><span class="change-hash">3bd7bb6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">skills:</span> Add fork-sync agent workflow for upstream
+            synchronization</span><span class="change-hash">1fb10d2</span></li>
+        <li class="change-item" data-type="merge"><span class="change-type type-merge">merge</span><span
+            class="change-text">Sync main with upstream frankbria/ralph-claude-code (v0.11.5)</span><span
+            class="change-hash">3bd7bb6</span></li>
       </ul>
     </section>
 
@@ -1388,13 +1942,39 @@
 
       <div class="change-group-title">Features</div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">live:</span> Show sub-agent progress in tmux live output <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/pull/216">#216</a></span><span class="change-hash">f702543</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">monitor:</span> Suppress I/O errors on broken tmux pty <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/188">#188</a></span><span class="change-hash">3fe66f6</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Detect Claude Extra Usage quota exhaustion <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/100">#100</a></span><span class="change-hash">f1298b8</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Prevent stale exit signals from causing premature exit <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/194">#194</a></span><span class="change-hash">12e4710</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Detect productive work on timeout instead of blanket failure <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/198">#198</a></span><span class="change-hash">13e35c4</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Detect <code>is_error:true</code> in JSON output when CLI exits with code 0 <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/134">#134</a>, <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/199">#199</a></span><span class="change-hash">2cf2bf3</span></li>
-        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">loop:</span> Remove <code>set -e</code> in favor of explicit error handling <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/208">#208</a></span><span class="change-hash">8237aa3</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">live:</span> Show sub-agent progress in tmux live output <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/pull/216">#216</a></span><span
+            class="change-hash">f702543</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">monitor:</span> Suppress I/O errors on broken tmux pty <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/188">#188</a></span><span
+            class="change-hash">3fe66f6</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Detect Claude Extra Usage quota exhaustion <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/100">#100</a></span><span
+            class="change-hash">f1298b8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Prevent stale exit signals from causing
+            premature exit <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/194">#194</a></span><span
+            class="change-hash">12e4710</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Detect productive work on timeout instead of
+            blanket failure <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/198">#198</a></span><span
+            class="change-hash">13e35c4</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Detect <code>is_error:true</code> in JSON output
+            when CLI exits with code 0 <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/134">#134</a>, <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/199">#199</a></span><span
+            class="change-hash">2cf2bf3</span></li>
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span
+            class="change-text"><span class="change-scope">loop:</span> Remove <code>set -e</code> in favor of explicit
+            error handling <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/208">#208</a></span><span
+            class="change-hash">8237aa3</span></li>
       </ul>
     </section>
 
@@ -1407,21 +1987,59 @@
 
       <div class="change-group-title">Features</div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">analyzer:</span> Add question pattern detection for headless mode <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">7fb4ed7</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">enable:</span> Add <code>ralph-enable</code> wizard for existing projects <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/124">#124</a></span><span class="change-hash">910f794</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">loop:</span> Validate Claude Code CLI command at startup <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/97">#97</a></span><span class="change-hash">4383e99</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">loop:</span> Add version check and auto-update at startup <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">170c530</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">diagnostic:</span> Add <code>ralph-check-beads</code> command for beads integration verification</span><span class="change-hash">7d0f337</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">analyzer:</span> Add question pattern detection for headless
+            mode <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span
+            class="change-hash">7fb4ed7</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">enable:</span> Add <code>ralph-enable</code> wizard for
+            existing projects <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/124">#124</a></span><span
+            class="change-hash">910f794</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">loop:</span> Validate Claude Code CLI command at startup <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/97">#97</a></span><span
+            class="change-hash">4383e99</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">loop:</span> Add version check and auto-update at startup <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span
+            class="change-hash">170c530</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">diagnostic:</span> Add <code>ralph-check-beads</code> command
+            for beads integration verification</span><span class="change-hash">7d0f337</span></li>
       </ul>
 
       <div class="change-group-title">Fixes</div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Inject corrective guidance when previous loop asked questions <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">d69b652</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Suppress no-progress counter on question loops <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">ffbc034</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Separate stderr from live mode JSON stream to fix jq parsing <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span class="change-hash">13b2413</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Persist API call counter immediately, not only on success <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/196">#196</a></span><span class="change-hash">6ff27b4</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Prevent <code>set -e</code> from killing script on API limit prompt timeout <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/185">#185</a></span><span class="change-hash">117fed7</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">enable:</span> Avoid early wizard exit when GitHub/beads checks return non-zero</span><span class="change-hash">2f64c45</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Inject corrective guidance when previous loop
+            asked questions <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span
+            class="change-hash">d69b652</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">circuit-breaker:</span> Suppress no-progress counter on
+            question loops <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span
+            class="change-hash">ffbc034</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Separate stderr from live mode JSON stream to
+            fix jq parsing <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/190">#190</a></span><span
+            class="change-hash">13b2413</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Persist API call counter immediately, not only
+            on success <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/196">#196</a></span><span
+            class="change-hash">6ff27b4</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Prevent <code>set -e</code> from killing script
+            on API limit prompt timeout <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/185">#185</a></span><span
+            class="change-hash">117fed7</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">enable:</span> Avoid early wizard exit when GitHub/beads
+            checks return non-zero</span><span class="change-hash">2f64c45</span></li>
       </ul>
     </section>
 
@@ -1434,23 +2052,67 @@
 
       <div class="change-group-title">Features</div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">protection:</span> Prevent Ralph from deleting its own <code>.ralph/</code> directory <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/149">#149</a></span><span class="change-hash">5ae0d21</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Add auto-recovery from OPEN state with cooldown timer <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/160">#160</a></span><span class="change-hash">b4b9db6</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add live streaming output mode with real-time Claude Code visibility <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/125">#125</a></span><span class="change-hash">9aa2fef</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">exit:</span> Detect permission denials and halt loop <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/101">#101</a></span><span class="change-hash">3282948</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">structure:</span> Migrate Ralph files to <code>.ralph/</code> subfolder <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/109">#109</a></span><span class="change-hash">9b19d70</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add timeout command support for macOS <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/108">#108</a></span><span class="change-hash">0e95f67</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">protection:</span> Prevent Ralph from deleting its own
+            <code>.ralph/</code> directory <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/149">#149</a></span><span
+            class="change-hash">5ae0d21</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">circuit-breaker:</span> Add auto-recovery from OPEN state
+            with cooldown timer <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/160">#160</a></span><span
+            class="change-hash">b4b9db6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Add live streaming output mode with real-time Claude Code visibility <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/125">#125</a></span><span
+            class="change-hash">9aa2fef</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">exit:</span> Detect permission denials and halt loop <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/101">#101</a></span><span
+            class="change-hash">3282948</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">structure:</span> Migrate Ralph files to <code>.ralph/</code>
+            subfolder <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/109">#109</a></span><span
+            class="change-hash">9b19d70</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Add timeout command support for macOS <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/108">#108</a></span><span
+            class="change-hash">0e95f67</span></li>
       </ul>
 
       <div class="change-group-title">Fixes</div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">setup:</span> Generate <code>.gitignore</code> for new projects, enable dotglob so template is copied <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/174">#174</a></span><span class="change-hash">3b22c0e</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">loop:</span> Prevent silent script death on Claude timeout <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/175">#175</a></span><span class="change-hash">fe64f2b</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">live-mode:</span> Crash with text output format <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/164">#164</a></span><span class="change-hash">4027ac9</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">wizard:</span> Redirect prompts to stderr for clean command substitution <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/130">#130</a></span><span class="change-hash">05c5720</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Improve permission denial display to show tool names</span><span class="change-hash">6dc1c2c</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Progress detection improvements <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/141">#141</a>, <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/144">#144</a></span><span class="change-hash">aa753c9</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Auto-terminate tmux session when Ralph loop exits <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/176">#176</a></span><span class="change-hash">1233995</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">setup:</span> Generate <code>.gitignore</code> for new
+            projects, enable dotglob so template is copied <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/174">#174</a></span><span
+            class="change-hash">3b22c0e</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">loop:</span> Prevent silent script death on Claude timeout <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/175">#175</a></span><span
+            class="change-hash">fe64f2b</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">live-mode:</span> Crash with text output format <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/164">#164</a></span><span
+            class="change-hash">4027ac9</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">wizard:</span> Redirect prompts to stderr for clean command
+            substitution <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/130">#130</a></span><span
+            class="change-hash">05c5720</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Improve permission denial display to show tool names</span><span
+            class="change-hash">6dc1c2c</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Progress detection improvements <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/141">#141</a>, <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/144">#144</a></span><span
+            class="change-hash">aa753c9</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Auto-terminate tmux session when Ralph loop exits <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/176">#176</a></span><span
+            class="change-hash">1233995</span></li>
       </ul>
     </section>
 
@@ -1463,35 +2125,88 @@
 
       <div class="change-group-title">Features</div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">exit:</span> Use explicit EXIT_SIGNAL instead of confidence threshold &mdash; dual-condition gate <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/132">#132</a></span><span class="change-hash">f6fde67</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">session:</span> Implement session expiration with configurable timeout (24h default) <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/84">#84</a></span><span class="change-hash">3dc3479</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">session:</span> Add session lifecycle management with auto-reset triggers</span><span class="change-hash">d3310d1</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">analyzer:</span> Add Claude CLI JSON format support and session management</span><span class="change-hash">fdff095</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">cli:</span> Add modern CLI commands with JSON output support (Phase 1.1)</span><span class="change-hash">da5640e</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">import:</span> Modernize <code>ralph_import.sh</code> with JSON output parsing</span><span class="change-hash">4b1ca9b</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Add dedicated <code>uninstall.sh</code> script <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/45">#45</a></span><span class="change-hash">3e8d3fd</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">loop:</span> Support for non-zero first-window tmux configs</span><span class="change-hash">da84dbc</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Allow configuring thresholds via environment variables</span><span class="change-hash">c05499c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">exit:</span> Use explicit EXIT_SIGNAL instead of confidence
+            threshold &mdash; dual-condition gate <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/132">#132</a></span><span
+            class="change-hash">f6fde67</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">session:</span> Implement session expiration with
+            configurable timeout (24h default) <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/84">#84</a></span><span
+            class="change-hash">3dc3479</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">session:</span> Add session lifecycle management with
+            auto-reset triggers</span><span class="change-hash">d3310d1</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">analyzer:</span> Add Claude CLI JSON format support and
+            session management</span><span class="change-hash">fdff095</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">cli:</span> Add modern CLI commands with JSON output support
+            (Phase 1.1)</span><span class="change-hash">da5640e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">import:</span> Modernize <code>ralph_import.sh</code> with
+            JSON output parsing</span><span class="change-hash">4b1ca9b</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Add dedicated <code>uninstall.sh</code> script <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/45">#45</a></span><span
+            class="change-hash">3e8d3fd</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">loop:</span> Support for non-zero first-window tmux
+            configs</span><span class="change-hash">da84dbc</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">circuit-breaker:</span> Allow configuring thresholds via
+            environment variables</span><span class="change-hash">c05499c</span></li>
       </ul>
 
       <div class="change-group-title">Fixes</div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">session:</span> Clear exit signals on session reset <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/91">#91</a></span><span class="change-hash">d63f300</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">analyzer:</span> Respect explicit EXIT_SIGNAL:false with STATUS:COMPLETE</span><span class="change-hash">43bba1b</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">analyzer:</span> Handle Claude CLI JSON array output format</span><span class="change-hash">5ce9bc8</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Prevent session hijacking and improve reliability</span><span class="change-hash">42f5df6</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">import:</span> Add <code>--print</code> flag to prevent <code>ralph-import</code> hanging</span><span class="change-hash">fe94cbd</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">monitor:</span> Forward all CLI parameters to inner ralph loop <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/120">#120</a></span><span class="change-hash">83672d3</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">setup:</span> Create <code>.ralphrc</code> with consistent tool permissions <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/137">#137</a></span><span class="change-hash">dbb27d8</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Extract denied commands from correct JSON path <a class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/143">#143</a></span><span class="change-hash">627ad7d</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">session:</span> Clear exit signals on session reset <a
+              class="change-issue" href="https://github.com/frankbria/ralph-claude-code/issues/91">#91</a></span><span
+            class="change-hash">d63f300</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">analyzer:</span> Respect explicit EXIT_SIGNAL:false with
+            STATUS:COMPLETE</span><span class="change-hash">43bba1b</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">analyzer:</span> Handle Claude CLI JSON array output
+            format</span><span class="change-hash">5ce9bc8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Prevent session hijacking and improve reliability</span><span
+            class="change-hash">42f5df6</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">import:</span> Add <code>--print</code> flag to prevent
+            <code>ralph-import</code> hanging</span><span class="change-hash">fe94cbd</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">monitor:</span> Forward all CLI parameters to inner ralph
+            loop <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/120">#120</a></span><span
+            class="change-hash">83672d3</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">setup:</span> Create <code>.ralphrc</code> with consistent
+            tool permissions <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/137">#137</a></span><span
+            class="change-hash">dbb27d8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Extract denied commands from correct JSON path <a class="change-issue"
+              href="https://github.com/frankbria/ralph-claude-code/issues/143">#143</a></span><span
+            class="change-hash">627ad7d</span></li>
       </ul>
 
       <div class="change-group-title">Testing</div>
       <ul class="change-list">
-        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">cli:</span> Add comprehensive CLI argument parsing tests</span><span class="change-hash">fffcc26</span></li>
-        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">install:</span> Add 14 comprehensive installation tests</span><span class="change-hash">6688c27</span></li>
-        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">setup:</span> Add 36 comprehensive tests for <code>setup.sh</code></span><span class="change-hash">c68e484</span></li>
-        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span class="change-text"><span class="change-scope">import:</span> Add 22 comprehensive tests for <code>ralph_import.sh</code></span><span class="change-hash">b06d979</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span
+            class="change-text"><span class="change-scope">cli:</span> Add comprehensive CLI argument parsing
+            tests</span><span class="change-hash">fffcc26</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span
+            class="change-text"><span class="change-scope">install:</span> Add 14 comprehensive installation
+            tests</span><span class="change-hash">6688c27</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span
+            class="change-text"><span class="change-scope">setup:</span> Add 36 comprehensive tests for
+            <code>setup.sh</code></span><span class="change-hash">c68e484</span></li>
+        <li class="change-item" data-type="test"><span class="change-type type-test">test</span><span
+            class="change-text"><span class="change-scope">import:</span> Add 22 comprehensive tests for
+            <code>ralph_import.sh</code></span><span class="change-hash">b06d979</span></li>
       </ul>
     </section>
 
@@ -1504,28 +2219,63 @@
 
       <div class="change-group-title">Features</div>
       <ul class="change-list">
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Autonomous AI development loop with intelligent exit detection</span><span class="change-hash">5e1d873</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Rate limiting with hourly reset (100 calls/hour, configurable)</span><span class="change-hash">5e1d873</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Circuit breaker with advanced error detection and two-stage filtering</span><span class="change-hash">2cf06b0</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Response analyzer with semantic understanding</span><span class="change-hash">2cf06b0</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Cross-platform date utilities for macOS and Linux</span><span class="change-hash">3d7db2c</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">tmux integration for live monitoring</span><span class="change-hash">d815195</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Global command system &mdash; <code>ralph</code>, <code>ralph-monitor</code>, <code>ralph-setup</code></span><span class="change-hash">6d64be9</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">PRD import command (<code>ralph-import</code>) using Claude Code</span><span class="change-hash">76a8022</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Configurable timeout for Claude Code execution</span><span class="change-hash">7b6f71f</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Verbose option with separated progress updates</span><span class="change-hash">d480c1e</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Comprehensive test infrastructure with BATS</span><span class="change-hash">8ad49e6</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Autonomous AI development loop with intelligent exit detection</span><span
+            class="change-hash">5e1d873</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Rate limiting with hourly reset (100 calls/hour, configurable)</span><span
+            class="change-hash">5e1d873</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Circuit breaker with advanced error detection and two-stage filtering</span><span
+            class="change-hash">2cf06b0</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Response analyzer with semantic understanding</span><span
+            class="change-hash">2cf06b0</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Cross-platform date utilities for macOS and Linux</span><span
+            class="change-hash">3d7db2c</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">tmux integration for live monitoring</span><span class="change-hash">d815195</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Global command system &mdash; <code>ralph</code>, <code>ralph-monitor</code>,
+            <code>ralph-setup</code></span><span class="change-hash">6d64be9</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">PRD import command (<code>ralph-import</code>) using Claude Code</span><span
+            class="change-hash">76a8022</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Configurable timeout for Claude Code execution</span><span
+            class="change-hash">7b6f71f</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Verbose option with separated progress updates</span><span
+            class="change-hash">d480c1e</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text">Comprehensive test infrastructure with BATS</span><span
+            class="change-hash">8ad49e6</span></li>
       </ul>
 
       <div class="change-group-title">Critical Bug Fixes</div>
       <ul class="change-list">
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix infinite retry loop when Claude API 5-hour limit is reached</span><span class="change-hash">08fe93e</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix silent exit bug and improve error messages</span><span class="change-hash">738e91a</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix exit condition logic in <code>ralph_loop.sh</code></span><span class="change-hash">dac9629</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text">Fix <code>loop_count</code> increment syntax for bash compatibility</span><span class="change-hash">6bf8cd8</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Eliminate JSON field false positives in error detection</span><span class="change-hash">8fc5375</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">circuit-breaker:</span> Fix multi-line error matching in <code>detect_stuck_loop</code></span><span class="change-hash">63590b3</span></li>
-        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span class="change-text"><span class="change-scope">install:</span> Add <code>lib/</code> directory copy for <code>response_analyzer.sh</code></span><span class="change-hash">a98a167</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Fix infinite retry loop when Claude API 5-hour limit is reached</span><span
+            class="change-hash">08fe93e</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Fix silent exit bug and improve error messages</span><span
+            class="change-hash">738e91a</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Fix exit condition logic in <code>ralph_loop.sh</code></span><span
+            class="change-hash">dac9629</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text">Fix <code>loop_count</code> increment syntax for bash compatibility</span><span
+            class="change-hash">6bf8cd8</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">circuit-breaker:</span> Eliminate JSON field false positives
+            in error detection</span><span class="change-hash">8fc5375</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">circuit-breaker:</span> Fix multi-line error matching in
+            <code>detect_stuck_loop</code></span><span class="change-hash">63590b3</span></li>
+        <li class="change-item" data-type="fix"><span class="change-type type-fix">fix</span><span
+            class="change-text"><span class="change-scope">install:</span> Add <code>lib/</code> directory copy for
+            <code>response_analyzer.sh</code></span><span class="change-hash">a98a167</span></li>
       </ul>
     </section>
 
@@ -1551,13 +2301,13 @@
     function setTheme(dark) {
       document.body.classList.toggle('dark', dark);
       themeToggle.textContent = dark ? '\u2600' : '\u263E';
-      try { localStorage.setItem(STORAGE_KEY, dark ? 'dark' : 'light'); } catch(e) {}
+      try { localStorage.setItem(STORAGE_KEY, dark ? 'dark' : 'light'); } catch (e) { }
     }
 
     // Init: check localStorage, then OS preference
-    (function() {
+    (function () {
       let stored = null;
-      try { stored = localStorage.getItem(STORAGE_KEY); } catch(e) {}
+      try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) { }
       if (stored === 'dark') setTheme(true);
       else if (stored === 'light') setTheme(false);
       else setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -1570,7 +2320,7 @@
     // Listen for OS preference changes
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
       let stored = null;
-      try { stored = localStorage.getItem(STORAGE_KEY); } catch(e2) {}
+      try { stored = localStorage.getItem(STORAGE_KEY); } catch (e2) { }
       if (!stored) setTheme(e.matches);
     });
 
@@ -2655,7 +3405,7 @@
       let html = '<div class="change-detail-inner">';
       if (d.how) {
         html += '<h4>How it works</h4><ul>';
-        d.how.forEach(function(h) { html += '<li>' + h + '</li>'; });
+        d.how.forEach(function (h) { html += '<li>' + h + '</li>'; });
         html += '</ul>';
       }
       if (d.usage) {
@@ -2666,12 +3416,12 @@
     }
 
     // Inject detail panels into matching change items
-    document.querySelectorAll('.version-section').forEach(function(section) {
+    document.querySelectorAll('.version-section').forEach(function (section) {
       var version = section.dataset.version;
-      if (!CHANGE_DETAILS[version]) return;
+      if (!CHANGE_DETAILS[ version ]) return;
       var items = section.querySelectorAll('.change-item');
-      items.forEach(function(item, i) {
-        var detail = CHANGE_DETAILS[version][i];
+      items.forEach(function (item, i) {
+        var detail = CHANGE_DETAILS[ version ][ i ];
         if (!detail) return;
         item.setAttribute('data-has-detail', '');
         // Add toggle chevron
@@ -2688,7 +3438,7 @@
     });
 
     // Click handler for collapsible toggle
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
       var item = e.target.closest('.change-item[data-has-detail]');
       if (!item) return;
       if (e.target.closest('a')) return; // don't toggle when clicking links
@@ -2699,182 +3449,182 @@
     const CMD_DATA = [
       // ── Claude Code (rpc.*) ──────────────────────────────
       // Basic execution
-      { alias: 'rpc',            cmd: 'ralph',                                                     desc: 'Start the Claude Code loop',          engine: 'claude', cat: 'basic' },
-      { alias: 'rpc.live',       cmd: 'ralph --live',                                              desc: 'Live streaming output',                engine: 'claude', cat: 'basic' },
-      { alias: 'rpc.monitor',    cmd: 'ralph --monitor',                                           desc: 'tmux monitoring dashboard',            engine: 'claude', cat: 'basic' },
-      { alias: 'rpc.verbose',    cmd: 'ralph --verbose',                                           desc: 'Verbose progress updates',             engine: 'claude', cat: 'basic' },
-      { alias: 'rpc.hitl',       cmd: 'ralph --live --monitor',                                    desc: 'Human-in-the-loop (live + monitor)',   engine: 'claude', cat: 'basic' },
+      { alias: 'rpc', cmd: 'ralph', desc: 'Start the Claude Code loop', engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.live', cmd: 'ralph --live', desc: 'Live streaming output', engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.monitor', cmd: 'ralph --monitor', desc: 'tmux monitoring dashboard', engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.verbose', cmd: 'ralph --verbose', desc: 'Verbose progress updates', engine: 'claude', cat: 'basic' },
+      { alias: 'rpc.hitl', cmd: 'ralph --live --monitor', desc: 'Human-in-the-loop (live + monitor)', engine: 'claude', cat: 'basic' },
       // Session
-      { alias: 'rpc.continue',   cmd: 'ralph --continue',                                          desc: 'Resume previous session',              engine: 'claude', cat: 'session' },
-      { alias: 'rpc.reset',      cmd: 'ralph --reset-session',                                     desc: 'Reset session state',                  engine: 'claude', cat: 'session' },
-      { alias: 'rpc.status',     cmd: 'ralph --status',                                            desc: 'Show current loop status',             engine: 'claude', cat: 'session' },
+      { alias: 'rpc.continue', cmd: 'ralph --continue', desc: 'Resume previous session', engine: 'claude', cat: 'session' },
+      { alias: 'rpc.reset', cmd: 'ralph --reset-session', desc: 'Reset session state', engine: 'claude', cat: 'session' },
+      { alias: 'rpc.status', cmd: 'ralph --status', desc: 'Show current loop status', engine: 'claude', cat: 'session' },
       // Circuit breaker
-      { alias: 'rpc.cb.reset',   cmd: 'ralph --reset-circuit',                                     desc: 'Reset circuit breaker',                engine: 'claude', cat: 'circuit' },
-      { alias: 'rpc.cb.status',  cmd: 'ralph --circuit-status',                                    desc: 'Show circuit breaker status',          engine: 'claude', cat: 'circuit' },
-      { alias: 'rpc.cb.auto',    cmd: 'ralph --auto-reset-circuit',                                desc: 'Auto-reset circuit on startup',        engine: 'claude', cat: 'circuit' },
+      { alias: 'rpc.cb.reset', cmd: 'ralph --reset-circuit', desc: 'Reset circuit breaker', engine: 'claude', cat: 'circuit' },
+      { alias: 'rpc.cb.status', cmd: 'ralph --circuit-status', desc: 'Show circuit breaker status', engine: 'claude', cat: 'circuit' },
+      { alias: 'rpc.cb.auto', cmd: 'ralph --auto-reset-circuit', desc: 'Auto-reset circuit on startup', engine: 'claude', cat: 'circuit' },
       // Config
-      { alias: 'rpc.fast',       cmd: 'ralph --calls 200',                                         desc: '200 calls/hour rate limit',            engine: 'claude', cat: 'config' },
-      { alias: 'rpc.slow',       cmd: 'ralph --calls 50',                                          desc: '50 calls/hour rate limit',             engine: 'claude', cat: 'config' },
-      { alias: 'rpc.test',       cmd: 'ralph --max-loops 1',                                       desc: 'Single loop iteration (test)',         engine: 'claude', cat: 'config' },
-      { alias: 'rpc.5',          cmd: 'ralph --max-loops 5',                                       desc: 'Run 5 loops',                          engine: 'claude', cat: 'config' },
-      { alias: 'rpc.10',         cmd: 'ralph --max-loops 10',                                      desc: 'Run 10 loops',                         engine: 'claude', cat: 'config' },
+      { alias: 'rpc.fast', cmd: 'ralph --calls 200', desc: '200 calls/hour rate limit', engine: 'claude', cat: 'config' },
+      { alias: 'rpc.slow', cmd: 'ralph --calls 50', desc: '50 calls/hour rate limit', engine: 'claude', cat: 'config' },
+      { alias: 'rpc.test', cmd: 'ralph --max-loops 1', desc: 'Single loop iteration (test)', engine: 'claude', cat: 'config' },
+      { alias: 'rpc.5', cmd: 'ralph --max-loops 5', desc: 'Run 5 loops', engine: 'claude', cat: 'config' },
+      { alias: 'rpc.10', cmd: 'ralph --max-loops 10', desc: 'Run 10 loops', engine: 'claude', cat: 'config' },
       // Model
-      { alias: 'rpc.opus',       cmd: 'ralph --model opus',                                        desc: 'Use Opus model',                       engine: 'claude', cat: 'model' },
-      { alias: 'rpc.sonnet',     cmd: 'ralph --model sonnet',                                      desc: 'Use Sonnet model',                     engine: 'claude', cat: 'model' },
+      { alias: 'rpc.opus', cmd: 'ralph --model opus', desc: 'Use Opus model', engine: 'claude', cat: 'model' },
+      { alias: 'rpc.sonnet', cmd: 'ralph --model sonnet', desc: 'Use Sonnet model', engine: 'claude', cat: 'model' },
       // Output
-      { alias: 'rpc.json',       cmd: 'ralph --output-format json',                                desc: 'JSON output mode',                     engine: 'claude', cat: 'output' },
-      { alias: 'rpc.text',       cmd: 'ralph --output-format text',                                desc: 'Text output mode',                     engine: 'claude', cat: 'output' },
+      { alias: 'rpc.json', cmd: 'ralph --output-format json', desc: 'JSON output mode', engine: 'claude', cat: 'output' },
+      { alias: 'rpc.text', cmd: 'ralph --output-format text', desc: 'Text output mode', engine: 'claude', cat: 'output' },
       // Worktree
-      { alias: 'rpc.nowt',       cmd: 'ralph --no-worktree',                                       desc: 'Disable worktree isolation',           engine: 'claude', cat: 'worktree' },
-      { alias: 'rpc.wt.squash',  cmd: 'ralph --merge-strategy squash',                             desc: 'Squash merge strategy',                engine: 'claude', cat: 'worktree' },
-      { alias: 'rpc.wt.merge',   cmd: 'ralph --merge-strategy merge',                              desc: 'Merge commit strategy',                engine: 'claude', cat: 'worktree' },
-      { alias: 'rpc.wt.rebase',  cmd: 'ralph --merge-strategy rebase',                             desc: 'Rebase strategy',                      engine: 'claude', cat: 'worktree' },
-      { alias: 'rpc.wt.nogate',  cmd: 'ralph --quality-gates none',                                desc: 'Skip quality gates',                   engine: 'claude', cat: 'worktree' },
-      { alias: 'rpc.qg',         cmd: 'ralph --qg',                                               desc: 'Quality gate fix mode (retry loop)',   engine: 'claude', cat: 'worktree' },
-      { alias: 'rpc.wt.full',    cmd: 'ralph --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode',          engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.nowt', cmd: 'ralph --no-worktree', desc: 'Disable worktree isolation', engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.squash', cmd: 'ralph --merge-strategy squash', desc: 'Squash merge strategy', engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.merge', cmd: 'ralph --merge-strategy merge', desc: 'Merge commit strategy', engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.rebase', cmd: 'ralph --merge-strategy rebase', desc: 'Rebase strategy', engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.nogate', cmd: 'ralph --quality-gates none', desc: 'Skip quality gates', engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.qg', cmd: 'ralph --qg', desc: 'Quality gate fix mode (retry loop)', engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.wt.full', cmd: 'ralph --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode', engine: 'claude', cat: 'worktree' },
       // Interactive / Parallel
-      { alias: 'rpc.int',        cmd: 'ralph --live --monitor',                                    desc: 'Interactive mode (live + monitor)',     engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.int.p N',    cmd: 'ralph --live --monitor --parallel N',                       desc: 'Spawn N parallel agents',              engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.int.p.b N',  cmd: 'ralph --live --monitor --parallel-bg N',                    desc: 'Spawn N agents in background',         engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int', cmd: 'ralph --live --monitor', desc: 'Interactive mode (live + monitor)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p N', cmd: 'ralph --live --monitor --parallel N', desc: 'Spawn N parallel agents', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p.b N', cmd: 'ralph --live --monitor --parallel-bg N', desc: 'Spawn N agents in background', engine: 'claude', cat: 'interactive' },
       // Workflow
-      { alias: 'rpc.dev',        cmd: 'ralph --live --monitor --verbose',                          desc: 'Development mode',                     engine: 'claude', cat: 'workflow' },
-      { alias: 'rpc.prod',       cmd: 'ralph --calls 50 --auto-reset-circuit',                     desc: 'Production / unattended mode',         engine: 'claude', cat: 'workflow' },
-      { alias: 'rpc.debug',      cmd: 'ralph --live --verbose --max-loops 1',                      desc: 'Debug mode (single loop)',              engine: 'claude', cat: 'workflow' },
+      { alias: 'rpc.dev', cmd: 'ralph --live --monitor --verbose', desc: 'Development mode', engine: 'claude', cat: 'workflow' },
+      { alias: 'rpc.prod', cmd: 'ralph --calls 50 --auto-reset-circuit', desc: 'Production / unattended mode', engine: 'claude', cat: 'workflow' },
+      { alias: 'rpc.debug', cmd: 'ralph --live --verbose --max-loops 1', desc: 'Debug mode (single loop)', engine: 'claude', cat: 'workflow' },
       // Task
-      { alias: 'rpc.task N',     cmd: 'ralph --task N',                                            desc: 'Execute task #N from fix_plan.md',     engine: 'claude', cat: 'task' },
-      { alias: 'rpc.task.int N', cmd: 'ralph --live --monitor --task N',                            desc: 'Task #N in interactive mode',          engine: 'claude', cat: 'task' },
+      { alias: 'rpc.task N', cmd: 'ralph --task N', desc: 'Execute task #N from fix_plan.md', engine: 'claude', cat: 'task' },
+      { alias: 'rpc.task.int N', cmd: 'ralph --live --monitor --task N', desc: 'Task #N in interactive mode', engine: 'claude', cat: 'task' },
       // Management
-      { alias: 'rpc.install',    cmd: './install.sh',                                               desc: 'Install/reinstall Claude engine',      engine: 'claude', cat: 'management' },
-      { alias: 'rpc.uninstall',  cmd: './uninstall.sh',                                             desc: 'Uninstall Claude engine',              engine: 'claude', cat: 'management' },
+      { alias: 'rpc.install', cmd: './install.sh', desc: 'Install/reinstall Claude engine', engine: 'claude', cat: 'management' },
+      { alias: 'rpc.uninstall', cmd: './uninstall.sh', desc: 'Uninstall Claude engine', engine: 'claude', cat: 'management' },
       // Planning
-      { alias: 'rpc.plan',       cmd: 'ralph-plan',                                                desc: 'AI-powered planning mode',             engine: 'claude', cat: 'planning' },
-      { alias: 'rpc.plan.sup',   cmd: 'ralph-plan --yolo --superpowers',                           desc: 'Planning with yolo + superpowers',     engine: 'claude', cat: 'planning' },
-      { alias: 'rpc.plan.s',     cmd: 'ralph-plan --status',                                       desc: 'Fix plan status',                      engine: 'claude', cat: 'planning' },
-      { alias: 'rpc.adhoc',      cmd: 'ralph-plan --adhoc',                                        desc: 'Ad-hoc task entry into fix_plan.md',   engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.plan', cmd: 'ralph-plan', desc: 'AI-powered planning mode', engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.plan.sup', cmd: 'ralph-plan --yolo --superpowers', desc: 'Planning with yolo + superpowers', engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.plan.s', cmd: 'ralph-plan --status', desc: 'Fix plan status', engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.adhoc', cmd: 'ralph-plan --adhoc', desc: 'Ad-hoc task entry into fix_plan.md', engine: 'claude', cat: 'planning' },
 
       // ── Codex (rpx.*) ───────────────────────────────────
       // Basic execution
-      { alias: 'rpx',            cmd: 'ralph-codex',                                               desc: 'Start the Codex loop',                 engine: 'codex', cat: 'basic' },
-      { alias: 'rpx.live',       cmd: 'ralph-codex --live',                                        desc: 'Live streaming output',                engine: 'codex', cat: 'basic' },
-      { alias: 'rpx.monitor',    cmd: 'ralph-codex --monitor',                                     desc: 'tmux monitoring dashboard',            engine: 'codex', cat: 'basic' },
-      { alias: 'rpx.verbose',    cmd: 'ralph-codex --verbose',                                     desc: 'Verbose progress updates',             engine: 'codex', cat: 'basic' },
-      { alias: 'rpx.hitl',       cmd: 'ralph-codex --live --monitor',                              desc: 'Human-in-the-loop (live + monitor)',   engine: 'codex', cat: 'basic' },
+      { alias: 'rpx', cmd: 'ralph-codex', desc: 'Start the Codex loop', engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.live', cmd: 'ralph-codex --live', desc: 'Live streaming output', engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.monitor', cmd: 'ralph-codex --monitor', desc: 'tmux monitoring dashboard', engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.verbose', cmd: 'ralph-codex --verbose', desc: 'Verbose progress updates', engine: 'codex', cat: 'basic' },
+      { alias: 'rpx.hitl', cmd: 'ralph-codex --live --monitor', desc: 'Human-in-the-loop (live + monitor)', engine: 'codex', cat: 'basic' },
       // Session
-      { alias: 'rpx.continue',   cmd: 'ralph-codex --continue',                                    desc: 'Resume previous session',              engine: 'codex', cat: 'session' },
-      { alias: 'rpx.reset',      cmd: 'ralph-codex --reset-session',                               desc: 'Reset session state',                  engine: 'codex', cat: 'session' },
-      { alias: 'rpx.status',     cmd: 'ralph-codex --status',                                      desc: 'Show current loop status',             engine: 'codex', cat: 'session' },
+      { alias: 'rpx.continue', cmd: 'ralph-codex --continue', desc: 'Resume previous session', engine: 'codex', cat: 'session' },
+      { alias: 'rpx.reset', cmd: 'ralph-codex --reset-session', desc: 'Reset session state', engine: 'codex', cat: 'session' },
+      { alias: 'rpx.status', cmd: 'ralph-codex --status', desc: 'Show current loop status', engine: 'codex', cat: 'session' },
       // Circuit breaker
-      { alias: 'rpx.cb.reset',   cmd: 'ralph-codex --reset-circuit',                               desc: 'Reset circuit breaker',                engine: 'codex', cat: 'circuit' },
-      { alias: 'rpx.cb.status',  cmd: 'ralph-codex --circuit-status',                              desc: 'Show circuit breaker status',          engine: 'codex', cat: 'circuit' },
-      { alias: 'rpx.cb.auto',    cmd: 'ralph-codex --auto-reset-circuit',                          desc: 'Auto-reset circuit on startup',        engine: 'codex', cat: 'circuit' },
+      { alias: 'rpx.cb.reset', cmd: 'ralph-codex --reset-circuit', desc: 'Reset circuit breaker', engine: 'codex', cat: 'circuit' },
+      { alias: 'rpx.cb.status', cmd: 'ralph-codex --circuit-status', desc: 'Show circuit breaker status', engine: 'codex', cat: 'circuit' },
+      { alias: 'rpx.cb.auto', cmd: 'ralph-codex --auto-reset-circuit', desc: 'Auto-reset circuit on startup', engine: 'codex', cat: 'circuit' },
       // Config
-      { alias: 'rpx.fast',       cmd: 'ralph-codex --calls 200',                                   desc: '200 calls/hour rate limit',            engine: 'codex', cat: 'config' },
-      { alias: 'rpx.slow',       cmd: 'ralph-codex --calls 50',                                    desc: '50 calls/hour rate limit',             engine: 'codex', cat: 'config' },
-      { alias: 'rpx.test',       cmd: 'ralph-codex --max-loops 1',                                 desc: 'Single loop iteration (test)',         engine: 'codex', cat: 'config' },
-      { alias: 'rpx.5',          cmd: 'ralph-codex --max-loops 5',                                 desc: 'Run 5 loops',                          engine: 'codex', cat: 'config' },
-      { alias: 'rpx.10',         cmd: 'ralph-codex --max-loops 10',                                desc: 'Run 10 loops',                         engine: 'codex', cat: 'config' },
+      { alias: 'rpx.fast', cmd: 'ralph-codex --calls 200', desc: '200 calls/hour rate limit', engine: 'codex', cat: 'config' },
+      { alias: 'rpx.slow', cmd: 'ralph-codex --calls 50', desc: '50 calls/hour rate limit', engine: 'codex', cat: 'config' },
+      { alias: 'rpx.test', cmd: 'ralph-codex --max-loops 1', desc: 'Single loop iteration (test)', engine: 'codex', cat: 'config' },
+      { alias: 'rpx.5', cmd: 'ralph-codex --max-loops 5', desc: 'Run 5 loops', engine: 'codex', cat: 'config' },
+      { alias: 'rpx.10', cmd: 'ralph-codex --max-loops 10', desc: 'Run 10 loops', engine: 'codex', cat: 'config' },
       // Model
-      { alias: 'rpx.gpt4',       cmd: 'ralph-codex --model gpt-4',                                 desc: 'Use GPT-4',                            engine: 'codex', cat: 'model' },
-      { alias: 'rpx.gpt35',      cmd: 'ralph-codex --model gpt-3.5',                               desc: 'Use GPT-3.5',                          engine: 'codex', cat: 'model' },
-      { alias: 'rpx.claude',     cmd: 'ralph-codex --model claude',                                desc: 'Use Claude model',                     engine: 'codex', cat: 'model' },
+      { alias: 'rpx.gpt4', cmd: 'ralph-codex --model gpt-4', desc: 'Use GPT-4', engine: 'codex', cat: 'model' },
+      { alias: 'rpx.gpt35', cmd: 'ralph-codex --model gpt-3.5', desc: 'Use GPT-3.5', engine: 'codex', cat: 'model' },
+      { alias: 'rpx.claude', cmd: 'ralph-codex --model claude', desc: 'Use Claude model', engine: 'codex', cat: 'model' },
       // Permission
-      { alias: 'rpx.safe',       cmd: 'ralph-codex --permission-mode auto',                        desc: 'Safe auto-permission mode',            engine: 'codex', cat: 'permission' },
-      { alias: 'rpx.danger',     cmd: 'ralph-codex --permission-mode dangerous',                   desc: 'Dangerous mode (skip permissions)',     engine: 'codex', cat: 'permission' },
+      { alias: 'rpx.safe', cmd: 'ralph-codex --permission-mode auto', desc: 'Safe auto-permission mode', engine: 'codex', cat: 'permission' },
+      { alias: 'rpx.danger', cmd: 'ralph-codex --permission-mode dangerous', desc: 'Dangerous mode (skip permissions)', engine: 'codex', cat: 'permission' },
       // Worktree
-      { alias: 'rpx.nowt',       cmd: 'ralph-codex --no-worktree',                                 desc: 'Disable worktree isolation',           engine: 'codex', cat: 'worktree' },
-      { alias: 'rpx.wt.squash',  cmd: 'ralph-codex --merge-strategy squash',                       desc: 'Squash merge strategy',                engine: 'codex', cat: 'worktree' },
-      { alias: 'rpx.wt.merge',   cmd: 'ralph-codex --merge-strategy merge',                        desc: 'Merge commit strategy',                engine: 'codex', cat: 'worktree' },
-      { alias: 'rpx.wt.rebase',  cmd: 'ralph-codex --merge-strategy rebase',                       desc: 'Rebase strategy',                      engine: 'codex', cat: 'worktree' },
-      { alias: 'rpx.wt.nogate',  cmd: 'ralph-codex --quality-gates none',                          desc: 'Skip quality gates',                   engine: 'codex', cat: 'worktree' },
-      { alias: 'rpx.qg',         cmd: 'ralph-codex --qg',                                         desc: 'Quality gate fix mode (retry loop)',   engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.nowt', cmd: 'ralph-codex --no-worktree', desc: 'Disable worktree isolation', engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.squash', cmd: 'ralph-codex --merge-strategy squash', desc: 'Squash merge strategy', engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.merge', cmd: 'ralph-codex --merge-strategy merge', desc: 'Merge commit strategy', engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.rebase', cmd: 'ralph-codex --merge-strategy rebase', desc: 'Rebase strategy', engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.wt.nogate', cmd: 'ralph-codex --quality-gates none', desc: 'Skip quality gates', engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.qg', cmd: 'ralph-codex --qg', desc: 'Quality gate fix mode (retry loop)', engine: 'codex', cat: 'worktree' },
       // Interactive / Parallel
-      { alias: 'rpx.autoexit',   cmd: 'ralph-codex --codex-auto-exit',                             desc: 'Force auto-exit mode',                 engine: 'codex', cat: 'interactive' },
-      { alias: 'rpx.int',        cmd: 'ralph-codex --no-codex-auto-exit',                          desc: 'Interactive mode (no auto-exit)',       engine: 'codex', cat: 'interactive' },
-      { alias: 'rpx.wt.int',     cmd: 'ralph-codex --no-codex-auto-exit --live --monitor',         desc: 'Interactive + live + monitor',          engine: 'codex', cat: 'interactive' },
-      { alias: 'rpx.int.p N',    cmd: 'ralph-codex --no-codex-auto-exit --parallel N',             desc: 'Spawn N parallel interactive agents',  engine: 'codex', cat: 'interactive' },
-      { alias: 'rpx.int.p.b N',  cmd: 'ralph-codex --no-codex-auto-exit --parallel-bg N',          desc: 'Spawn N interactive agents in bg',     engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.autoexit', cmd: 'ralph-codex --codex-auto-exit', desc: 'Force auto-exit mode', engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.int', cmd: 'ralph-codex --no-codex-auto-exit', desc: 'Interactive mode (no auto-exit)', engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.wt.int', cmd: 'ralph-codex --no-codex-auto-exit --live --monitor', desc: 'Interactive + live + monitor', engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.int.p N', cmd: 'ralph-codex --no-codex-auto-exit --parallel N', desc: 'Spawn N parallel interactive agents', engine: 'codex', cat: 'interactive' },
+      { alias: 'rpx.int.p.b N', cmd: 'ralph-codex --no-codex-auto-exit --parallel-bg N', desc: 'Spawn N interactive agents in bg', engine: 'codex', cat: 'interactive' },
       // Workflow
-      { alias: 'rpx.dev',        cmd: 'ralph-codex --live --monitor --verbose',                    desc: 'Development mode',                     engine: 'codex', cat: 'workflow' },
-      { alias: 'rpx.prod',       cmd: 'ralph-codex --calls 50 --auto-reset-circuit --permission-mode dangerous', desc: 'Production / unattended', engine: 'codex', cat: 'workflow' },
-      { alias: 'rpx.debug',      cmd: 'ralph-codex --live --verbose --max-loops 1',                desc: 'Debug mode (single loop)',              engine: 'codex', cat: 'workflow' },
-      { alias: 'rpx.wt.full',    cmd: 'ralph-codex --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode',    engine: 'codex', cat: 'workflow' },
+      { alias: 'rpx.dev', cmd: 'ralph-codex --live --monitor --verbose', desc: 'Development mode', engine: 'codex', cat: 'workflow' },
+      { alias: 'rpx.prod', cmd: 'ralph-codex --calls 50 --auto-reset-circuit --permission-mode dangerous', desc: 'Production / unattended', engine: 'codex', cat: 'workflow' },
+      { alias: 'rpx.debug', cmd: 'ralph-codex --live --verbose --max-loops 1', desc: 'Debug mode (single loop)', engine: 'codex', cat: 'workflow' },
+      { alias: 'rpx.wt.full', cmd: 'ralph-codex --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode', engine: 'codex', cat: 'workflow' },
       // Task
-      { alias: 'rpx.task N',     cmd: 'ralph-codex --task N',                                      desc: 'Execute task #N from fix_plan.md',     engine: 'codex', cat: 'task' },
-      { alias: 'rpx.task.int N', cmd: 'ralph-codex --no-codex-auto-exit --task N',                  desc: 'Task #N in interactive TUI',           engine: 'codex', cat: 'task' },
+      { alias: 'rpx.task N', cmd: 'ralph-codex --task N', desc: 'Execute task #N from fix_plan.md', engine: 'codex', cat: 'task' },
+      { alias: 'rpx.task.int N', cmd: 'ralph-codex --no-codex-auto-exit --task N', desc: 'Task #N in interactive TUI', engine: 'codex', cat: 'task' },
       // Management
-      { alias: 'rpx.install',    cmd: './install_codex.sh',                                         desc: 'Install/reinstall Codex engine',       engine: 'codex', cat: 'management' },
-      { alias: 'rpx.uninstall',  cmd: './uninstall_codex.sh',                                       desc: 'Uninstall Codex engine',               engine: 'codex', cat: 'management' },
-      { alias: 'rpx.enable',     cmd: 'ralph-codex-enable',                                        desc: 'Enable Ralph+Codex in project',        engine: 'codex', cat: 'management' },
+      { alias: 'rpx.install', cmd: './install_codex.sh', desc: 'Install/reinstall Codex engine', engine: 'codex', cat: 'management' },
+      { alias: 'rpx.uninstall', cmd: './uninstall_codex.sh', desc: 'Uninstall Codex engine', engine: 'codex', cat: 'management' },
+      { alias: 'rpx.enable', cmd: 'ralph-codex-enable', desc: 'Enable Ralph+Codex in project', engine: 'codex', cat: 'management' },
       // Planning
-      { alias: 'rpx.plan',       cmd: 'ralph-plan --engine codex',                                 desc: 'Planning mode with Codex',             engine: 'codex', cat: 'planning' },
-      { alias: 'rpx.plan.s',     cmd: 'ralph-plan --engine codex --status',                        desc: 'Fix plan status (Codex)',               engine: 'codex', cat: 'planning' },
-      { alias: 'rpx.adhoc',      cmd: 'ralph-plan --engine codex --adhoc',                         desc: 'Ad-hoc task entry (Codex)',             engine: 'codex', cat: 'planning' },
+      { alias: 'rpx.plan', cmd: 'ralph-plan --engine codex', desc: 'Planning mode with Codex', engine: 'codex', cat: 'planning' },
+      { alias: 'rpx.plan.s', cmd: 'ralph-plan --engine codex --status', desc: 'Fix plan status (Codex)', engine: 'codex', cat: 'planning' },
+      { alias: 'rpx.adhoc', cmd: 'ralph-plan --engine codex --adhoc', desc: 'Ad-hoc task entry (Codex)', engine: 'codex', cat: 'planning' },
 
       // ── Devin (rpd.*) ───────────────────────────────────
       // Basic execution
-      { alias: 'rpd',            cmd: 'ralph-devin',                                               desc: 'Start the Devin loop',                 engine: 'devin', cat: 'basic' },
-      { alias: 'rpd.live',       cmd: 'ralph-devin --live',                                        desc: 'Live streaming output',                engine: 'devin', cat: 'basic' },
-      { alias: 'rpd.monitor',    cmd: 'ralph-devin --monitor',                                     desc: 'tmux monitoring dashboard',            engine: 'devin', cat: 'basic' },
-      { alias: 'rpd.verbose',    cmd: 'ralph-devin --verbose',                                     desc: 'Verbose progress updates',             engine: 'devin', cat: 'basic' },
-      { alias: 'rpd.hitl',       cmd: 'ralph-devin --live --monitor',                              desc: 'Human-in-the-loop (live + monitor)',   engine: 'devin', cat: 'basic' },
+      { alias: 'rpd', cmd: 'ralph-devin', desc: 'Start the Devin loop', engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.live', cmd: 'ralph-devin --live', desc: 'Live streaming output', engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.monitor', cmd: 'ralph-devin --monitor', desc: 'tmux monitoring dashboard', engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.verbose', cmd: 'ralph-devin --verbose', desc: 'Verbose progress updates', engine: 'devin', cat: 'basic' },
+      { alias: 'rpd.hitl', cmd: 'ralph-devin --live --monitor', desc: 'Human-in-the-loop (live + monitor)', engine: 'devin', cat: 'basic' },
       // Session
-      { alias: 'rpd.continue',   cmd: 'ralph-devin --continue',                                    desc: 'Resume previous session',              engine: 'devin', cat: 'session' },
-      { alias: 'rpd.reset',      cmd: 'ralph-devin --reset-session',                               desc: 'Reset session state',                  engine: 'devin', cat: 'session' },
-      { alias: 'rpd.status',     cmd: 'ralph-devin --status',                                      desc: 'Show current loop status',             engine: 'devin', cat: 'session' },
+      { alias: 'rpd.continue', cmd: 'ralph-devin --continue', desc: 'Resume previous session', engine: 'devin', cat: 'session' },
+      { alias: 'rpd.reset', cmd: 'ralph-devin --reset-session', desc: 'Reset session state', engine: 'devin', cat: 'session' },
+      { alias: 'rpd.status', cmd: 'ralph-devin --status', desc: 'Show current loop status', engine: 'devin', cat: 'session' },
       // Circuit breaker
-      { alias: 'rpd.cb.reset',   cmd: 'ralph-devin --reset-circuit',                               desc: 'Reset circuit breaker',                engine: 'devin', cat: 'circuit' },
-      { alias: 'rpd.cb.status',  cmd: 'ralph-devin --circuit-status',                              desc: 'Show circuit breaker status',          engine: 'devin', cat: 'circuit' },
-      { alias: 'rpd.cb.auto',    cmd: 'ralph-devin --auto-reset-circuit',                          desc: 'Auto-reset circuit on startup',        engine: 'devin', cat: 'circuit' },
+      { alias: 'rpd.cb.reset', cmd: 'ralph-devin --reset-circuit', desc: 'Reset circuit breaker', engine: 'devin', cat: 'circuit' },
+      { alias: 'rpd.cb.status', cmd: 'ralph-devin --circuit-status', desc: 'Show circuit breaker status', engine: 'devin', cat: 'circuit' },
+      { alias: 'rpd.cb.auto', cmd: 'ralph-devin --auto-reset-circuit', desc: 'Auto-reset circuit on startup', engine: 'devin', cat: 'circuit' },
       // Config
-      { alias: 'rpd.fast',       cmd: 'ralph-devin --calls 200',                                   desc: '200 calls/hour rate limit',            engine: 'devin', cat: 'config' },
-      { alias: 'rpd.slow',       cmd: 'ralph-devin --calls 50',                                    desc: '50 calls/hour rate limit',             engine: 'devin', cat: 'config' },
+      { alias: 'rpd.fast', cmd: 'ralph-devin --calls 200', desc: '200 calls/hour rate limit', engine: 'devin', cat: 'config' },
+      { alias: 'rpd.slow', cmd: 'ralph-devin --calls 50', desc: '50 calls/hour rate limit', engine: 'devin', cat: 'config' },
       // Model
-      { alias: 'rpd.opus',       cmd: 'ralph-devin --model opus',                                  desc: 'Use Opus model',                       engine: 'devin', cat: 'model' },
-      { alias: 'rpd.sonnet',     cmd: 'ralph-devin --model sonnet',                                desc: 'Use Sonnet model',                     engine: 'devin', cat: 'model' },
-      { alias: 'rpd.swe',        cmd: 'ralph-devin --model swe',                                   desc: 'Use SWE model',                        engine: 'devin', cat: 'model' },
-      { alias: 'rpd.gpt',        cmd: 'ralph-devin --model gpt',                                   desc: 'Use GPT model',                        engine: 'devin', cat: 'model' },
+      { alias: 'rpd.opus', cmd: 'ralph-devin --model opus', desc: 'Use Opus model', engine: 'devin', cat: 'model' },
+      { alias: 'rpd.sonnet', cmd: 'ralph-devin --model sonnet', desc: 'Use Sonnet model', engine: 'devin', cat: 'model' },
+      { alias: 'rpd.swe', cmd: 'ralph-devin --model swe', desc: 'Use SWE model', engine: 'devin', cat: 'model' },
+      { alias: 'rpd.gpt', cmd: 'ralph-devin --model gpt', desc: 'Use GPT model', engine: 'devin', cat: 'model' },
       // Permission
-      { alias: 'rpd.safe',       cmd: 'ralph-devin --permission-mode auto',                        desc: 'Safe auto-permission mode',            engine: 'devin', cat: 'permission' },
-      { alias: 'rpd.danger',     cmd: 'ralph-devin --permission-mode dangerous',                   desc: 'Dangerous mode (skip permissions)',     engine: 'devin', cat: 'permission' },
+      { alias: 'rpd.safe', cmd: 'ralph-devin --permission-mode auto', desc: 'Safe auto-permission mode', engine: 'devin', cat: 'permission' },
+      { alias: 'rpd.danger', cmd: 'ralph-devin --permission-mode dangerous', desc: 'Dangerous mode (skip permissions)', engine: 'devin', cat: 'permission' },
       // Worktree
-      { alias: 'rpd.nowt',       cmd: 'ralph-devin --no-worktree',                                 desc: 'Disable worktree isolation',           engine: 'devin', cat: 'worktree' },
-      { alias: 'rpd.wt.squash',  cmd: 'ralph-devin --merge-strategy squash',                       desc: 'Squash merge strategy',                engine: 'devin', cat: 'worktree' },
-      { alias: 'rpd.wt.merge',   cmd: 'ralph-devin --merge-strategy merge',                        desc: 'Merge commit strategy',                engine: 'devin', cat: 'worktree' },
-      { alias: 'rpd.wt.rebase',  cmd: 'ralph-devin --merge-strategy rebase',                       desc: 'Rebase strategy',                      engine: 'devin', cat: 'worktree' },
-      { alias: 'rpd.wt.nogate',  cmd: 'ralph-devin --quality-gates none',                          desc: 'Skip quality gates',                   engine: 'devin', cat: 'worktree' },
-      { alias: 'rpd.qg',         cmd: 'ralph-devin --qg',                                         desc: 'Quality gate fix mode (retry loop)',   engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.nowt', cmd: 'ralph-devin --no-worktree', desc: 'Disable worktree isolation', engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.squash', cmd: 'ralph-devin --merge-strategy squash', desc: 'Squash merge strategy', engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.merge', cmd: 'ralph-devin --merge-strategy merge', desc: 'Merge commit strategy', engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.rebase', cmd: 'ralph-devin --merge-strategy rebase', desc: 'Rebase strategy', engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.wt.nogate', cmd: 'ralph-devin --quality-gates none', desc: 'Skip quality gates', engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.qg', cmd: 'ralph-devin --qg', desc: 'Quality gate fix mode (retry loop)', engine: 'devin', cat: 'worktree' },
       // Interactive / Parallel
-      { alias: 'rpd.int',        cmd: 'ralph-devin --no-devin-auto-exit',                          desc: 'Interactive TUI mode (no auto-exit)',   engine: 'devin', cat: 'interactive' },
-      { alias: 'rpd.wt.int',     cmd: 'ralph-devin --no-devin-auto-exit --live --monitor',         desc: 'Interactive + live + monitor',          engine: 'devin', cat: 'interactive' },
-      { alias: 'rpd.p N',        cmd: 'ralph-devin --parallel N',                                  desc: 'Spawn N parallel agents (auto-exit)',   engine: 'devin', cat: 'interactive' },
-      { alias: 'rpd.int.p N',    cmd: 'ralph-devin --no-devin-auto-exit --parallel N',             desc: 'Spawn N parallel agents (TUI)',         engine: 'devin', cat: 'interactive' },
-      { alias: 'rpd.p.b N',      cmd: 'ralph-devin --parallel-bg N',                               desc: 'Spawn N agents in background',          engine: 'devin', cat: 'interactive' },
-      { alias: 'rpd.int.p.b N',  cmd: 'ralph-devin --no-devin-auto-exit --parallel-bg N',          desc: 'Spawn N interactive agents in bg',      engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.int', cmd: 'ralph-devin --no-devin-auto-exit', desc: 'Interactive TUI mode (no auto-exit)', engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.wt.int', cmd: 'ralph-devin --no-devin-auto-exit --live --monitor', desc: 'Interactive + live + monitor', engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.p N', cmd: 'ralph-devin --parallel N', desc: 'Spawn N parallel agents (auto-exit)', engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.int.p N', cmd: 'ralph-devin --no-devin-auto-exit --parallel N', desc: 'Spawn N parallel agents (TUI)', engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.p.b N', cmd: 'ralph-devin --parallel-bg N', desc: 'Spawn N agents in background', engine: 'devin', cat: 'interactive' },
+      { alias: 'rpd.int.p.b N', cmd: 'ralph-devin --no-devin-auto-exit --parallel-bg N', desc: 'Spawn N interactive agents in bg', engine: 'devin', cat: 'interactive' },
       // Workflow
-      { alias: 'rpd.dev',        cmd: 'ralph-devin --live --monitor --verbose',                    desc: 'Development mode',                     engine: 'devin', cat: 'workflow' },
-      { alias: 'rpd.prod',       cmd: 'ralph-devin --calls 50 --auto-reset-circuit --permission-mode dangerous', desc: 'Production / unattended', engine: 'devin', cat: 'workflow' },
-      { alias: 'rpd.wt.full',    cmd: 'ralph-devin --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode',    engine: 'devin', cat: 'workflow' },
+      { alias: 'rpd.dev', cmd: 'ralph-devin --live --monitor --verbose', desc: 'Development mode', engine: 'devin', cat: 'workflow' },
+      { alias: 'rpd.prod', cmd: 'ralph-devin --calls 50 --auto-reset-circuit --permission-mode dangerous', desc: 'Production / unattended', engine: 'devin', cat: 'workflow' },
+      { alias: 'rpd.wt.full', cmd: 'ralph-devin --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode', engine: 'devin', cat: 'workflow' },
       // Task
-      { alias: 'rpd.task N',     cmd: 'ralph-devin --task N',                                      desc: 'Execute task #N from fix_plan.md',     engine: 'devin', cat: 'task' },
-      { alias: 'rpd.task.int N', cmd: 'ralph-devin --no-devin-auto-exit --task N',                  desc: 'Task #N in interactive TUI',           engine: 'devin', cat: 'task' },
+      { alias: 'rpd.task N', cmd: 'ralph-devin --task N', desc: 'Execute task #N from fix_plan.md', engine: 'devin', cat: 'task' },
+      { alias: 'rpd.task.int N', cmd: 'ralph-devin --no-devin-auto-exit --task N', desc: 'Task #N in interactive TUI', engine: 'devin', cat: 'task' },
       // Management
-      { alias: 'rpd.install',    cmd: './install_devin.sh',                                         desc: 'Install/reinstall Devin engine',       engine: 'devin', cat: 'management' },
-      { alias: 'rpd.uninstall',  cmd: './uninstall_devin.sh',                                       desc: 'Uninstall Devin engine',               engine: 'devin', cat: 'management' },
-      { alias: 'rpd.enable',     cmd: 'ralph-devin-enable',                                        desc: 'Enable Ralph+Devin in project',        engine: 'devin', cat: 'management' },
+      { alias: 'rpd.install', cmd: './install_devin.sh', desc: 'Install/reinstall Devin engine', engine: 'devin', cat: 'management' },
+      { alias: 'rpd.uninstall', cmd: './uninstall_devin.sh', desc: 'Uninstall Devin engine', engine: 'devin', cat: 'management' },
+      { alias: 'rpd.enable', cmd: 'ralph-devin-enable', desc: 'Enable Ralph+Devin in project', engine: 'devin', cat: 'management' },
       // Planning
-      { alias: 'rpd.plan',       cmd: 'ralph-plan --engine devin',                                 desc: 'Planning mode with Devin',             engine: 'devin', cat: 'planning' },
-      { alias: 'rpd.plan.s',     cmd: 'ralph-plan --engine devin --status',                        desc: 'Fix plan status (Devin)',               engine: 'devin', cat: 'planning' },
-      { alias: 'rpd.adhoc',      cmd: 'ralph-plan --engine devin --adhoc',                         desc: 'Ad-hoc task entry (Devin)',             engine: 'devin', cat: 'planning' },
+      { alias: 'rpd.plan', cmd: 'ralph-plan --engine devin', desc: 'Planning mode with Devin', engine: 'devin', cat: 'planning' },
+      { alias: 'rpd.plan.s', cmd: 'ralph-plan --engine devin --status', desc: 'Fix plan status (Devin)', engine: 'devin', cat: 'planning' },
+      { alias: 'rpd.adhoc', cmd: 'ralph-plan --engine devin --adhoc', desc: 'Ad-hoc task entry (Devin)', engine: 'devin', cat: 'planning' },
 
       // ── Shared (ralph.*, rp.*) ──────────────────────────
-      { alias: 'ralph.setup',       cmd: 'ralph-setup',                                            desc: 'Create a new Ralph project',           engine: 'shared', cat: 'management' },
-      { alias: 'ralph.enable',      cmd: 'ralph-enable',                                           desc: 'Enable Ralph in existing project',     engine: 'shared', cat: 'management' },
-      { alias: 'ralph.enable.ci',   cmd: 'ralph-enable-ci',                                        desc: 'Non-interactive enable for CI',        engine: 'shared', cat: 'management' },
-      { alias: 'ralph.migrate',     cmd: 'ralph-migrate',                                          desc: 'Migrate to .ralph/ structure',         engine: 'shared', cat: 'management' },
-      { alias: 'ralph.import',      cmd: 'ralph-import',                                           desc: 'Import PRD/spec document',             engine: 'shared', cat: 'management' },
-      { alias: 'ralph.check.beads', cmd: 'ralph-check-beads',                                      desc: 'Beads integration diagnostic',         engine: 'shared', cat: 'management' },
-      { alias: 'ralph.plan',        cmd: 'ralph-plan',                                             desc: 'AI-powered planning mode',             engine: 'shared', cat: 'planning' },
-      { alias: 'rp.install',        cmd: 'rpc.install;rpd.install;rpx.install',                    desc: 'Install all three engines at once',    engine: 'shared', cat: 'management' },
+      { alias: 'ralph.setup', cmd: 'ralph-setup', desc: 'Create a new Ralph project', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.enable', cmd: 'ralph-enable', desc: 'Enable Ralph in existing project', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.enable.ci', cmd: 'ralph-enable-ci', desc: 'Non-interactive enable for CI', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.migrate', cmd: 'ralph-migrate', desc: 'Migrate to .ralph/ structure', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.import', cmd: 'ralph-import', desc: 'Import PRD/spec document', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.check.beads', cmd: 'ralph-check-beads', desc: 'Beads integration diagnostic', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.plan', cmd: 'ralph-plan', desc: 'AI-powered planning mode', engine: 'shared', cat: 'planning' },
+      { alias: 'rp.install', cmd: 'rpc.install;rpd.install;rpx.install', desc: 'Install all three engines at once', engine: 'shared', cat: 'management' },
     ];
 
     const CAT_LABELS = {
@@ -2927,24 +3677,24 @@
       // Group by category
       const grouped = {};
       filtered.forEach(c => {
-        if (!grouped[c.cat]) grouped[c.cat] = [];
-        grouped[c.cat].push(c);
+        if (!grouped[ c.cat ]) grouped[ c.cat ] = [];
+        grouped[ c.cat ].push(c);
       });
 
       let html = '';
       CAT_ORDER.forEach(cat => {
-        if (!grouped[cat]) return;
+        if (!grouped[ cat ]) return;
         const catClass = 'cat-' + cat;
         html += '<div class="cmd-category" data-cat="' + cat + '">';
-        html += '<div class="cmd-category-title ' + catClass + '">' + escHtml(CAT_LABELS[cat]) + '</div>';
+        html += '<div class="cmd-category-title ' + catClass + '">' + escHtml(CAT_LABELS[ cat ]) + '</div>';
         html += '<table class="cmd-table"><thead><tr><th>Alias</th><th>Description</th><th>Expands To</th><th>Engine</th><th></th></tr></thead><tbody>';
-        grouped[cat].forEach(c => {
+        grouped[ cat ].forEach(c => {
           const engineClass = 'engine-' + (c.engine === 'shared' ? 'all' : c.engine);
           html += '<tr data-engine="' + c.engine + '">'
             + '<td class="cmd-alias">' + escHtml(c.alias) + '</td>'
             + '<td>' + escHtml(c.desc) + '</td>'
             + '<td class="cmd-expands">' + escHtml(c.cmd) + '</td>'
-            + '<td><span class="cmd-engine-tag ' + engineClass + '">' + escHtml(ENGINE_LABELS[c.engine]) + '</span></td>'
+            + '<td><span class="cmd-engine-tag ' + engineClass + '">' + escHtml(ENGINE_LABELS[ c.engine ]) + '</span></td>'
             + '<td><button class="cmd-copy-btn" type="button" data-copy="' + escHtml(c.alias.replace(/ N$/, '')) + '" aria-label="Copy alias" title="Copy alias">\u2398</button></td>'
             + '</tr>';
         });
@@ -2955,7 +3705,7 @@
     }
 
     // Copy handler (event delegation)
-    cmdContent.addEventListener('click', function(e) {
+    cmdContent.addEventListener('click', function (e) {
       const btn = e.target.closest('.cmd-copy-btn');
       if (!btn) return;
       const text = btn.getAttribute('data-copy');
@@ -2981,4 +3731,5 @@
     renderCommands();
   </script>
 </body>
+
 </html>
