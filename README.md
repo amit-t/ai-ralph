@@ -932,6 +932,7 @@ Uninstalling one engine does not affect the others.
 - **Automatic dependency installation** in worktrees -- detects package manager, installs before quality gates
 - **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection and multi-engine support
+- **Ad-hoc task mode** (`ralph-plan --adhoc`) for quick bug/task entry into `fix_plan.md` via AI
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Intelligent exit detection** -- dual-condition gate requiring BOTH completion indicators AND explicit EXIT_SIGNAL
 - **Circuit breaker** with cooldown timer, auto-recovery, and configurable thresholds
@@ -945,7 +946,14 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Task ID Selection** (latest)
+**Ad-hoc Task Mode** (latest)
+- `ralph-plan --adhoc` for quick one-liner bug/task entry into `fix_plan.md`
+- Interactive prompt or inline description: `rpc.adhoc "Login broken on iOS"`
+- AI analyzes codebase and creates structured `fix_plan.md` entry with subtasks
+- Works across all 3 engines: `rpc.adhoc`, `rpx.adhoc`, `rpd.adhoc`
+- Supports `--yolo` and `--superpowers` flags (Claude only)
+
+**Task ID Selection**
 - Support task ID selection via `--task R05` with bold markdown ID matching
 - Case-insensitive matching for task IDs
 

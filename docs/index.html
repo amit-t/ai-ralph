@@ -989,7 +989,7 @@
         </span>
         <span class="badge badge-green">
           <svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
-          602 Tests Passing
+          649 Tests Passing
         </span>
         <span class="badge badge-orange">
           <svg viewBox="0 0 16 16"><path d="M8.75 1.75a.75.75 0 00-1.5 0V5H4a.75.75 0 000 1.5h3.25v3.25a.75.75 0 001.5 0V6.5H12A.75.75 0 0012 5H8.75V1.75z"/></svg>
@@ -1023,7 +1023,7 @@
         <span class="stat-label">Libraries</span>
       </div>
       <div class="stat-card">
-        <span class="stat-value">602</span>
+        <span class="stat-value">649</span>
         <span class="stat-label">Tests</span>
       </div>
     </div>
@@ -1090,6 +1090,9 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Ad-hoc task mode &mdash; <code>ralph-plan --adhoc</code> for quick bug/task entry into <code>fix_plan.md</code> via AI across all 3 engines</span><span class="change-hash">47a6c49</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> Quality gate retry uses subagents &mdash; one per failing gate for parallel fixing; <code>Task</code> tool temporarily enabled for Claude</span><span class="change-hash">514bff8</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> Quality gate retry loop &mdash; re-invoke AI to fix failures before PR creation with <code>MAX_QG_RETRIES</code> config</span><span class="change-hash">47a3a02</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">summary:</span> Display session/conversation ID in execution summary</span><span class="change-hash">71c7aac</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Update Codex CLI flags to <code>--dangerously-bypass-approvals-and-sandbox</code></span><span class="change-hash">75084be</span></li>
       </ul>
@@ -1437,7 +1440,7 @@
       <a href="https://github.com/amit-t/ai-ralph">AI Ralph</a> &mdash;
       Inspired by the <a href="https://ghuntley.com/ralph/">Ralph technique</a> by Geoffrey Huntley
     </p>
-    <p style="margin-top: 0.5rem; opacity: 0.6;">Last updated: April 2, 2026</p>
+    <p style="margin-top: 0.5rem; opacity: 0.6;">Last updated: April 3, 2026</p>
   </footer>
 
   <script>
@@ -1588,6 +1591,7 @@
       { alias: 'rpc.plan',       cmd: 'ralph-plan',                                                desc: 'AI-powered planning mode',             engine: 'claude', cat: 'planning' },
       { alias: 'rpc.plan.sup',   cmd: 'ralph-plan --yolo --superpowers',                           desc: 'Planning with yolo + superpowers',     engine: 'claude', cat: 'planning' },
       { alias: 'rpc.plan.s',     cmd: 'ralph-plan --status',                                       desc: 'Fix plan status',                      engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.adhoc',      cmd: 'ralph-plan --adhoc',                                        desc: 'Ad-hoc task entry into fix_plan.md',   engine: 'claude', cat: 'planning' },
 
       // ── Codex (rpx.*) ───────────────────────────────────
       // Basic execution
@@ -1644,6 +1648,7 @@
       // Planning
       { alias: 'rpx.plan',       cmd: 'ralph-plan --engine codex',                                 desc: 'Planning mode with Codex',             engine: 'codex', cat: 'planning' },
       { alias: 'rpx.plan.s',     cmd: 'ralph-plan --engine codex --status',                        desc: 'Fix plan status (Codex)',               engine: 'codex', cat: 'planning' },
+      { alias: 'rpx.adhoc',      cmd: 'ralph-plan --engine codex --adhoc',                         desc: 'Ad-hoc task entry (Codex)',             engine: 'codex', cat: 'planning' },
 
       // ── Devin (rpd.*) ───────────────────────────────────
       // Basic execution
@@ -1698,6 +1703,7 @@
       // Planning
       { alias: 'rpd.plan',       cmd: 'ralph-plan --engine devin',                                 desc: 'Planning mode with Devin',             engine: 'devin', cat: 'planning' },
       { alias: 'rpd.plan.s',     cmd: 'ralph-plan --engine devin --status',                        desc: 'Fix plan status (Devin)',               engine: 'devin', cat: 'planning' },
+      { alias: 'rpd.adhoc',      cmd: 'ralph-plan --engine devin --adhoc',                         desc: 'Ad-hoc task entry (Devin)',             engine: 'devin', cat: 'planning' },
 
       // ── Shared (ralph.*, rp.*) ──────────────────────────
       { alias: 'ralph.setup',       cmd: 'ralph-setup',                                            desc: 'Create a new Ralph project',           engine: 'shared', cat: 'management' },
