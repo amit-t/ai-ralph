@@ -39,6 +39,7 @@ CALL_COUNT_FILE="$RALPH_DIR/.call_count"
 TIMESTAMP_FILE="$RALPH_DIR/.last_reset"
 USE_TMUX=false
 SPECIFIC_TASK_NUM=""
+QG_MODE=false
 
 # Save environment variable state BEFORE setting defaults
 # These are used by load_ralphrc() to determine which values came from environment
@@ -106,7 +107,7 @@ RESPONSE_ANALYSIS_FILE="$RALPH_DIR/.response_analysis"
 MAX_CONSECUTIVE_TEST_LOOPS=3
 MAX_CONSECUTIVE_DONE_SIGNALS=2
 
-# Quality gate retry configuration
+# Quality gate mode configuration (used with --qg flag)
 MAX_QG_RETRIES="${MAX_QG_RETRIES:-3}"
 TEST_PERCENTAGE_THRESHOLD=30  # If more than 30% of recent loops are test-only, flag it
 
@@ -2144,7 +2145,7 @@ main() {
             return 0
         fi
 
-        # ── Worktree: quality gates + retry loop + commit + push + PR + cleanup ───────
+        # ── Worktree: quality gates + commit + push + PR + cleanup ───────
         if [[ "$WORKTREE_ENABLED" == "true" ]] && worktree_is_active; then
             log_status "INFO" "Running quality gates..."
             local gate_output gate_result
@@ -2152,90 +2153,13 @@ main() {
             gate_result=$?
             while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
 
-            # ── QG retry loop: re-invoke AI to fix failures ──────────────
-            local qg_attempt=0
-            while [[ $gate_result -ne 0 && $qg_attempt -lt $MAX_QG_RETRIES ]]; do
-                qg_attempt=$((qg_attempt + 1))
-                log_status "WARN" "Quality gates failed — invoking AI to fix (attempt $qg_attempt/$MAX_QG_RETRIES)..."
-
-                # Build a focused fix prompt from the gate failures
-                local qg_fix_prompt
-                qg_fix_prompt=$(worktree_build_qg_fix_prompt "$qg_attempt" "$MAX_QG_RETRIES")
-
-                # Auto-commit current state before retry so AI sees latest code
-                if [[ -n "$(cd "$work_dir" && git status --porcelain 2>/dev/null)" ]]; then
-                    (cd "$work_dir" && git add -A && git commit -m "ralph: pre-QG-retry auto-commit (attempt $qg_attempt)") 2>/dev/null || true
-                fi
-
-                # Re-invoke Claude with the QG fix prompt
-                local qg_fix_session=""
-                [[ -f "$CLAUDE_SESSION_FILE" ]] && qg_fix_session=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null || echo "")
-
-                local qg_worktree_directive=""
-                if [[ "$work_dir" != "$(pwd)" ]]; then
-                    qg_worktree_directive="# WORKING DIRECTORY CONSTRAINT
-You are operating inside an isolated git worktree.
-- Your working directory: \`${work_dir}\`
-- DO NOT navigate to or modify files outside this directory."
-                fi
-
-                # Enable Task tool for subagent-based QG fixes
-                local _saved_allowed_tools="$CLAUDE_ALLOWED_TOOLS"
-                if [[ "$CLAUDE_ALLOWED_TOOLS" != *"Task"* ]]; then
-                    CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS},Task"
-                fi
-
-                build_claude_command "$PROMPT_FILE" "" "$qg_fix_session" "$qg_worktree_directive"
-
-                # Restore original allowed tools after command is built
-                CLAUDE_ALLOWED_TOOLS="$_saved_allowed_tools"
-                # Override the prompt with the QG fix prompt
-                CLAUDE_CMD_ARGS=("${CLAUDE_CMD_ARGS[@]/%"-p"*/}")
-                # Rebuild: remove last two elements (-p and the prompt content) and replace
-                local _qg_args=()
-                local _skip_next=false
-                for _arg in "${CLAUDE_CMD_ARGS[@]}"; do
-                    if [[ "$_skip_next" == "true" ]]; then
-                        _skip_next=false
-                        continue
-                    fi
-                    if [[ "$_arg" == "-p" ]]; then
-                        _skip_next=true
-                        continue
-                    fi
-                    _qg_args+=("$_arg")
-                done
-                _qg_args+=("-p" "$qg_fix_prompt")
-                CLAUDE_CMD_ARGS=("${_qg_args[@]}")
-
-                log_status "INFO" "QG fix command: ${CLAUDE_CMD_ARGS[*]:0:5}..."
-                local qg_timestamp
-                qg_timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
-                local qg_output_file="$LOG_DIR/claude_qg_fix_${qg_timestamp}.log"
-
-                set +e
-                (cd "$work_dir" && "${CLAUDE_CMD_ARGS[@]}" > "$qg_output_file" 2>&1)
-                local qg_exec_result=$?
-                set -e
-
-                if [[ $qg_exec_result -ne 0 ]]; then
-                    log_status "WARN" "QG fix execution failed (exit $qg_exec_result)"
-                fi
-
-                # Re-run quality gates
-                log_status "INFO" "Re-running quality gates after fix attempt $qg_attempt..."
-                gate_output=$(worktree_run_quality_gates 2>&1)
-                gate_result=$?
-                while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
-            done
-
             local wt_branch_for_log pr_result=0
             wt_branch_for_log="$(worktree_get_branch)"
             if [[ $gate_result -eq 0 ]]; then
                 log_status "SUCCESS" "Quality gates passed."
                 worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "true" "1" || pr_result=$?
             else
-                log_status "WARN" "Quality gates still failing after $MAX_QG_RETRIES fix attempts — creating PR with failure details."
+                log_status "WARN" "Quality gates failed — creating PR with failure details."
                 worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "false" "1" || pr_result=$?
             fi
             worktree_cleanup "false"
@@ -2298,6 +2222,142 @@ You are operating inside an isolated git worktree.
     fi
 }
 
+# ── Quality Gate Mode ─────────────────────────────────────────────────────────
+# Standalone mode: run quality gates and invoke AI to fix failures.
+# Does NOT execute tasks from fix_plan.md — only runs gates and fixes them.
+# Usage: ralph --qg
+#
+run_qg_mode() {
+    # Load project-specific configuration from .ralphrc
+    if load_ralphrc; then
+        [[ "$RALPHRC_LOADED" == "true" ]] && log_status "INFO" "Loaded configuration from .ralphrc"
+    fi
+
+    # Validate Claude Code CLI is available
+    if ! validate_claude_command; then
+        log_status "ERROR" "Claude Code CLI not found: $CLAUDE_CODE_CMD"
+        exit 1
+    fi
+
+    log_status "SUCCESS" "Ralph QG mode starting — running quality gates and fixing failures"
+    log_status "INFO" "Max fix attempts: $MAX_QG_RETRIES"
+    log_status "INFO" "Quality gates: ${WORKTREE_QUALITY_GATES}"
+
+    # Detect quality gates
+    local gates_str
+    if [[ "$WORKTREE_QUALITY_GATES" == "auto" ]]; then
+        gates_str=$(_detect_quality_gates "$(pwd)")
+    elif [[ "$WORKTREE_QUALITY_GATES" == "none" ]]; then
+        log_status "WARN" "Quality gates disabled (WORKTREE_QUALITY_GATES=none). Nothing to do."
+        exit 0
+    else
+        gates_str="$WORKTREE_QUALITY_GATES"
+    fi
+
+    if [[ -z "$gates_str" ]]; then
+        log_status "WARN" "No quality gates detected for this project. Nothing to do."
+        exit 0
+    fi
+
+    log_status "INFO" "Detected quality gates: $gates_str"
+
+    # Install dependencies before running gates
+    _worktree_install_deps "$(pwd)"
+
+    # Run quality gates
+    log_status "INFO" "Running quality gates..."
+    local gate_output gate_result
+    gate_output=$(worktree_run_quality_gates 2>&1)
+    gate_result=$?
+    while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+
+    if [[ $gate_result -eq 0 ]]; then
+        log_status "SUCCESS" "All quality gates passed. Nothing to fix."
+        exit 0
+    fi
+
+    # QG fix loop: invoke AI to fix failures
+    local qg_attempt=0
+    while [[ $gate_result -ne 0 && $qg_attempt -lt $MAX_QG_RETRIES ]]; do
+        qg_attempt=$((qg_attempt + 1))
+        log_status "WARN" "Quality gates failed — invoking AI to fix (attempt $qg_attempt/$MAX_QG_RETRIES)..."
+
+        # Build a focused fix prompt from the gate failures
+        local qg_fix_prompt
+        qg_fix_prompt=$(worktree_build_qg_fix_prompt "$qg_attempt" "$MAX_QG_RETRIES")
+
+        # Auto-commit current state before retry so AI sees latest code
+        if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+            git add -A && git commit -m "ralph: QG fix auto-commit (attempt $qg_attempt)" 2>/dev/null || true
+        fi
+
+        # Build Claude command with the QG fix prompt
+        local qg_fix_session=""
+        [[ -f "$CLAUDE_SESSION_FILE" ]] && qg_fix_session=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null || echo "")
+
+        # Enable Task tool for subagent-based QG fixes
+        local _saved_allowed_tools="$CLAUDE_ALLOWED_TOOLS"
+        if [[ "$CLAUDE_ALLOWED_TOOLS" != *"Task"* ]]; then
+            CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS},Task"
+        fi
+
+        build_claude_command "$PROMPT_FILE" "" "$qg_fix_session" ""
+
+        # Restore original allowed tools after command is built
+        CLAUDE_ALLOWED_TOOLS="$_saved_allowed_tools"
+
+        # Override the prompt with the QG fix prompt
+        local _qg_args=()
+        local _skip_next=false
+        for _arg in "${CLAUDE_CMD_ARGS[@]}"; do
+            if [[ "$_skip_next" == "true" ]]; then
+                _skip_next=false
+                continue
+            fi
+            if [[ "$_arg" == "-p" ]]; then
+                _skip_next=true
+                continue
+            fi
+            _qg_args+=("$_arg")
+        done
+        _qg_args+=("-p" "$qg_fix_prompt")
+        CLAUDE_CMD_ARGS=("${_qg_args[@]}")
+
+        log_status "INFO" "QG fix command: ${CLAUDE_CMD_ARGS[*]:0:5}..."
+        local qg_timestamp
+        qg_timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
+        local qg_output_file="$LOG_DIR/claude_qg_fix_${qg_timestamp}.log"
+
+        set +e
+        "${CLAUDE_CMD_ARGS[@]}" > "$qg_output_file" 2>&1
+        local qg_exec_result=$?
+        set -e
+
+        if [[ $qg_exec_result -ne 0 ]]; then
+            log_status "WARN" "QG fix execution failed (exit $qg_exec_result)"
+        fi
+
+        # Re-run quality gates
+        log_status "INFO" "Re-running quality gates after fix attempt $qg_attempt..."
+        gate_output=$(worktree_run_quality_gates 2>&1)
+        gate_result=$?
+        while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+    done
+
+    if [[ $gate_result -eq 0 ]]; then
+        log_status "SUCCESS" "All quality gates passed after $qg_attempt fix attempt(s)."
+        # Auto-commit the final fixes
+        if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+            git add -A && git commit -m "ralph: QG fixes applied (all gates pass)" 2>/dev/null || true
+        fi
+        exit 0
+    else
+        log_status "ERROR" "Quality gates still failing after $MAX_QG_RETRIES fix attempts."
+        log_status "INFO" "Review the failures and fix manually, or run 'ralph --qg' again."
+        exit 1
+    fi
+}
+
 # Help function
 show_help() {
     cat << HELPEOF
@@ -2339,6 +2399,11 @@ Worktree Options:
 Task Selection:
     --task NUM|ID           Execute a specific task by number (1-based) or bold ID (e.g. R05)
 
+Quality Gate Mode:
+    --qg                    Run quality gates and invoke AI to fix failures (standalone mode)
+                            Does not execute tasks — only runs gates and loops to fix them
+                            Configurable: MAX_QG_RETRIES (default: 3) in .ralphrc
+
 Files created:
     - $LOG_DIR/: All execution logs
     - $DOCS_DIR/: Generated documentation
@@ -2367,6 +2432,8 @@ Examples:
     ralph --task 3                 # Execute the 3rd task in fix_plan.md
     ralph --task R05               # Execute task **R05** by its ID
     ralph --task 5 --live          # Live mode for task #5
+    ralph --qg                     # Run quality gates and fix failures
+    ralph --qg --quality-gates "npm run lint;npm test"  # Custom gates
 
 Bash Aliases (rpc):
     Add to ~/.bashrc or ~/.zshrc: source ~/.ralph/ALIASES.sh
@@ -2531,6 +2598,10 @@ while [[ $# -gt 0 ]]; do
             PARALLEL_BG=true
             shift 2
             ;;
+        --qg)
+            QG_MODE=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             show_help
@@ -2559,6 +2630,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         done
         export PARALLEL_BG
         spawn_parallel_agents "$PARALLEL_COUNT" ralph "${passthrough_args[@]}"
+        exit $?
+    fi
+
+    # If QG mode requested, run it directly (no tmux, no main loop)
+    if [[ "$QG_MODE" == "true" ]]; then
+        run_qg_mode
         exit $?
     fi
 

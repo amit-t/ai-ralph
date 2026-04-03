@@ -132,22 +132,32 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - Detects project type from config files (package.json, Cargo.toml, etc.)
     - Includes AGENT.md build instructions in prompt for context
 
-### Quality Gate Retry Behaviour
+### Quality Gate Behaviour
 
-When quality gates fail, Ralph re-invokes the AI engine with subagent instructions to fix the failures before creating a PR. The retry loop:
+During the main loop, quality gates are run **once** after Claude completes a task. A PR is always created regardless of gate status:
 
-1. Quality gates fail after initial AI execution
-2. `worktree_build_qg_fix_prompt()` generates a focused prompt with failed gate commands, full error output, and a **subagent strategy** section
-3. The prompt instructs the AI to spawn **one subagent per failing gate** for parallel fixing (or a single subagent when only one gate fails)
-4. For Claude: `Task` tool is temporarily added to `CLAUDE_ALLOWED_TOOLS` during QG fix invocations (saved and restored)
-5. For Codex/Devin: subagent access is already available via `--permission-mode dangerous`
-6. Quality gates are re-run after each fix attempt
-7. If gates pass → PR is created with success status
-8. If gates still fail after `MAX_QG_RETRIES` (default: 3) → PR is created with `quality-gates-failed` label
+- **Gates pass** → PR is created with success status, task marked complete
+- **Gates fail** → PR is created with `quality-gates-failed` label for manual review
+
+To fix failing quality gates, use the standalone **`ralph --qg`** mode:
+
+```bash
+ralph --qg                                    # Auto-detect gates and fix them
+ralph --qg --quality-gates "npm run lint;npm test"  # Custom gates
+```
+
+The `--qg` mode:
+1. Runs quality gates in the current directory
+2. If gates fail, invokes the AI engine with a focused fix prompt (using `worktree_build_qg_fix_prompt()`)
+3. The prompt includes failed gate commands, full error output, and a **subagent strategy** section
+4. For Claude: `Task` tool is temporarily added to `CLAUDE_ALLOWED_TOOLS` (saved and restored)
+5. Quality gates are re-run after each fix attempt
+6. Loop continues up to `MAX_QG_RETRIES` (default: 3) attempts
+7. Auto-commits fixes on success
 
 **Configuration:**
 ```bash
-MAX_QG_RETRIES=3    # max quality gate fix attempts before creating failure PR (in .ralphrc)
+MAX_QG_RETRIES=3    # max quality gate fix attempts in --qg mode (in .ralphrc)
 ```
 
 ## Key Commands
@@ -244,6 +254,15 @@ rpc.adhoc                                    # Claude, interactive prompt
 rpc.adhoc "Dark mode toggle doesn't persist" # Claude, inline
 rpd.adhoc "Fix pagination on /users endpoint" # Devin
 rpx.adhoc                                    # Codex, interactive prompt
+```
+
+### Quality Gate Mode (fix failing gates)
+```bash
+# Auto-detect and fix quality gate failures
+ralph --qg
+
+# With custom quality gates
+ralph --qg --quality-gates "npm run lint;npm test;npm run build"
 ```
 
 ### Running the Ralph Loop
@@ -687,7 +706,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_wizard_utils.bats` | 20 | Wizard utility functions (stdout/stderr separation, prompt functions) |
 | `test_file_protection.bats` | 15 | File integrity validation (RALPH_REQUIRED_PATHS, validate_ralph_integrity, get_integrity_report) (Issue #149) |
 | `test_integrity_check.bats` | 10 | Pre-loop integrity check in ralph_loop.sh (startup + in-loop validation) (Issue #149) |
-| `test_qg_retry.bats` | 36 | Quality gate retry behaviour (worktree_build_qg_fix_prompt, subagent strategy, MAX_QG_RETRIES, retry loop structure, Task tool injection) |
+| `test_qg_retry.bats` | 36 | Quality gate behaviour (worktree_build_qg_fix_prompt, --qg standalone mode, PR-on-failure, MAX_QG_RETRIES config, subagent strategy) |
 | `test_adhoc_task.bats` | 18 | Ad-hoc task mode (CLI parsing, find_fix_plan_for_adhoc, prompt_task_description, run_adhoc_task engine validation, prompt construction) |
 
 ### Running Tests

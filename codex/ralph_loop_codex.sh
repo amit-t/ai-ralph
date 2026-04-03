@@ -81,7 +81,7 @@ MAX_CONSECUTIVE_TEST_LOOPS=3
 MAX_CONSECUTIVE_DONE_SIGNALS=2
 TEST_PERCENTAGE_THRESHOLD=30
 
-# Quality gate retry configuration
+# Quality gate mode configuration (used with --qg flag)
 MAX_QG_RETRIES="${MAX_QG_RETRIES:-3}"
 
 # .ralphrc.codex configuration file (separate from Claude's .ralphrc)
@@ -1148,7 +1148,7 @@ main() {
             return 0
         fi
 
-        # ── Worktree: quality gates + retry loop + commit + push + PR + cleanup ───────
+        # ── Worktree: quality gates + commit + push + PR + cleanup ───────
         if [[ "$WORKTREE_ENABLED" == "true" ]] && worktree_is_active; then
             log_status "INFO" "Running quality gates..."
             local gate_output gate_result
@@ -1156,66 +1156,13 @@ main() {
             gate_result=$?
             while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
 
-            # ── QG retry loop: re-invoke AI to fix failures ──────────────
-            local qg_attempt=0
-            while [[ $gate_result -ne 0 && $qg_attempt -lt $MAX_QG_RETRIES ]]; do
-                qg_attempt=$((qg_attempt + 1))
-                log_status "WARN" "Quality gates failed — invoking AI to fix (attempt $qg_attempt/$MAX_QG_RETRIES)..."
-
-                # Build a focused fix prompt from the gate failures
-                local qg_fix_prompt
-                qg_fix_prompt=$(worktree_build_qg_fix_prompt "$qg_attempt" "$MAX_QG_RETRIES")
-
-                # Write QG fix prompt to a temp file for --prompt-file
-                local qg_prompt_file="${work_dir}/.ralph/.qg_fix_prompt.md"
-                printf '%s\n' "$qg_fix_prompt" > "$qg_prompt_file"
-
-                # Auto-commit current state before retry so AI sees latest code
-                if [[ -n "$(cd "$work_dir" && git status --porcelain 2>/dev/null)" ]]; then
-                    (cd "$work_dir" && git add -A && git commit -m "ralph-codex: pre-QG-retry auto-commit (attempt $qg_attempt)") 2>/dev/null || true
-                fi
-
-                # Re-invoke Codex with the QG fix prompt
-                local qg_worktree_directive=""
-                if [[ "$work_dir" != "$(pwd)" ]]; then
-                    qg_worktree_directive="# WORKING DIRECTORY CONSTRAINT
-You are operating inside an isolated git worktree.
-- Your working directory: \`${work_dir}\`
-- DO NOT navigate to or modify files outside this directory."
-                fi
-
-                build_codex_command "$qg_prompt_file" "" "" "true" "$qg_worktree_directive"
-
-                log_status "INFO" "QG fix command: ${CODEX_CMD_ARGS[*]:0:5}..."
-                local qg_timestamp
-                qg_timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
-                local qg_output_file="$LOG_DIR/codex_qg_fix_${qg_timestamp}.log"
-
-                set +e
-                (cd "$work_dir" && "${CODEX_CMD_ARGS[@]}" > "$qg_output_file" 2>&1)
-                local qg_exec_result=$?
-                set -e
-
-                if [[ $qg_exec_result -ne 0 ]]; then
-                    log_status "WARN" "QG fix execution failed (exit $qg_exec_result)"
-                fi
-
-                rm -f "$qg_prompt_file" 2>/dev/null || true
-
-                # Re-run quality gates
-                log_status "INFO" "Re-running quality gates after fix attempt $qg_attempt..."
-                gate_output=$(worktree_run_quality_gates 2>&1)
-                gate_result=$?
-                while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
-            done
-
             local wt_branch_for_log pr_result=0
             wt_branch_for_log="$(worktree_get_branch)"
             if [[ $gate_result -eq 0 ]]; then
                 log_status "SUCCESS" "Quality gates passed."
                 worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "true" "1" || pr_result=$?
             else
-                log_status "WARN" "Quality gates still failing after $MAX_QG_RETRIES fix attempts — creating PR with failure details."
+                log_status "WARN" "Quality gates failed — creating PR with failure details."
                 worktree_commit_and_pr "$picked_task_id" "$picked_task_name" "false" "1" || pr_result=$?
             fi
             worktree_cleanup "false"

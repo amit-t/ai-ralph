@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# Unit tests for quality gate retry behaviour
-# Tests: worktree_build_qg_fix_prompt, MAX_QG_RETRIES config, retry loop structure
+# Unit tests for quality gate behaviour
+# Tests: worktree_build_qg_fix_prompt, MAX_QG_RETRIES config, --qg mode, PR-on-failure
 
 load '../helpers/test_helper'
 
@@ -175,87 +175,103 @@ teardown() {
 }
 
 # =============================================================================
-# QG retry loop structure in loop scripts
+# Main loop: no inline QG retry — gates run once, PR always created
 # =============================================================================
 
-@test "ralph_loop.sh has QG retry loop with worktree_build_qg_fix_prompt" {
-    grep -q 'worktree_build_qg_fix_prompt' "$RALPH_LOOP"
+@test "ralph_loop.sh main loop does NOT have inline QG retry while-loop" {
+    # The main execute_claude_code function should NOT contain the old retry loop
+    # Only run_qg_mode should have it
+    local inline_retry_count
+    inline_retry_count=$(sed -n '/^execute_claude_code/,/^[^ ]/p' "$RALPH_LOOP" | grep -c 'qg_attempt -lt' || true)
+    [[ "$inline_retry_count" -eq 0 ]]
 }
 
-@test "codex loop has QG retry loop with worktree_build_qg_fix_prompt" {
-    grep -q 'worktree_build_qg_fix_prompt' "$CODEX_LOOP"
+@test "codex loop does NOT have inline QG retry while-loop" {
+    ! grep -q 'qg_attempt -lt' "$CODEX_LOOP"
 }
 
-@test "devin loop has QG retry loop with worktree_build_qg_fix_prompt" {
-    grep -q 'worktree_build_qg_fix_prompt' "$DEVIN_LOOP"
+@test "devin loop does NOT have inline QG retry while-loop" {
+    ! grep -q 'qg_attempt -lt' "$DEVIN_LOOP"
 }
 
-@test "ralph_loop.sh retry loop iterates up to MAX_QG_RETRIES" {
-    grep -q 'qg_attempt -lt \$MAX_QG_RETRIES' "$RALPH_LOOP" || \
-    grep -q 'qg_attempt -lt $MAX_QG_RETRIES' "$RALPH_LOOP"
+@test "ralph_loop.sh main loop creates PR when quality gates fail" {
+    grep -q 'Quality gates failed.*creating PR with failure details' "$RALPH_LOOP"
 }
 
-@test "codex loop retry iterates up to MAX_QG_RETRIES" {
-    grep -q 'qg_attempt -lt \$MAX_QG_RETRIES' "$CODEX_LOOP" || \
-    grep -q 'qg_attempt -lt $MAX_QG_RETRIES' "$CODEX_LOOP"
+@test "codex loop creates PR when quality gates fail" {
+    grep -q 'Quality gates failed.*creating PR with failure details' "$CODEX_LOOP"
 }
 
-@test "devin loop retry iterates up to MAX_QG_RETRIES" {
-    grep -q 'qg_attempt -lt \$MAX_QG_RETRIES' "$DEVIN_LOOP" || \
-    grep -q 'qg_attempt -lt $MAX_QG_RETRIES' "$DEVIN_LOOP"
+@test "devin loop creates PR when quality gates fail" {
+    grep -q 'Quality gates failed.*creating PR with failure details' "$DEVIN_LOOP"
 }
 
-@test "ralph_loop.sh re-runs quality gates after each fix attempt" {
+@test "ralph_loop.sh main loop runs quality gates once (no retry)" {
+    # In the worktree PR section, worktree_run_quality_gates appears exactly once
     local count
-    count=$(grep -c 'worktree_run_quality_gates' "$RALPH_LOOP")
+    count=$(sed -n '/quality gates.*commit.*push.*PR/,/worktree_cleanup/p' "$RALPH_LOOP" | grep -c 'worktree_run_quality_gates' || true)
+    [[ $count -eq 1 ]]
+}
+
+# =============================================================================
+# ralph --qg standalone mode
+# =============================================================================
+
+@test "ralph_loop.sh has run_qg_mode function" {
+    grep -q 'run_qg_mode()' "$RALPH_LOOP"
+}
+
+@test "ralph_loop.sh --qg flag sets QG_MODE=true" {
+    grep -q -- '--qg)' "$RALPH_LOOP"
+    grep -q 'QG_MODE=true' "$RALPH_LOOP"
+}
+
+@test "ralph_loop.sh dispatches to run_qg_mode when QG_MODE=true" {
+    grep -q 'QG_MODE.*true.*run_qg_mode\|run_qg_mode' "$RALPH_LOOP"
+}
+
+@test "run_qg_mode has QG fix retry loop with MAX_QG_RETRIES" {
+    local qg_section
+    qg_section=$(sed -n '/^run_qg_mode()/,/^}/p' "$RALPH_LOOP")
+    echo "$qg_section" | grep -q 'qg_attempt -lt.*MAX_QG_RETRIES\|qg_attempt -lt \$MAX_QG_RETRIES'
+}
+
+@test "run_qg_mode calls worktree_build_qg_fix_prompt" {
+    local qg_section
+    qg_section=$(sed -n '/^run_qg_mode()/,/^}/p' "$RALPH_LOOP")
+    echo "$qg_section" | grep -q 'worktree_build_qg_fix_prompt'
+}
+
+@test "run_qg_mode re-runs quality gates after each fix attempt" {
+    local qg_section
+    qg_section=$(sed -n '/^run_qg_mode()/,/^}/p' "$RALPH_LOOP")
+    local count
+    count=$(echo "$qg_section" | grep -c 'worktree_run_quality_gates')
     [[ $count -ge 2 ]]  # initial run + retry
 }
 
-@test "codex loop re-runs quality gates after each fix attempt" {
-    local count
-    count=$(grep -c 'worktree_run_quality_gates' "$CODEX_LOOP")
-    [[ $count -ge 2 ]]
+@test "run_qg_mode auto-commits before QG fix" {
+    local qg_section
+    qg_section=$(sed -n '/^run_qg_mode()/,/^}/p' "$RALPH_LOOP")
+    echo "$qg_section" | grep -q 'QG fix auto-commit'
 }
 
-@test "devin loop re-runs quality gates after each fix attempt" {
-    local count
-    count=$(grep -c 'worktree_run_quality_gates' "$DEVIN_LOOP")
-    [[ $count -ge 2 ]]
+@test "run_qg_mode enables Task tool for QG fix subagents" {
+    local qg_section
+    qg_section=$(sed -n '/^run_qg_mode()/,/^}/p' "$RALPH_LOOP")
+    echo "$qg_section" | grep -q 'CLAUDE_ALLOWED_TOOLS.*Task\|Task'
 }
 
-@test "ralph_loop.sh creates failure PR only after retries exhausted" {
-    # The "still failing" message should appear, meaning PR is only created after retry loop
-    grep -q 'still failing after.*fix attempts' "$RALPH_LOOP"
+@test "run_qg_mode saves and restores CLAUDE_ALLOWED_TOOLS" {
+    local qg_section
+    qg_section=$(sed -n '/^run_qg_mode()/,/^}/p' "$RALPH_LOOP")
+    echo "$qg_section" | grep -q '_saved_allowed_tools'
+    echo "$qg_section" | grep -q 'Restore original allowed tools'
 }
 
-@test "codex loop creates failure PR only after retries exhausted" {
-    grep -q 'still failing after.*fix attempts' "$CODEX_LOOP"
-}
-
-@test "devin loop creates failure PR only after retries exhausted" {
-    grep -q 'still failing after.*fix attempts' "$DEVIN_LOOP"
-}
-
-@test "ralph_loop.sh auto-commits before QG retry" {
-    grep -q 'pre-QG-retry auto-commit' "$RALPH_LOOP"
-}
-
-@test "ralph_loop.sh enables Task tool for QG fix subagents" {
-    grep -q 'Task' "$RALPH_LOOP" | head -1 || \
-    grep -q 'CLAUDE_ALLOWED_TOOLS.*Task' "$RALPH_LOOP"
-}
-
-@test "ralph_loop.sh saves and restores CLAUDE_ALLOWED_TOOLS around QG fix" {
-    grep -q '_saved_allowed_tools' "$RALPH_LOOP"
-    grep -q 'Restore original allowed tools' "$RALPH_LOOP"
-}
-
-@test "codex loop auto-commits before QG retry" {
-    grep -q 'pre-QG-retry auto-commit' "$CODEX_LOOP"
-}
-
-@test "devin loop auto-commits before QG retry" {
-    grep -q 'pre-QG-retry auto-commit' "$DEVIN_LOOP"
+@test "ralph_loop.sh --qg appears in help text" {
+    grep -q -- '--qg' "$RALPH_LOOP"
+    grep -q 'Quality Gate Mode' "$RALPH_LOOP"
 }
 
 # =============================================================================
