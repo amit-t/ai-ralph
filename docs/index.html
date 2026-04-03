@@ -1188,10 +1188,11 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span class="change-text"><span class="change-scope">qg:</span> Extract QG retry into standalone <code>ralph --qg</code> mode &mdash; main loop now always creates PR (with <code>quality-gates-failed</code> label on failure); dedicated mode runs retry loop with subagent support</span><span class="change-hash">c47b700</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Ad-hoc mode returns task ID (e.g. <strong>AH01</strong>) for use with <code>--task</code> flag; stdout-only output enables piping</span><span class="change-hash">32f7cae</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Ad-hoc task mode &mdash; <code>ralph-plan --adhoc</code> for quick bug/task entry into <code>fix_plan.md</code> via AI across all 3 engines</span><span class="change-hash">47a6c49</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> Quality gate retry uses subagents &mdash; one per failing gate for parallel fixing; <code>Task</code> tool temporarily enabled for Claude</span><span class="change-hash">514bff8</span></li>
-        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> Quality gate retry loop &mdash; re-invoke AI to fix failures before PR creation with <code>MAX_QG_RETRIES</code> config</span><span class="change-hash">47a3a02</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> <s>Quality gate retry uses subagents</s> &mdash; superseded by <code>ralph --qg</code> standalone mode (<code>c47b700</code>)</span><span class="change-hash">514bff8</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> <s>Quality gate retry loop</s> &mdash; superseded by <code>ralph --qg</code> standalone mode (<code>c47b700</code>)</span><span class="change-hash">47a3a02</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">summary:</span> Display session/conversation ID in execution summary</span><span class="change-hash">71c7aac</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Update Codex CLI flags to <code>--dangerously-bypass-approvals-and-sandbox</code></span><span class="change-hash">75084be</span></li>
       </ul>
@@ -1642,6 +1643,17 @@
       'latest': {
         0: {
           how: [
+            'Removed the inline QG retry <code>while</code> loop from all 3 engine loop scripts (~80 lines each)',
+            'Main loop now runs quality gates once and always creates a PR &mdash; success or failure (with <code>quality-gates-failed</code> label)',
+            'New <code>run_qg_mode()</code> function in <code>ralph_loop.sh</code> contains the dedicated retry loop (up to <code>MAX_QG_RETRIES</code>)',
+            'Activated via <code>ralph --qg</code> CLI flag &mdash; dispatched before <code>main</code> call',
+            'Subagent support preserved: <code>Task</code> tool temporarily injected into <code>CLAUDE_ALLOWED_TOOLS</code> during fix invocations',
+            'Auto-commits QG fixes on success with conventional commit message'
+          ],
+          usage: '# Run quality gate fix mode after a failed PR\nralph --qg\nrpc.qg\n\n# With specific engine\nralph-codex --qg\nrpx.qg\nralph-devin --qg\nrpd.qg\n\n# Configure max retry attempts in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts'
+        },
+        1: {
+          how: [
             '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
             'The task ID is pre-generated before AI invocation and injected into the prompt',
             'The AI is instructed to prefix the first subtask line with <strong>AH01</strong> (bold markdown)',
@@ -1649,7 +1661,7 @@
           ],
           usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
         },
-        1: {
+        2: {
           how: [
             '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
             'Prompts for a one-liner task description (interactive or inline via argument)',
@@ -1659,33 +1671,28 @@
           ],
           usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
         },
-        2: {
-          how: [
-            '<code>worktree_build_qg_fix_prompt()</code> generates a focused prompt with failed gate commands and full error output',
-            'Prompt includes a <strong>subagent strategy</strong> section instructing the AI to spawn one subagent per failing gate',
-            'For Claude: <code>Task</code> tool temporarily added to <code>CLAUDE_ALLOWED_TOOLS</code> (saved and restored after)',
-            'For Codex/Devin: subagent access already available via <code>--permission-mode dangerous</code>',
-            'Single-gate failures use a single subagent; multi-gate failures spawn parallel subagents'
-          ],
-          usage: '# Automatic during quality gate retry \u2014 no user action needed\n# Configure max attempts in .ralphrc:\nMAX_QG_RETRIES=3'
-        },
         3: {
           how: [
-            'After initial AI execution, if quality gates (lint/test/build) fail, Ralph re-invokes the AI with focused error context',
-            'Quality gates are re-run after each fix attempt',
-            'Pass \u2192 PR is created with success status',
-            'Fail after <code>MAX_QG_RETRIES</code> (default: 3) \u2192 PR is created with <code>quality-gates-failed</code> label'
+            '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
+            'Original: subagent strategy for parallel gate fixing within the main loop'
           ],
-          usage: '# Automatic \u2014 runs after every worktree execution\n# Configure in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts before failure PR'
+          usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
         4: {
+          how: [
+            '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
+            'Original: inline retry loop after worktree execution'
+          ],
+          usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
+        },
+        5: {
           how: [
             'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
             'Helps correlate loop iterations with Claude conversation context'
           ],
           usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
         },
-        5: {
+        6: {
           how: [
             'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
             'Matches the latest Codex CLI API naming convention'
@@ -2723,6 +2730,7 @@
       { alias: 'rpc.wt.merge',   cmd: 'ralph --merge-strategy merge',                              desc: 'Merge commit strategy',                engine: 'claude', cat: 'worktree' },
       { alias: 'rpc.wt.rebase',  cmd: 'ralph --merge-strategy rebase',                             desc: 'Rebase strategy',                      engine: 'claude', cat: 'worktree' },
       { alias: 'rpc.wt.nogate',  cmd: 'ralph --quality-gates none',                                desc: 'Skip quality gates',                   engine: 'claude', cat: 'worktree' },
+      { alias: 'rpc.qg',         cmd: 'ralph --qg',                                               desc: 'Quality gate fix mode (retry loop)',   engine: 'claude', cat: 'worktree' },
       { alias: 'rpc.wt.full',    cmd: 'ralph --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode',          engine: 'claude', cat: 'worktree' },
       // Interactive / Parallel
       { alias: 'rpc.int',        cmd: 'ralph --live --monitor',                                    desc: 'Interactive mode (live + monitor)',     engine: 'claude', cat: 'interactive' },
@@ -2778,6 +2786,7 @@
       { alias: 'rpx.wt.merge',   cmd: 'ralph-codex --merge-strategy merge',                        desc: 'Merge commit strategy',                engine: 'codex', cat: 'worktree' },
       { alias: 'rpx.wt.rebase',  cmd: 'ralph-codex --merge-strategy rebase',                       desc: 'Rebase strategy',                      engine: 'codex', cat: 'worktree' },
       { alias: 'rpx.wt.nogate',  cmd: 'ralph-codex --quality-gates none',                          desc: 'Skip quality gates',                   engine: 'codex', cat: 'worktree' },
+      { alias: 'rpx.qg',         cmd: 'ralph-codex --qg',                                         desc: 'Quality gate fix mode (retry loop)',   engine: 'codex', cat: 'worktree' },
       // Interactive / Parallel
       { alias: 'rpx.autoexit',   cmd: 'ralph-codex --codex-auto-exit',                             desc: 'Force auto-exit mode',                 engine: 'codex', cat: 'interactive' },
       { alias: 'rpx.int',        cmd: 'ralph-codex --no-codex-auto-exit',                          desc: 'Interactive mode (no auto-exit)',       engine: 'codex', cat: 'interactive' },
@@ -2833,6 +2842,7 @@
       { alias: 'rpd.wt.merge',   cmd: 'ralph-devin --merge-strategy merge',                        desc: 'Merge commit strategy',                engine: 'devin', cat: 'worktree' },
       { alias: 'rpd.wt.rebase',  cmd: 'ralph-devin --merge-strategy rebase',                       desc: 'Rebase strategy',                      engine: 'devin', cat: 'worktree' },
       { alias: 'rpd.wt.nogate',  cmd: 'ralph-devin --quality-gates none',                          desc: 'Skip quality gates',                   engine: 'devin', cat: 'worktree' },
+      { alias: 'rpd.qg',         cmd: 'ralph-devin --qg',                                         desc: 'Quality gate fix mode (retry loop)',   engine: 'devin', cat: 'worktree' },
       // Interactive / Parallel
       { alias: 'rpd.int',        cmd: 'ralph-devin --no-devin-auto-exit',                          desc: 'Interactive TUI mode (no auto-exit)',   engine: 'devin', cat: 'interactive' },
       { alias: 'rpd.wt.int',     cmd: 'ralph-devin --no-devin-auto-exit --live --monitor',         desc: 'Interactive + live + monitor',          engine: 'devin', cat: 'interactive' },
