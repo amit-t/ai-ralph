@@ -1605,6 +1605,38 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="feat" data-has-detail><span
+            class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">planning:</span> Fix plan compression mode &mdash;
+            <code>ralph-plan --compress</code> reduces token consumption by collapsing completed items and shortening
+            verbose descriptions while preserving all task IDs and progress</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it does</h4>
+              <ul>
+                <li>Archives current <code>fix_plan.md</code> before compression (timestamped backup in
+                  <code>.ralph/logs/</code>)</li>
+                <li>AI collapses completed items into summary lines with task ID lists</li>
+                <li>Shortens verbose pending/in-progress descriptions to concise one-liners</li>
+                <li>Preserves all task IDs, checkbox states, and dependency annotations</li>
+                <li>Shows pre/post compression stats (item count, file size)</li>
+              </ul>
+              <h4>Usage</h4>
+              <pre>ralph-plan --compress                # Claude (default)
+ralph-plan --engine codex --compress # Codex
+rpc.compress                         # Claude alias
+rpd.compress                         # Devin alias
+rpx.compress                         # Codex alias</pre>
+              <h4>New files</h4>
+              <ul>
+                <li><code>lib/compress_plan.sh</code> &mdash; core compression logic (find, count, archive, invoke
+                  AI)</li>
+                <li><code>templates/PROMPT_COMPRESS.md</code> &mdash; AI prompt template with compression rules</li>
+                <li><code>tests/unit/test_compress_plan.bats</code> &mdash; 33 unit tests</li>
+              </ul>
+            </div>
+          </div>
+        </li>
         <li class="change-item" data-type="refactor"><span class="change-type type-refactor">refactor</span><span
             class="change-text"><span class="change-scope">qg:</span> Extract QG retry into standalone
             <code>ralph --qg</code> mode &mdash; main loop now always creates PR (with <code>quality-gates-failed</code>
@@ -2391,7 +2423,8 @@
     // Detail data keyed by section data-version → item index
     const CHANGE_DETAILS = {
       'latest': {
-        0: {
+        // 0 = compress mode (uses inline HTML detail, no JS entry needed)
+        1: {
           how: [
             'Removed the inline QG retry <code>while</code> loop from all 3 engine loop scripts (~80 lines each)',
             'Main loop now runs quality gates once and always creates a PR &mdash; success or failure (with <code>quality-gates-failed</code> label)',
@@ -2402,7 +2435,7 @@
           ],
           usage: '# Run quality gate fix mode after a failed PR\nralph --qg\nrpc.qg\n\n# With specific engine\nralph-codex --qg\nrpx.qg\nralph-devin --qg\nrpd.qg\n\n# Configure max retry attempts in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts'
         },
-        1: {
+        2: {
           how: [
             '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
             'The task ID is pre-generated before AI invocation and injected into the prompt',
@@ -2411,7 +2444,7 @@
           ],
           usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
         },
-        2: {
+        3: {
           how: [
             '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
             'Prompts for a one-liner task description (interactive or inline via argument)',
@@ -2421,28 +2454,28 @@
           ],
           usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
         },
-        3: {
+        4: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: subagent strategy for parallel gate fixing within the main loop'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        4: {
+        5: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: inline retry loop after worktree execution'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        5: {
+        6: {
           how: [
             'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
             'Helps correlate loop iterations with Claude conversation context'
           ],
           usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
         },
-        6: {
+        7: {
           how: [
             'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
             'Matches the latest Codex CLI API naming convention'
@@ -3501,6 +3534,7 @@
       { alias: 'rpc.plan.sup', cmd: 'ralph-plan --yolo --superpowers', desc: 'Planning with yolo + superpowers', engine: 'claude', cat: 'planning' },
       { alias: 'rpc.plan.s', cmd: 'ralph-plan --status', desc: 'Fix plan status', engine: 'claude', cat: 'planning' },
       { alias: 'rpc.adhoc', cmd: 'ralph-plan --adhoc', desc: 'Ad-hoc task entry into fix_plan.md', engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.compress', cmd: 'ralph-plan --compress', desc: 'Compress fix_plan.md to reduce tokens', engine: 'claude', cat: 'planning' },
 
       // ── Codex (rpx.*) ───────────────────────────────────
       // Basic execution
@@ -3559,6 +3593,7 @@
       { alias: 'rpx.plan', cmd: 'ralph-plan --engine codex', desc: 'Planning mode with Codex', engine: 'codex', cat: 'planning' },
       { alias: 'rpx.plan.s', cmd: 'ralph-plan --engine codex --status', desc: 'Fix plan status (Codex)', engine: 'codex', cat: 'planning' },
       { alias: 'rpx.adhoc', cmd: 'ralph-plan --engine codex --adhoc', desc: 'Ad-hoc task entry (Codex)', engine: 'codex', cat: 'planning' },
+      { alias: 'rpx.compress', cmd: 'ralph-plan --engine codex --compress', desc: 'Compress fix_plan.md (Codex)', engine: 'codex', cat: 'planning' },
 
       // ── Devin (rpd.*) ───────────────────────────────────
       // Basic execution
@@ -3615,6 +3650,7 @@
       { alias: 'rpd.plan', cmd: 'ralph-plan --engine devin', desc: 'Planning mode with Devin', engine: 'devin', cat: 'planning' },
       { alias: 'rpd.plan.s', cmd: 'ralph-plan --engine devin --status', desc: 'Fix plan status (Devin)', engine: 'devin', cat: 'planning' },
       { alias: 'rpd.adhoc', cmd: 'ralph-plan --engine devin --adhoc', desc: 'Ad-hoc task entry (Devin)', engine: 'devin', cat: 'planning' },
+      { alias: 'rpd.compress', cmd: 'ralph-plan --engine devin --compress', desc: 'Compress fix_plan.md (Devin)', engine: 'devin', cat: 'planning' },
 
       // ── Shared (ralph.*, rp.*) ──────────────────────────
       { alias: 'ralph.setup', cmd: 'ralph-setup', desc: 'Create a new Ralph project', engine: 'shared', cat: 'management' },
