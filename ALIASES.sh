@@ -83,9 +83,9 @@ alias rpc.adhoc='ralph-plan --adhoc'
 alias rpc.compress='ralph-plan --compress'
 
 # File-based planning (pass a specific MD, JSON, or text file)
-# Usage: rpc.file ./docs/requirements.md   -> plan from a specific file
-# Usage: rpc.file ./tasks.json             -> plan from a JSON task list
-rpc.file() { ralph-plan --file "${1:?Usage: rpc.file <file_path>}"; }
+# Usage: rpc.plan.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpc.plan.file ./tasks.json             -> plan from a JSON task list
+rpc.plan.file() { ralph-plan --file "${1:?Usage: rpc.plan.file <file_path>}"; }
 
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpc.task 3        -> execute task #3

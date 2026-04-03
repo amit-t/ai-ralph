@@ -397,7 +397,7 @@ Source: `devin/ALIASES.sh`
 | `rpd.uninstall` | *(runs uninstall_devin.sh)* | Uninstall Devin engine |
 | `rpd.enable` | `ralph-devin-enable` | Enable Ralph+Devin in current project |
 | `rpd.plan` | `ralph-plan --engine devin` | Planning mode with Devin |
-| `rpd.file <path>` | `ralph-plan --engine devin --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpd.plan.file <path>` | `ralph-plan --engine devin --file <path>` | Plan from a specific file (MD/JSON/text) |
 | `rpd.compress` | `ralph-plan --engine devin --compress` | Compress fix plan to reduce token usage |
 
 ---
@@ -499,7 +499,7 @@ Source: `ALIASES.sh`
 | `rpc.uninstall` | *(runs uninstall.sh)* | Uninstall Claude engine |
 | `rpc.plan` | `ralph-plan` | Planning mode (Claude engine) |
 | `rpc.plan.sup` | `ralph-plan --yolo --superpowers` | Planning with yolo + superpowers plugin |
-| `rpc.file <path>` | `ralph-plan --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpc.plan.file <path>` | `ralph-plan --file <path>` | Plan from a specific file (MD/JSON/text) |
 | `rpc.compress` | `ralph-plan --compress` | Compress fix plan to reduce token usage |
 
 ---
@@ -604,7 +604,7 @@ Source: `codex/ALIASES.sh`
 | `rpx.uninstall` | *(runs uninstall_codex.sh)* | Uninstall Codex engine |
 | `rpx.enable` | `ralph-codex-enable` | Enable Ralph+Codex in current project |
 | `rpx.plan` | `ralph-plan --engine codex` | Planning mode with Codex |
-| `rpx.file <path>` | `ralph-plan --engine codex --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpx.plan.file <path>` | `ralph-plan --engine codex --file <path>` | Plan from a specific file (MD/JSON/text) |
 | `rpx.compress` | `ralph-plan --engine codex --compress` | Compress fix plan to reduce token usage |
 
 ---
@@ -967,7 +967,7 @@ Uninstalling one engine does not affect the others.
 - `ralph-plan --file <path>` to generate fix_plan from a specific document
 - Accepts Markdown (.md), JSON (.json), YAML (.yaml), or plain text (.txt) files
 - AI reads the document, analyzes the codebase, and creates prioritized fix_plan.md
-- Works across all 3 engines: `rpc.file`, `rpx.file`, `rpd.file`
+- Works across all 3 engines: `rpc.plan.file`, `rpx.plan.file`, `rpd.plan.file`
 - Supports `--yolo` and `--superpowers` flags (Claude only)
 
 **Ad-hoc Task Mode**

@@ -86,9 +86,9 @@ alias rpx.adhoc='ralph-plan --engine codex --adhoc'
 alias rpx.compress='ralph-plan --engine codex --compress'
 
 # File-based planning (pass a specific MD, JSON, or text file, uses codex engine)
-# Usage: rpx.file ./docs/requirements.md   -> plan from a specific file
-# Usage: rpx.file ./tasks.json             -> plan from a JSON task list
-rpx.file() { ralph-plan --engine codex --file "${1:?Usage: rpx.file <file_path>}"; }
+# Usage: rpx.plan.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpx.plan.file ./tasks.json             -> plan from a JSON task list
+rpx.plan.file() { ralph-plan --engine codex --file "${1:?Usage: rpx.plan.file <file_path>}"; }
 
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpx.task 3        -> non-interactive, execute task #3

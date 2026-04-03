@@ -316,9 +316,9 @@ ralph-plan --engine devin --file ./spec.md
 ralph-plan --engine codex --file ./backlog.json
 
 # Using aliases (recommended)
-rpc.file ./docs/requirements.md              # Claude
-rpd.file ./spec.md                           # Devin
-rpx.file ./tasks.json                        # Codex
+rpc.plan.file ./docs/requirements.md              # Claude
+rpd.plan.file ./spec.md                           # Devin
+rpx.plan.file ./tasks.json                        # Codex
 ```
 
 ### Quality Gate Mode (fix failing gates)
@@ -880,6 +880,13 @@ Before moving to the next feature, ALL changes must be:
    - Keep installation instructions accurate and tested
    - Document new Ralph loop behaviors or quality gates
 
+6. **Mandatory Sync Artifacts** (must be updated together for every relevant change):
+   - **`README.md`** — alias tables, "What this fork adds" feature list, "Recent Changes" section
+   - **`docs/index.html`** — changelog entries (HTML `<li>` items), JS `CHANGE_DETAILS` indices, and JS `COMMANDS` alias array (for all 3 engines: `rpc.*`, `rpx.*`, `rpd.*`)
+   - **`ALIASES.sh`** / **`devin/ALIASES.sh`** / **`codex/ALIASES.sh`** — shell function aliases (must match README and docs/index.html naming)
+   - **`AGENTS.md`** (this file) — lib documentation, key commands, test table entries
+   - When adding or renaming aliases, update **all five locations** above in a single commit
+
 ### Feature Completion Checklist
 
 Before marking ANY feature as complete, verify:
@@ -893,6 +900,7 @@ Before marking ANY feature as complete, verify:
 - [ ] Implementation documentation updated
 - [ ] Inline code comments updated or added
 - [ ] CLAUDE.md updated (if new patterns introduced)
+- [ ] Mandatory sync artifacts updated (README, docs/index.html, ALIASES.sh files, AGENTS.md)
 - [ ] Template files updated (if applicable)
 - [ ] Breaking changes documented
 - [ ] Ralph loop tested with new features
