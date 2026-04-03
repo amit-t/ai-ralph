@@ -33,6 +33,9 @@ DOE_OS_DIR=""
 STATUS_MODE=false
 ADHOC_MODE=false
 ADHOC_DESCRIPTION=""
+COMPRESS_MODE=false
+FILE_MODE=false
+FILE_PATH=""
 
 # Engine selection: claude (default), codex, devin
 ENGINE="claude"
@@ -98,6 +101,12 @@ Options:
     --status           Show AI-powered fix plan status and insights (no planning runs)
     --adhoc [desc]     Ad-hoc task mode: describe a bug/task, AI creates fix_plan entry
                        If desc is omitted, prompts interactively
+    --compress         Compress fix_plan.md to reduce token consumption
+                       Archives current plan, then AI rewrites it compactly
+                       Completed items collapsed, descriptions shortened, IDs preserved
+    --file <path>      File-based planning: pass a specific MD, JSON, or text file
+                       AI reads the document, analyzes the codebase, and generates
+                       a prioritized fix_plan.md from the file's content
     -h, --help         Show this help
 
 Examples:
@@ -113,6 +122,12 @@ Examples:
     ralph-plan --adhoc                          # Interactive ad-hoc task (prompts for desc)
     ralph-plan --adhoc "Login broken on mobile" # Ad-hoc with inline description
     ralph-plan --engine devin --adhoc           # Ad-hoc via Devin engine
+    ralph-plan --compress                       # Compress fix plan (Claude, default)
+    ralph-plan --engine codex --compress        # Compress fix plan via Codex
+    ralph-plan --file ./docs/requirements.md    # Plan from a specific markdown file
+    ralph-plan --file ./tasks.json              # Plan from a JSON task list
+    ralph-plan --file ./notes.txt               # Plan from plain text notes
+    ralph-plan --engine devin --file spec.md    # File-based planning via Devin
 
 PM-OS / DoE-OS Auto-Detection:
     When Ralph is not enabled in the current directory (no .ralph/ folder),
@@ -678,6 +693,21 @@ parse_args() {
                     shift
                 fi
                 ;;
+            --compress)
+                COMPRESS_MODE=true
+                shift
+                ;;
+            --file)
+                FILE_MODE=true
+                if [[ $# -ge 2 ]] && [[ "$2" != --* ]]; then
+                    FILE_PATH="$2"
+                    shift 2
+                else
+                    log "ERROR" "--file requires a file path argument"
+                    show_help
+                    exit 1
+                fi
+                ;;
             --yolo)
                 YOLO_MODE=true
                 shift
@@ -716,6 +746,20 @@ main() {
     if [[ "$ADHOC_MODE" == true ]]; then
         source "$SCRIPT_DIR/lib/adhoc_task.sh"
         run_adhoc_task "$ENGINE" "$ADHOC_DESCRIPTION" "$YOLO_MODE" "$SUPERPOWERS" "$SUPERPOWERS_PLUGIN_DIR" || exit $?
+        exit 0
+    fi
+
+    # Compress mode: shrink fix_plan.md to reduce token consumption -- exits before any planning
+    if [[ "$COMPRESS_MODE" == true ]]; then
+        source "$SCRIPT_DIR/lib/compress_plan.sh"
+        run_compress_plan "$ENGINE" "$YOLO_MODE" "$SUPERPOWERS" "$SUPERPOWERS_PLUGIN_DIR" || exit $?
+        exit 0
+    fi
+
+    # File mode: plan from a specific MD, JSON, or text file -- exits before any planning
+    if [[ "$FILE_MODE" == true ]]; then
+        source "$SCRIPT_DIR/lib/file_plan.sh"
+        run_file_plan "$ENGINE" "$FILE_PATH" "$YOLO_MODE" "$SUPERPOWERS" "$SUPERPOWERS_PLUGIN_DIR" || exit $?
         exit 0
     fi
 

@@ -48,6 +48,15 @@ The system consists of four main bash scripts and a modular library system:
      analyze the codebase and create a structured fix_plan.md entry with subtasks
    - Supports inline description: `--adhoc "Login broken on mobile"`
    - Works with all three engines (claude, codex, devin)
+   - `--compress` flag: Compress fix_plan.md to reduce token consumption
+   - Archives current plan before compression (timestamped backup in `.ralph/logs/`)
+   - AI collapses completed items into summary lines, shortens verbose descriptions
+   - Preserves all task IDs, checkbox states, and progress tracking
+   - Works with all three engines (claude, codex, devin)
+   - `--file <path>` flag: File-based planning mode -- pass a specific MD, JSON, or text file
+   - AI reads the document, analyzes the codebase, and generates a prioritized fix_plan.md
+   - Accepts Markdown (.md), JSON (.json), YAML (.yaml/.yml), or plain text (.txt) files
+   - Works with all three engines (claude, codex, devin)
 
 ### Library Components (lib/)
 
@@ -131,6 +140,27 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - Creates `.ralph/` directory if not present (auto-bootstrap)
     - Detects project type from config files (package.json, Cargo.toml, etc.)
     - Includes AGENT.md build instructions in prompt for context
+
+12. **lib/compress_plan.sh** - Fix plan compression to reduce token consumption
+    - `find_fix_plan_for_compress()`: walks upward from CWD to locate `.ralph/fix_plan.md`
+    - `count_plan_items()`: counts total, completed, in-progress, and pending items
+    - `archive_fix_plan()`: creates timestamped backup in `.ralph/logs/` before compression
+    - `run_compress_plan()`: main entry point -- validates engine, archives plan, shows
+      pre-compression stats, builds prompt from `PROMPT_COMPRESS.md` template, invokes AI,
+      shows post-compression stats with size comparison
+    - Requires existing `.ralph/fix_plan.md` (no auto-bootstrap)
+    - Works with all three engines (claude, codex, devin)
+
+13. **lib/file_plan.sh** - File-based planning mode for generating fix_plan from a specific document
+    - `detect_file_type()`: determines file type from extension (markdown, json, yaml, text)
+    - `find_fix_plan_for_file_plan()`: walks upward from CWD to locate `.ralph/fix_plan.md`
+    - `run_file_plan()`: main entry point -- validates engine, reads input file, gathers
+      codebase context, builds prompt from `PROMPT_FILE_PLAN.md` template, invokes AI in TUI mode
+    - Accepts MD, JSON, YAML, or plain text files
+    - Creates `.ralph/` directory if not present (auto-bootstrap)
+    - Detects project type from config files (package.json, Cargo.toml, etc.)
+    - Includes AGENT.md build instructions in prompt for context
+    - Works with all three engines (claude, codex, devin)
 
 ### Quality Gate Behaviour
 
@@ -254,6 +284,41 @@ rpc.adhoc                                    # Claude, interactive prompt
 rpc.adhoc "Dark mode toggle doesn't persist" # Claude, inline
 rpd.adhoc "Fix pagination on /users endpoint" # Devin
 rpx.adhoc                                    # Codex, interactive prompt
+```
+
+### Compress Mode (reduce fix plan token usage)
+```bash
+# Compress fix plan (archives original first)
+ralph-plan --compress
+
+# With specific engine
+ralph-plan --engine codex --compress
+
+# Using aliases (recommended)
+rpc.compress                                 # Claude
+rpd.compress                                 # Devin
+rpx.compress                                 # Codex
+```
+
+### File-based Planning Mode (plan from a specific document)
+```bash
+# Plan from a markdown specification
+ralph-plan --file ./docs/requirements.md
+
+# Plan from a JSON task list
+ralph-plan --file ./tasks.json
+
+# Plan from plain text notes
+ralph-plan --file ./notes.txt
+
+# With specific engine
+ralph-plan --engine devin --file ./spec.md
+ralph-plan --engine codex --file ./backlog.json
+
+# Using aliases (recommended)
+rpc.file ./docs/requirements.md              # Claude
+rpd.file ./spec.md                           # Devin
+rpx.file ./tasks.json                        # Codex
 ```
 
 ### Quality Gate Mode (fix failing gates)
@@ -684,7 +749,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (631 tests total)
+### Test Files (664 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -708,6 +773,8 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_integrity_check.bats` | 10 | Pre-loop integrity check in ralph_loop.sh (startup + in-loop validation) (Issue #149) |
 | `test_qg_retry.bats` | 36 | Quality gate behaviour (worktree_build_qg_fix_prompt, --qg standalone mode, PR-on-failure, MAX_QG_RETRIES config, subagent strategy) |
 | `test_adhoc_task.bats` | 18 | Ad-hoc task mode (CLI parsing, find_fix_plan_for_adhoc, prompt_task_description, run_adhoc_task engine validation, prompt construction) |
+| `test_compress_plan.bats` | 33 | Fix plan compression mode (CLI parsing, find_fix_plan_for_compress, count_plan_items, archive_fix_plan, run_compress_plan engine validation, template validation) |
+| `test_file_plan.bats` | 30 | File-based planning mode (CLI parsing, detect_file_type, find_fix_plan_for_file_plan, run_file_plan engine/file validation, template validation) |
 
 ### Running Tests
 ```bash

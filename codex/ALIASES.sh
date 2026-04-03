@@ -82,6 +82,14 @@ alias rpx.plan.s='ralph-plan --engine codex --status'
 # Usage: rpx.adhoc "Login broken on iOS"  -> inline description
 alias rpx.adhoc='ralph-plan --engine codex --adhoc'
 
+# Compress fix plan (reduce token consumption, archive original, uses codex engine)
+alias rpx.compress='ralph-plan --engine codex --compress'
+
+# File-based planning (pass a specific MD, JSON, or text file, uses codex engine)
+# Usage: rpx.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpx.file ./tasks.json             -> plan from a JSON task list
+rpx.file() { ralph-plan --engine codex --file "${1:?Usage: rpx.file <file_path>}"; }
+
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpx.task 3        -> non-interactive, execute task #3
 # Usage: rpx.task.int 3    -> interactive TUI, execute task #3

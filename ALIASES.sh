@@ -79,6 +79,14 @@ alias rpc.plan.s='ralph-plan --status'
 # Usage: rpc.adhoc "Login broken on iOS"  -> inline description
 alias rpc.adhoc='ralph-plan --adhoc'
 
+# Compress fix plan (reduce token consumption, archive original)
+alias rpc.compress='ralph-plan --compress'
+
+# File-based planning (pass a specific MD, JSON, or text file)
+# Usage: rpc.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpc.file ./tasks.json             -> plan from a JSON task list
+rpc.file() { ralph-plan --file "${1:?Usage: rpc.file <file_path>}"; }
+
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpc.task 3        -> execute task #3
 # Usage: rpc.task.int 3    -> interactive (live + monitor) for task #3

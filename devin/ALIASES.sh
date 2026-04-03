@@ -83,6 +83,14 @@ alias rpd.plan.s='ralph-plan --engine devin --status'
 # Usage: rpd.adhoc "Login broken on iOS"  -> inline description
 alias rpd.adhoc='ralph-plan --engine devin --adhoc'
 
+# Compress fix plan (reduce token consumption, archive original, uses devin engine)
+alias rpd.compress='ralph-plan --engine devin --compress'
+
+# File-based planning (pass a specific MD, JSON, or text file, uses devin engine)
+# Usage: rpd.file ./docs/requirements.md   -> plan from a specific file
+# Usage: rpd.file ./tasks.json             -> plan from a JSON task list
+rpd.file() { ralph-plan --engine devin --file "${1:?Usage: rpd.file <file_path>}"; }
+
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpd.task 3        -> non-interactive, execute task #3
 # Usage: rpd.task.int 3    -> interactive TUI, execute task #3
