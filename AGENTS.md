@@ -121,14 +121,16 @@ The system uses a modular architecture with reusable components in the `lib/` di
 
 ### Quality Gate Retry Behaviour
 
-When quality gates fail, Ralph re-invokes the AI engine to fix the failures before creating a PR. The retry loop:
+When quality gates fail, Ralph re-invokes the AI engine with subagent instructions to fix the failures before creating a PR. The retry loop:
 
 1. Quality gates fail after initial AI execution
-2. `worktree_build_qg_fix_prompt()` generates a focused prompt with the failed gate commands and their full error output
-3. The AI engine (Claude/Codex/Devin) is re-invoked with this fix prompt in the same worktree
-4. Quality gates are re-run after each fix attempt
-5. If gates pass → PR is created with success status
-6. If gates still fail after `MAX_QG_RETRIES` (default: 3) → PR is created with `quality-gates-failed` label
+2. `worktree_build_qg_fix_prompt()` generates a focused prompt with failed gate commands, full error output, and a **subagent strategy** section
+3. The prompt instructs the AI to spawn **one subagent per failing gate** for parallel fixing (or a single subagent when only one gate fails)
+4. For Claude: `Task` tool is temporarily added to `CLAUDE_ALLOWED_TOOLS` during QG fix invocations (saved and restored)
+5. For Codex/Devin: subagent access is already available via `--permission-mode dangerous`
+6. Quality gates are re-run after each fix attempt
+7. If gates pass → PR is created with success status
+8. If gates still fail after `MAX_QG_RETRIES` (default: 3) → PR is created with `quality-gates-failed` label
 
 **Configuration:**
 ```bash
@@ -631,7 +633,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (623 tests total)
+### Test Files (631 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -653,7 +655,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_wizard_utils.bats` | 20 | Wizard utility functions (stdout/stderr separation, prompt functions) |
 | `test_file_protection.bats` | 15 | File integrity validation (RALPH_REQUIRED_PATHS, validate_ralph_integrity, get_integrity_report) (Issue #149) |
 | `test_integrity_check.bats` | 10 | Pre-loop integrity check in ralph_loop.sh (startup + in-loop validation) (Issue #149) |
-| `test_qg_retry.bats` | 28 | Quality gate retry behaviour (worktree_build_qg_fix_prompt, MAX_QG_RETRIES, retry loop structure) |
+| `test_qg_retry.bats` | 36 | Quality gate retry behaviour (worktree_build_qg_fix_prompt, subagent strategy, MAX_QG_RETRIES, retry loop structure, Task tool injection) |
 
 ### Running Tests
 ```bash

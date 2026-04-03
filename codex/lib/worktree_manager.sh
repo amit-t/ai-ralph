@@ -391,6 +391,7 @@ worktree_run_quality_gates() {
 # Build a focused prompt for the AI agent to fix quality gate failures.
 # Reads the gate results file and the full output of failed commands,
 # then produces a markdown prompt on stdout.
+# Instructs the AI to use subagents (Task tool) for parallel gate fixing.
 # Args:
 #   $1 - attempt: Current retry attempt number (e.g. 1, 2, 3)
 #   $2 - max_attempts: Maximum retry attempts (e.g. 3)
@@ -402,6 +403,29 @@ worktree_build_qg_fix_prompt() {
     local workdir="${_WT_CURRENT_PATH}"
     local results_file="${workdir}/.ralph/.quality_gate_results"
 
+    # Collect failing gates into arrays for subagent task generation
+    local failed_gates=()
+    local failed_cmds=()
+    if [[ -f "$results_file" ]]; then
+        while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            [[ -z "$line" ]] && continue
+            if [[ "$line" == FAIL:\ * ]]; then
+                local rest="${line#FAIL: }"
+                failed_gates+=("$rest")
+                local cmd
+                if [[ "$rest" =~ ^(.*)" (exit "[0-9]+")" ]]; then
+                    cmd="${BASH_REMATCH[1]}"
+                else
+                    cmd="$rest"
+                fi
+                failed_cmds+=("$cmd")
+            fi
+        done < "$results_file"
+    fi
+
+    local gate_count=${#failed_gates[@]}
+
     cat <<QGEOF
 # QUALITY GATE FIX — Attempt ${attempt}/${max_attempts}
 
@@ -411,17 +435,13 @@ Do NOT ask questions — investigate the errors and fix them immediately.
 ## Failed Gates
 QGEOF
 
-    if [[ -f "$results_file" ]]; then
-        while IFS= read -r line; do
-            line="${line#"${line%%[![:space:]]*}"}"
-            [[ -z "$line" ]] && continue
-            if [[ "$line" == FAIL:\ * ]]; then
-                local rest="${line#FAIL: }"
-                echo "- \`${rest}\`"
-            fi
-        done < "$results_file"
-    else
+    if [[ ! -f "$results_file" ]]; then
         echo "- (no gate results file found)"
+    else
+        local i
+        for ((i = 0; i < gate_count; i++)); do
+            echo "- \`${failed_gates[$i]}\`"
+        done
     fi
 
     # Re-run failed commands to capture full error output for the prompt
@@ -429,27 +449,33 @@ QGEOF
     echo "## Full Error Output"
     echo ""
 
-    if [[ -f "$results_file" ]]; then
-        while IFS= read -r line; do
-            line="${line#"${line%%[![:space:]]*}"}"
-            [[ -z "$line" ]] && continue
-            if [[ "$line" == FAIL:\ * ]]; then
-                local rest="${line#FAIL: }"
-                local cmd
-                if [[ "$rest" =~ ^(.*)" (exit "[0-9]+")" ]]; then
-                    cmd="${BASH_REMATCH[1]}"
-                else
-                    cmd="$rest"
-                fi
-                echo "### \`${cmd}\`"
-                echo '```'
-                local full_output
-                full_output=$(cd "$workdir" && eval "$cmd" 2>&1 | tail -80) || true
-                echo "$full_output"
-                echo '```'
-                echo ""
-            fi
-        done < "$results_file"
+    for ((i = 0; i < gate_count; i++)); do
+        local cmd="${failed_cmds[$i]}"
+        echo "### \`${cmd}\`"
+        echo '```'
+        local full_output
+        full_output=$(cd "$workdir" && eval "$cmd" 2>&1 | tail -80) || true
+        echo "$full_output"
+        echo '```'
+        echo ""
+    done
+
+    # Subagent strategy section
+    echo "## Strategy: Use Subagents"
+    echo ""
+    echo "Use your subagent/task spawning capability to fix each failing gate independently."
+
+    if [[ $gate_count -gt 1 ]]; then
+        echo "Spawn **one subagent per failing gate** to fix errors in parallel:"
+        echo ""
+        for ((i = 0; i < gate_count; i++)); do
+            echo "- **Subagent $((i+1))**: Fix all errors from \`${failed_cmds[$i]}\`"
+        done
+        echo ""
+        echo "Each subagent should focus ONLY on its assigned gate's errors."
+        echo "After all subagents complete, verify their changes do not conflict."
+    else
+        echo "Spawn a subagent to investigate and fix the failing gate errors."
     fi
 
     cat <<QGEOF2
@@ -457,9 +483,10 @@ QGEOF
 ## Instructions
 
 1. Read the error output above carefully.
-2. Fix ALL errors — do not leave any quality gate failing.
-3. After fixing, the gates will be re-run automatically.
-4. Focus on the code changes needed — do not modify quality gate configuration or skip tests.
+2. Use subagents to fix the errors — one subagent per failing gate when multiple gates fail.
+3. Fix ALL errors — do not leave any quality gate failing.
+4. After fixing, the gates will be re-run automatically.
+5. Focus on the code changes needed — do not modify quality gate configuration or skip tests.
 QGEOF2
 
     return 0

@@ -2179,7 +2179,16 @@ You are operating inside an isolated git worktree.
 - DO NOT navigate to or modify files outside this directory."
                 fi
 
+                # Enable Task tool for subagent-based QG fixes
+                local _saved_allowed_tools="$CLAUDE_ALLOWED_TOOLS"
+                if [[ "$CLAUDE_ALLOWED_TOOLS" != *"Task"* ]]; then
+                    CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS},Task"
+                fi
+
                 build_claude_command "$PROMPT_FILE" "" "$qg_fix_session" "$qg_worktree_directive"
+
+                # Restore original allowed tools after command is built
+                CLAUDE_ALLOWED_TOOLS="$_saved_allowed_tools"
                 # Override the prompt with the QG fix prompt
                 CLAUDE_CMD_ARGS=("${CLAUDE_CMD_ARGS[@]/%"-p"*/}")
                 # Rebuild: remove last two elements (-p and the prompt content) and replace

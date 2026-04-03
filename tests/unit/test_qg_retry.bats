@@ -94,6 +94,64 @@ teardown() {
     [[ "$output" == *"do not modify quality gate configuration"* ]]
 }
 
+@test "worktree_build_qg_fix_prompt includes subagent strategy section" {
+    echo "FAIL: pnpm test (exit 1)" > "$_WT_CURRENT_PATH/.ralph/.quality_gate_results"
+
+    run worktree_build_qg_fix_prompt 1 3
+    assert_success
+    [[ "$output" == *"## Strategy: Use Subagents"* ]]
+}
+
+@test "worktree_build_qg_fix_prompt instructs use of subagent/task spawning" {
+    echo "FAIL: pnpm test (exit 1)" > "$_WT_CURRENT_PATH/.ralph/.quality_gate_results"
+
+    run worktree_build_qg_fix_prompt 1 3
+    assert_success
+    [[ "$output" == *"subagent/task spawning capability"* ]]
+}
+
+@test "worktree_build_qg_fix_prompt lists per-gate subagent tasks for multiple failures" {
+    printf "FAIL: pnpm run typecheck (exit 2)\nFAIL: pnpm test (exit 1)\nFAIL: pnpm run build (exit 1)\n" \
+        > "$_WT_CURRENT_PATH/.ralph/.quality_gate_results"
+
+    run worktree_build_qg_fix_prompt 1 3
+    assert_success
+    [[ "$output" == *"one subagent per failing gate"* ]]
+    [[ "$output" == *"Subagent 1"* ]]
+    [[ "$output" == *"Subagent 2"* ]]
+    [[ "$output" == *"Subagent 3"* ]]
+    [[ "$output" == *"pnpm run typecheck"* ]]
+    [[ "$output" == *"pnpm test"* ]]
+    [[ "$output" == *"pnpm run build"* ]]
+}
+
+@test "worktree_build_qg_fix_prompt uses single subagent for single failure" {
+    echo "FAIL: pnpm test (exit 1)" > "$_WT_CURRENT_PATH/.ralph/.quality_gate_results"
+
+    run worktree_build_qg_fix_prompt 1 3
+    assert_success
+    [[ "$output" == *"Spawn a subagent to investigate"* ]]
+    # Should NOT have numbered subagent tasks
+    [[ "$output" != *"Subagent 1"* ]]
+}
+
+@test "worktree_build_qg_fix_prompt instructs conflict verification for multiple failures" {
+    printf "FAIL: pnpm run typecheck (exit 2)\nFAIL: pnpm test (exit 1)\n" \
+        > "$_WT_CURRENT_PATH/.ralph/.quality_gate_results"
+
+    run worktree_build_qg_fix_prompt 1 3
+    assert_success
+    [[ "$output" == *"verify their changes do not conflict"* ]]
+}
+
+@test "worktree_build_qg_fix_prompt instructions mention subagents" {
+    echo "FAIL: pnpm test (exit 1)" > "$_WT_CURRENT_PATH/.ralph/.quality_gate_results"
+
+    run worktree_build_qg_fix_prompt 1 3
+    assert_success
+    [[ "$output" == *"Use subagents to fix the errors"* ]]
+}
+
 # =============================================================================
 # MAX_QG_RETRIES config defaults
 # =============================================================================
@@ -180,6 +238,16 @@ teardown() {
 
 @test "ralph_loop.sh auto-commits before QG retry" {
     grep -q 'pre-QG-retry auto-commit' "$RALPH_LOOP"
+}
+
+@test "ralph_loop.sh enables Task tool for QG fix subagents" {
+    grep -q 'Task' "$RALPH_LOOP" | head -1 || \
+    grep -q 'CLAUDE_ALLOWED_TOOLS.*Task' "$RALPH_LOOP"
+}
+
+@test "ralph_loop.sh saves and restores CLAUDE_ALLOWED_TOOLS around QG fix" {
+    grep -q '_saved_allowed_tools' "$RALPH_LOOP"
+    grep -q 'Restore original allowed tools' "$RALPH_LOOP"
 }
 
 @test "codex loop auto-commits before QG retry" {
