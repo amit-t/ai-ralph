@@ -44,6 +44,9 @@ alias rpc.wt.rebase='ralph --merge-strategy rebase'
 alias rpc.wt.nogate='ralph --quality-gates none'
 alias rpc.wt.full='ralph --live --monitor --merge-strategy squash --quality-gates auto'
 
+# Quality gate fix mode (retry loop to fix failing gates)
+alias rpc.qg='ralph --qg'
+
 # Interactive mode
 alias rpc.int='ralph --live --monitor'
 

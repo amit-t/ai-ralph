@@ -44,6 +44,9 @@ alias rpx.wt.merge='ralph-codex --merge-strategy merge'
 alias rpx.wt.rebase='ralph-codex --merge-strategy rebase'
 alias rpx.wt.nogate='ralph-codex --quality-gates none'
 
+# Quality gate fix mode (retry loop to fix failing gates)
+alias rpx.qg='ralph-codex --qg'
+
 # Auto-exit control
 alias rpx.autoexit='ralph-codex --codex-auto-exit'
 alias rpx.int='ralph-codex --no-codex-auto-exit'

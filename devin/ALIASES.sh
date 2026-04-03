@@ -42,6 +42,9 @@ alias rpd.wt.merge='ralph-devin --merge-strategy merge'
 alias rpd.wt.rebase='ralph-devin --merge-strategy rebase'
 alias rpd.wt.nogate='ralph-devin --quality-gates none'
 
+# Quality gate fix mode (retry loop to fix failing gates)
+alias rpd.qg='ralph-devin --qg'
+
 # Interactive (TUI) mode - Devin runs without -p flag, shows its TUI
 alias rpd.int='ralph-devin --no-devin-auto-exit'
 alias rpd.wt.int='ralph-devin --no-devin-auto-exit --live --monitor'
