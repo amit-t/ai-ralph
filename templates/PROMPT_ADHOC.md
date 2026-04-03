@@ -29,6 +29,9 @@ The user has described a bug, feature, or task in a **single line**. Your job is
 Insert the new entry under `## Ad-hoc` section (create it if it doesn't exist, place it before `## Completed`).
 For bugs, you may also insert under `## High Priority` if that section exists.
 
+**IMPORTANT: Task ID Assignment**
+You will receive a pre-assigned task ID (e.g. `AH01`, `AH03`). You MUST use this exact ID as a bold markdown prefix on the **first subtask line** of the entry. This ID is how the user will reference and execute the task later (e.g. `ralph --task AH01`).
+
 Each entry should follow this format:
 
 ```markdown
@@ -38,11 +41,16 @@ Each entry should follow this format:
 > Source: ad-hoc | Added: [current date]
 > Original: "user's one-liner description"
 
-- [ ] Investigate: [describe what to look at first - specific files/modules]
+- [ ] **AH01** Investigate: [describe what to look at first - specific files/modules]
 - [ ] Fix/Implement: [the core change needed]
 - [ ] Test: [what tests to write or run]
 - [ ] Verify: [how to confirm the fix works]
 ```
+
+**Rules for the task ID:**
+- Place `**AHXX**` (the exact ID you were given) as a bold prefix on the FIRST subtask line only
+- The remaining subtask lines do NOT get a task ID prefix
+- Do NOT invent your own ID -- use the one provided in the prompt
 
 ### Guidelines for Subtask Breakdown
 - **Investigate** - Always start with an investigation step referencing specific files
@@ -68,11 +76,13 @@ FILES_MODIFIED: 1
 TESTS_STATUS: NOT_RUN
 WORK_TYPE: ADHOC_PLANNING
 EXIT_SIGNAL: true
-RECOMMENDATION: Ad-hoc task entry created in fix_plan.md
+TASK_ID: AH01
+RECOMMENDATION: Ad-hoc task entry created in fix_plan.md. Run: ralph --task AH01
 ---END_RALPH_STATUS---
 ```
 
 Ad-hoc mode ALWAYS exits after one pass. Set `EXIT_SIGNAL: true` always.
+Replace `AH01` in the TASK_ID and RECOMMENDATION fields with the actual task ID you were given.
 
 ## What NOT To Do
 - Do NOT modify any source code files

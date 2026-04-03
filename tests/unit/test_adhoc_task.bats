@@ -55,6 +55,95 @@ teardown() {
 }
 
 # =============================================================================
+# next_adhoc_id -- sequential task ID generation
+# =============================================================================
+
+@test "next_adhoc_id returns AH01 for empty fix_plan" {
+    mkdir -p .ralph
+    echo "# Fix Plan" > .ralph/fix_plan.md
+
+    run next_adhoc_id ".ralph/fix_plan.md"
+    assert_success
+    [[ "$output" == "AH01" ]]
+}
+
+@test "next_adhoc_id returns AH01 when fix_plan has no AH IDs" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md <<'EOF'
+# Fix Plan
+## High Priority
+- [ ] **R01** Some existing task
+- [x] **R02** Another task
+EOF
+
+    run next_adhoc_id ".ralph/fix_plan.md"
+    assert_success
+    [[ "$output" == "AH01" ]]
+}
+
+@test "next_adhoc_id increments from highest existing AH ID" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md <<'EOF'
+## Ad-hoc
+- [ ] **AH01** First adhoc task
+- [x] **AH02** Second adhoc task
+- [ ] **AH03** Third adhoc task
+EOF
+
+    run next_adhoc_id ".ralph/fix_plan.md"
+    assert_success
+    [[ "$output" == "AH04" ]]
+}
+
+@test "next_adhoc_id handles non-sequential IDs" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md <<'EOF'
+- [ ] **AH01** First
+- [ ] **AH05** Jumped ahead
+- [ ] **AH03** Out of order
+EOF
+
+    run next_adhoc_id ".ralph/fix_plan.md"
+    assert_success
+    [[ "$output" == "AH06" ]]
+}
+
+@test "next_adhoc_id returns AH01 for missing fix_plan file" {
+    run next_adhoc_id "/nonexistent/path/fix_plan.md"
+    assert_success
+    [[ "$output" == "AH01" ]]
+}
+
+@test "next_adhoc_id returns AH01 for empty path argument" {
+    run next_adhoc_id ""
+    assert_success
+    [[ "$output" == "AH01" ]]
+}
+
+@test "next_adhoc_id zero-pads single digit IDs" {
+    mkdir -p .ralph
+    echo "# Fix Plan" > .ralph/fix_plan.md
+
+    run next_adhoc_id ".ralph/fix_plan.md"
+    assert_success
+    # Should be AH01 not AH1
+    [[ "$output" == "AH01" ]]
+    [[ ${#output} -eq 4 ]]
+}
+
+@test "next_adhoc_id handles double-digit IDs" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md <<'EOF'
+- [ ] **AH09** Task nine
+- [ ] **AH10** Task ten
+EOF
+
+    run next_adhoc_id ".ralph/fix_plan.md"
+    assert_success
+    [[ "$output" == "AH11" ]]
+}
+
+# =============================================================================
 # run_adhoc_task -- engine validation
 # =============================================================================
 
@@ -289,4 +378,18 @@ teardown() {
     [[ "$output" == *"## Ad-hoc"* ]]
     [[ "$output" == *"BUG"* ]]
     [[ "$output" == *"FEAT"* ]]
+}
+
+@test "PROMPT_ADHOC.md contains task ID assignment instructions" {
+    run cat "$TEMPLATES_DIR/PROMPT_ADHOC.md"
+    assert_success
+    [[ "$output" == *"Task ID Assignment"* ]]
+    [[ "$output" == *"**AH01**"* ]]
+    [[ "$output" == *"ralph --task"* ]]
+}
+
+@test "PROMPT_ADHOC.md RALPH_STATUS includes TASK_ID field" {
+    run cat "$TEMPLATES_DIR/PROMPT_ADHOC.md"
+    assert_success
+    [[ "$output" == *"TASK_ID:"* ]]
 }

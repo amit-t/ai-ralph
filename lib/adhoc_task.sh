@@ -17,6 +17,30 @@ _ADHOC_PURPLE='\033[0;35m'
 _ADHOC_CYAN='\033[0;36m'
 _ADHOC_NC='\033[0m'
 
+# next_adhoc_id [fix_plan_path]
+# Scans fix_plan.md for existing **AHxx** task IDs and returns the next
+# sequential one.  First ad-hoc entry gets AH01.
+# Outputs the new ID to stdout (e.g. "AH03").
+next_adhoc_id() {
+    local fix_plan="${1:-}"
+    local max_num=0
+
+    if [[ -n "$fix_plan" ]] && [[ -f "$fix_plan" ]]; then
+        # Extract all AH<number> IDs from bold markdown **AHxx** patterns
+        local nums
+        nums=$(grep -oE '\*\*AH([0-9]+)\*\*' "$fix_plan" 2>/dev/null \
+               | sed 's/\*\*AH//;s/\*\*//' \
+               | sort -n | tail -1)
+        if [[ -n "$nums" ]]; then
+            # Strip leading zeros for arithmetic
+            max_num=$((10#$nums))
+        fi
+    fi
+
+    local next=$((max_num + 1))
+    printf "AH%02d" "$next"
+}
+
 # find_fix_plan_for_adhoc
 # Walks upward from CWD looking for .ralph/fix_plan.md.
 # Prints the absolute path on success (exit 0).
@@ -159,7 +183,11 @@ run_adhoc_task() {
         prompt_template=$(cat "$script_dir/templates/PROMPT_ADHOC.md")
     fi
 
-    # 7. Build the prompt
+    # 7. Generate a unique task ID for this entry
+    local task_id=""
+    task_id=$(next_adhoc_id "$fix_plan_path")
+
+    # 8. Build the prompt
     local prompt=""
     if [[ -n "$prompt_template" ]]; then
         prompt="$prompt_template"
@@ -172,6 +200,11 @@ Your job is to analyze the codebase, understand the issue, and create a structur
     prompt+="
 
 ---
+
+## Assigned Task ID: $task_id
+
+**You MUST use \`**${task_id}**\` as a bold markdown prefix on the first subtask line of the entry you create.**
+This is how the user will run this task later: \`ralph --task $task_id\`
 
 ## Ad-hoc Task Input
 
@@ -211,12 +244,13 @@ $fix_plan_contents
 2. Analyze what the root cause might be and what changes are needed
 3. Create a detailed, actionable task entry (or section) in \`$fix_plan_path\`
 4. The entry should include subtasks that break down the fix into concrete steps
-5. Place it under an appropriate priority section (High Priority for bugs, or create a new ad-hoc section)
-6. Preserve ALL existing content in fix_plan.md -- only append or insert your new entry"
+5. **Prefix the FIRST subtask line with \`**${task_id}**\`** (bold markdown)
+6. Place it under an appropriate priority section (High Priority for bugs, or create a new ad-hoc section)
+7. Preserve ALL existing content in fix_plan.md -- only append or insert your new entry"
 
-    # 8. Invoke engine in interactive (TUI) mode
+    # 9. Invoke engine in interactive (TUI) mode
     echo "" >&2
-    echo -e "${_ADHOC_BLUE}Engine: $engine | Task: $task_description${_ADHOC_NC}" >&2
+    echo -e "${_ADHOC_BLUE}Engine: $engine | Task: $task_description | ID: $task_id${_ADHOC_NC}" >&2
     echo -e "${_ADHOC_BLUE}Launching $engine to analyze and create fix_plan entry...${_ADHOC_NC}" >&2
     echo "" >&2
 
@@ -267,14 +301,24 @@ $fix_plan_contents
 
     # Report result
     if [[ $cli_exit_code -eq 0 ]]; then
+        # Verify the task ID landed in fix_plan.md
+        local confirmed_id="$task_id"
+        if [[ -f "$fix_plan_path" ]] && grep -qF "**${task_id}**" "$fix_plan_path" 2>/dev/null; then
+            confirmed_id="$task_id"
+        fi
+
         echo "" >&2
         echo -e "${_ADHOC_GREEN}Ad-hoc task entry created successfully!${_ADHOC_NC}" >&2
+        echo -e "${_ADHOC_GREEN}Task ID: ${confirmed_id}${_ADHOC_NC}" >&2
         echo -e "${_ADHOC_GREEN}Review: $fix_plan_path${_ADHOC_NC}" >&2
         echo "" >&2
         echo "Next steps:" >&2
         echo "  1. Review the new entry in $fix_plan_path" >&2
-        echo "  2. Run 'ralph --monitor' to start execution" >&2
-        echo "  3. Or run a specific task: rpc.task <number>" >&2
+        echo "  2. Run the task: ralph --task $confirmed_id" >&2
+        echo "  3. Or start the full loop: ralph --monitor" >&2
+
+        # Output task ID to stdout (machine-readable, pipe-friendly)
+        echo "$confirmed_id"
     else
         echo "" >&2
         echo -e "${_ADHOC_RED}Ad-hoc task creation failed (exit code: $cli_exit_code).${_ADHOC_NC}" >&2
