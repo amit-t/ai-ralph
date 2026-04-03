@@ -932,6 +932,7 @@ Uninstalling one engine does not affect the others.
 - **Automatic dependency installation** in worktrees -- detects package manager, installs before quality gates
 - **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection and multi-engine support
+- **Ad-hoc task mode** (`ralph-plan --adhoc`) for quick bug/task entry into `fix_plan.md` via AI
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Intelligent exit detection** -- dual-condition gate requiring BOTH completion indicators AND explicit EXIT_SIGNAL
 - **Circuit breaker** with cooldown timer, auto-recovery, and configurable thresholds
@@ -945,7 +946,14 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Task ID Selection** (latest)
+**Ad-hoc Task Mode** (latest)
+- `ralph-plan --adhoc` for quick one-liner bug/task entry into `fix_plan.md`
+- Interactive prompt or inline description: `rpc.adhoc "Login broken on iOS"`
+- AI analyzes codebase and creates structured `fix_plan.md` entry with subtasks
+- Works across all 3 engines: `rpc.adhoc`, `rpx.adhoc`, `rpd.adhoc`
+- Supports `--yolo` and `--superpowers` flags (Claude only)
+
+**Task ID Selection**
 - Support task ID selection via `--task R05` with bold markdown ID matching
 - Case-insensitive matching for task IDs
 
@@ -964,9 +972,14 @@ Uninstalling one engine does not affect the others.
 - `ralph-plan --status` to show current fix_plan.md progress
 - `rpc.plan.s` / `rpd.plan.s` / `rpx.plan.s` aliases
 
-**Quality Gate Fixes**
-- Correct misleading ERROR message on quality gate failure
-- Auto-create quality-gate labels on PRs
+**Quality Gate Retry**
+- When quality gates fail, Ralph re-invokes the AI engine with **subagent instructions** to fix failures before creating a PR
+- The fix prompt instructs the AI to spawn one subagent per failing gate for parallel fixing
+- For Claude: `Task` tool is temporarily enabled during QG fix invocations
+- Up to `MAX_QG_RETRIES` (default: 3) fix attempts per execution
+- Full error output from failed gates is included in the fix prompt
+- PR is only created after gates pass or all retries are exhausted
+- Failed PRs get `quality-gates-failed` label
 
 **PR Creation & Worktree Integration**
 - Automatic PR creation after successful quality gates

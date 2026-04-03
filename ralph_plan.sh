@@ -11,7 +11,7 @@
 #   --engine <name>    AI engine: claude (default), codex, devin
 #   --help             Show help
 #
-# Version: 0.3.0
+# Version: 0.4.0
 
 set -e
 
@@ -31,6 +31,8 @@ PRD_DIR=""
 PM_OS_DIR=""
 DOE_OS_DIR=""
 STATUS_MODE=false
+ADHOC_MODE=false
+ADHOC_DESCRIPTION=""
 
 # Engine selection: claude (default), codex, devin
 ENGINE="claude"
@@ -94,6 +96,8 @@ Options:
     --superpowers      Load obra/superpowers plugin (Claude only, auto-cloned)
     --sup              Alias for --superpowers
     --status           Show AI-powered fix plan status and insights (no planning runs)
+    --adhoc [desc]     Ad-hoc task mode: describe a bug/task, AI creates fix_plan entry
+                       If desc is omitted, prompts interactively
     -h, --help         Show this help
 
 Examples:
@@ -106,6 +110,9 @@ Examples:
     ralph-plan --pm-os ../product/my-pm-os --doe-os ../engineering/my-doe-os
     ralph-plan --status                         # AI fix plan status (Claude, default)
     ralph-plan --engine codex --status          # AI fix plan status via Codex
+    ralph-plan --adhoc                          # Interactive ad-hoc task (prompts for desc)
+    ralph-plan --adhoc "Login broken on mobile" # Ad-hoc with inline description
+    ralph-plan --engine devin --adhoc           # Ad-hoc via Devin engine
 
 PM-OS / DoE-OS Auto-Detection:
     When Ralph is not enabled in the current directory (no .ralph/ folder),
@@ -661,6 +668,16 @@ parse_args() {
                 STATUS_MODE=true
                 shift
                 ;;
+            --adhoc)
+                ADHOC_MODE=true
+                # Optional inline description: consume next arg if it doesn't look like a flag
+                if [[ $# -ge 2 ]] && [[ "$2" != --* ]]; then
+                    ADHOC_DESCRIPTION="$2"
+                    shift 2
+                else
+                    shift
+                fi
+                ;;
             --yolo)
                 YOLO_MODE=true
                 shift
@@ -685,13 +702,20 @@ parse_args() {
 main() {
     parse_args "$@"
 
-    # Status mode: AI-powered fix plan analysis — exits before any planning
+    # Status mode: AI-powered fix plan analysis -- exits before any planning
     # Note: ralph_plan.sh has `set -e`. Using `|| exit $?` disarms set -e for this
     # line so we can capture the exit code explicitly rather than relying on set -e
     # to exit on non-zero (which would work but is fragile if set -e is ever changed).
     if [[ "$STATUS_MODE" == true ]]; then
         source "$SCRIPT_DIR/lib/fix_plan_status.sh"
         show_fix_plan_status "$ENGINE" || exit $?
+        exit 0
+    fi
+
+    # Ad-hoc mode: interactive one-liner to fix_plan entry -- exits before any planning
+    if [[ "$ADHOC_MODE" == true ]]; then
+        source "$SCRIPT_DIR/lib/adhoc_task.sh"
+        run_adhoc_task "$ENGINE" "$ADHOC_DESCRIPTION" "$YOLO_MODE" "$SUPERPOWERS" "$SUPERPOWERS_PLUGIN_DIR" || exit $?
         exit 0
     fi
 

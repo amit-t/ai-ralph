@@ -584,6 +584,104 @@
 
     body.dark .change-hash { color: var(--muted-dark); }
 
+    /* ===== COLLAPSIBLE CHANGE DETAILS ===== */
+    .change-item[data-has-detail] {
+      cursor: pointer;
+      flex-wrap: wrap;
+    }
+
+    .change-toggle {
+      flex-shrink: 0;
+      width: 18px;
+      text-align: center;
+      font-size: 0.55rem;
+      color: var(--muted-light);
+      transition: transform 0.2s ease;
+      user-select: none;
+      line-height: 1.6;
+    }
+
+    body.dark .change-toggle { color: var(--muted-dark); }
+
+    .change-item.expanded .change-toggle {
+      transform: rotate(90deg);
+    }
+
+    .change-detail {
+      flex-basis: 100%;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease-out, opacity 0.2s ease;
+      opacity: 0;
+      padding-left: calc(70px + 0.75rem);
+    }
+
+    .change-item.expanded .change-detail {
+      max-height: 800px;
+      opacity: 1;
+    }
+
+    .change-detail-inner {
+      border-left: 3px solid var(--electric-blue);
+      padding: 0.6rem 0 0.4rem 1rem;
+      margin-top: 0.4rem;
+    }
+
+    body.dark .change-detail-inner {
+      border-left-color: #6ea8ff;
+    }
+
+    .change-detail h4 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0.65rem 0 0.25rem;
+      color: var(--hot-pink);
+    }
+
+    body.dark .change-detail h4 { color: #ff66f9; }
+
+    .change-detail h4:first-child { margin-top: 0; }
+
+    .change-detail ul {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+
+    .change-detail ul li {
+      margin-bottom: 0.2rem;
+      padding: 0;
+      border-bottom: none;
+      display: list-item;
+    }
+
+    .change-detail ul li:hover {
+      background: none;
+      transform: none;
+    }
+
+    .change-detail pre {
+      margin: 0.4rem 0 0;
+      padding: 0.55rem 0.75rem;
+      background: rgba(0,0,0,0.04);
+      border: 2px solid var(--border-light);
+      overflow-x: auto;
+      font-size: 0.76rem;
+      line-height: 1.5;
+      white-space: pre;
+    }
+
+    body.dark .change-detail pre {
+      background: rgba(255,255,255,0.05);
+      border-color: var(--border-dark);
+    }
+
+    @media (max-width: 640px) {
+      .change-detail { padding-left: 0; }
+      .change-detail-inner { padding-left: 0.75rem; }
+    }
+
     /* ===== GROUP TITLES ===== */
     .change-group-title {
       font-size: 0.82rem;
@@ -989,7 +1087,7 @@
         </span>
         <span class="badge badge-green">
           <svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
-          602 Tests Passing
+          649 Tests Passing
         </span>
         <span class="badge badge-orange">
           <svg viewBox="0 0 16 16"><path d="M8.75 1.75a.75.75 0 00-1.5 0V5H4a.75.75 0 000 1.5h3.25v3.25a.75.75 0 001.5 0V6.5H12A.75.75 0 0012 5H8.75V1.75z"/></svg>
@@ -1023,7 +1121,7 @@
         <span class="stat-label">Libraries</span>
       </div>
       <div class="stat-card">
-        <span class="stat-value">602</span>
+        <span class="stat-value">649</span>
         <span class="stat-label">Tests</span>
       </div>
     </div>
@@ -1090,6 +1188,10 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Ad-hoc mode returns task ID (e.g. <strong>AH01</strong>) for use with <code>--task</code> flag; stdout-only output enables piping</span><span class="change-hash">32f7cae</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">planning:</span> Ad-hoc task mode &mdash; <code>ralph-plan --adhoc</code> for quick bug/task entry into <code>fix_plan.md</code> via AI across all 3 engines</span><span class="change-hash">47a6c49</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> Quality gate retry uses subagents &mdash; one per failing gate for parallel fixing; <code>Task</code> tool temporarily enabled for Claude</span><span class="change-hash">514bff8</span></li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">qg:</span> Quality gate retry loop &mdash; re-invoke AI to fix failures before PR creation with <code>MAX_QG_RETRIES</code> config</span><span class="change-hash">47a3a02</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text"><span class="change-scope">summary:</span> Display session/conversation ID in execution summary</span><span class="change-hash">71c7aac</span></li>
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span class="change-text">Update Codex CLI flags to <code>--dangerously-bypass-approvals-and-sandbox</code></span><span class="change-hash">75084be</span></li>
       </ul>
@@ -1437,7 +1539,7 @@
       <a href="https://github.com/amit-t/ai-ralph">AI Ralph</a> &mdash;
       Inspired by the <a href="https://ghuntley.com/ralph/">Ralph technique</a> by Geoffrey Huntley
     </p>
-    <p style="margin-top: 0.5rem; opacity: 0.6;">Last updated: April 2, 2026</p>
+    <p style="margin-top: 0.5rem; opacity: 0.6;">Last updated: April 3, 2026</p>
   </footer>
 
   <script>
@@ -1490,7 +1592,7 @@
 
         items.forEach(item => {
           const type = item.getAttribute('data-type');
-          const text = item.textContent.toLowerCase();
+          const text = (item.querySelector('.change-text') || item).textContent.toLowerCase();
           const typeMatch = activeFilter === 'all' || type === activeFilter;
           const searchMatch = !query || text.includes(query);
           const visible = typeMatch && searchMatch;
@@ -1532,6 +1634,1058 @@
     // Stagger animation
     sections.forEach((s, i) => {
       s.style.animationDelay = `${i * 0.06}s`;
+    });
+
+    /* ===== COLLAPSIBLE CHANGE DETAILS ===== */
+    // Detail data keyed by section data-version → item index
+    const CHANGE_DETAILS = {
+      'latest': {
+        0: {
+          how: [
+            '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
+            'The task ID is pre-generated before AI invocation and injected into the prompt',
+            'The AI is instructed to prefix the first subtask line with <strong>AH01</strong> (bold markdown)',
+            'On success, the task ID is output to stdout (all human-readable messages go to stderr)'
+          ],
+          usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
+        },
+        1: {
+          how: [
+            '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
+            'Prompts for a one-liner task description (interactive or inline via argument)',
+            'Detects project type from config files (package.json, Cargo.toml, etc.)',
+            'Builds prompt from <code>PROMPT_ADHOC.md</code> template with codebase context and AGENT.md build instructions',
+            'Invokes the AI engine in TUI mode to analyze and create a structured <code>fix_plan.md</code> entry with subtasks'
+          ],
+          usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
+        },
+        2: {
+          how: [
+            '<code>worktree_build_qg_fix_prompt()</code> generates a focused prompt with failed gate commands and full error output',
+            'Prompt includes a <strong>subagent strategy</strong> section instructing the AI to spawn one subagent per failing gate',
+            'For Claude: <code>Task</code> tool temporarily added to <code>CLAUDE_ALLOWED_TOOLS</code> (saved and restored after)',
+            'For Codex/Devin: subagent access already available via <code>--permission-mode dangerous</code>',
+            'Single-gate failures use a single subagent; multi-gate failures spawn parallel subagents'
+          ],
+          usage: '# Automatic during quality gate retry \u2014 no user action needed\n# Configure max attempts in .ralphrc:\nMAX_QG_RETRIES=3'
+        },
+        3: {
+          how: [
+            'After initial AI execution, if quality gates (lint/test/build) fail, Ralph re-invokes the AI with focused error context',
+            'Quality gates are re-run after each fix attempt',
+            'Pass \u2192 PR is created with success status',
+            'Fail after <code>MAX_QG_RETRIES</code> (default: 3) \u2192 PR is created with <code>quality-gates-failed</code> label'
+          ],
+          usage: '# Automatic \u2014 runs after every worktree execution\n# Configure in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts before failure PR'
+        },
+        4: {
+          how: [
+            'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
+            'Helps correlate loop iterations with Claude conversation context'
+          ],
+          usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
+        },
+        5: {
+          how: [
+            'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
+            'Matches the latest Codex CLI API naming convention'
+          ],
+          usage: '# Transparent \u2014 applied automatically when using Codex engine\nrpx        # uses updated flag\nrpx.danger # explicit dangerous mode'
+        }
+      },
+
+      'task-id-selection': {
+        0: {
+          how: [
+            '<code>--task</code> flag accepts bold markdown IDs (e.g. <strong>**R05**</strong>) with case-insensitive matching',
+            'Scans <code>fix_plan.md</code> for lines containing the bold ID pattern',
+            'Supports both numeric indices and string IDs'
+          ],
+          usage: '# By task ID\nrpc.task R05\nrpd.task AH01\n\n# By numeric index\nrpc.task 3'
+        }
+      },
+
+      'task-selection': {
+        0: {
+          how: [
+            'Parses <code>fix_plan.md</code> to find task by number or bold ID',
+            'Marks the target task as in-progress with <code>[~]</code>',
+            'Builds a focused prompt containing only that task\'s context and subtasks'
+          ],
+          usage: '# Execute task #3\nrpc.task 3\nrpd.task 5\n\n# Interactive mode\nrpc.task.int 3'
+        },
+        1: {
+          how: [
+            'Records the git SHA (<code>.loop_start_sha</code>) before AI execution',
+            'After execution, compares HEAD and working tree state via <code>git diff --stat</code>',
+            'Reports files changed, insertions, and deletions in execution summary'
+          ],
+          usage: '# Automatic \u2014 summary displayed after each task execution\n# Example output:\n# 3 files changed, 42 insertions(+), 8 deletions(-)'
+        },
+        2: {
+          how: [
+            'After AI execution, runs <code>git diff --stat</code> to count files changed, lines added, and lines removed',
+            'Displays a formatted summary with change counts'
+          ],
+          usage: '# Automatic \u2014 shown after every task execution'
+        },
+        3: {
+          how: [
+            'If git shows no changes after AI execution, reverts the <code>[~]</code> in-progress marker back to <code>[ ]</code> in <code>fix_plan.md</code>',
+            'Allows the task to be retried on the next loop iteration'
+          ],
+          usage: '# Automatic \u2014 no-change tasks are silently reverted for retry'
+        },
+        4: {
+          how: [
+            'Detects package manager from lock files: <code>package-lock.json</code> \u2192 npm, <code>yarn.lock</code> \u2192 yarn, <code>pnpm-lock.yaml</code> \u2192 pnpm, <code>bun.lockb</code> \u2192 bun',
+            'Runs the detected package manager\'s install command inside the worktree before AI execution'
+          ],
+          usage: '# Automatic in worktree mode\n# Ensures fresh dependencies in isolated worktrees'
+        },
+        5: {
+          how: [
+            'Documents task-specific execution, change detection, and dependency installation in README'
+          ]
+        }
+      },
+
+      'gitignore': {
+        0: {
+          how: [
+            'Instead of copying a template <code>.gitignore</code>, appends Ralph-specific entries (<code>.ralph/logs/</code>, <code>.ralph/.*</code>, etc.) to existing <code>.gitignore</code>',
+            'Preserves all user\'s existing content in the file',
+            'Idempotent \u2014 does not duplicate entries if run multiple times'
+          ],
+          usage: '# Automatic during ralph-setup and ralph-enable\n# No user action needed'
+        }
+      },
+
+      'fix-plan-status': {
+        0: {
+          how: [
+            '<code>find_fix_plan()</code> walks up directories to locate <code>.ralph/fix_plan.md</code>',
+            '<code>show_fix_plan_status()</code> parses checkbox items (<code>[x]</code>, <code>[ ]</code>, <code>[~]</code>) and displays a progress bar with counts'
+          ],
+          usage: 'ralph-plan --status\nrpc.plan.s'
+        },
+        1: {
+          how: [
+            'Adds <code>--status</code> flag to <code>ralph_plan.sh</code>',
+            'Calls <code>show_fix_plan_status()</code> to display task completion progress with a visual bar'
+          ],
+          usage: 'ralph-plan --status'
+        },
+        2: {
+          how: [
+            'Adds engine-specific aliases that map to <code>ralph-plan --status</code> with the appropriate <code>--engine</code> flag'
+          ],
+          usage: 'rpc.plan.s   # Claude\nrpx.plan.s   # Codex\nrpd.plan.s   # Devin'
+        },
+        3: {
+          how: [
+            'Complete README rewrite covering the multi-engine fork, all aliases, and full configuration reference'
+          ]
+        },
+        4: {
+          how: [
+            'TDD approach \u2014 writes failing tests for <code>fix_plan_status</code> library before implementation'
+          ]
+        }
+      },
+
+      'quality-gates': {
+        0: {
+          how: [
+            'Corrects misleading <code>ERROR</code> prefix on quality gate failure messages to use <code>WARN</code>',
+            'Auto-creates the <code>quality-gates-failed</code> GitHub label via <code>gh label create</code> if it doesn\'t already exist'
+          ],
+          usage: '# Transparent \u2014 better error messages during PR creation'
+        }
+      },
+
+      'pr-creation': {
+        0: {
+          how: [
+            '<code>pr_preflight_check()</code> validates git remote reachability, <code>gh</code> CLI availability, and GitHub authentication status',
+            '<code>build_pr_title()</code> and <code>build_pr_description()</code> generate PR metadata from the fix_plan task and execution summary'
+          ],
+          usage: '# Automatic during worktree PR creation\n# Validates before attempting push'
+        },
+        1: {
+          how: [
+            'Commits all changes in the worktree with a descriptive message',
+            'Pushes to a remote branch named after the worktree',
+            'Creates PR via <code>gh pr create</code> with auto-generated title and description linking back to the fix_plan task'
+          ],
+          usage: '# Automatic after successful quality gates in worktree mode'
+        },
+        2: {
+          how: [
+            'When quality gates fail after all retries, creates a PR on a separate branch',
+            'PR is tagged with <code>quality-gates-failed</code> label so reviewers know gates didn\'t pass'
+          ],
+          usage: '# Automatic when QG fails after MAX_QG_RETRIES attempts'
+        },
+        3: {
+          how: [
+            'Adds auto-PR configuration templates to Codex and Devin engine variants',
+            'All three engines (Claude, Codex, Devin) now create PRs automatically after worktree execution'
+          ],
+          usage: '# Automatic \u2014 works with all engines:\nrpc.wt.full   # Claude\nrpx.wt.full   # Codex\nrpd.wt.full   # Devin'
+        },
+        4: {
+          how: [
+            'Removes the interactive "merge to main?" prompt from the main loop',
+            'Replaces it with automatic PR creation via GitHub \u2014 merge decisions happen via PR review'
+          ],
+          usage: '# No more interactive prompts \u2014 PRs are created automatically'
+        },
+        5: {
+          how: [
+            'When <code>gh</code> CLI is not available or not authenticated, generates a GitHub compare URL as fallback',
+            'Opens the compare URL for manual PR creation'
+          ],
+          usage: '# Automatic fallback \u2014 compare URL printed to terminal'
+        },
+        6: {
+          how: [
+            'Re-enables interactive TUI mode for Devin and Codex engines',
+            'Users can see AI reasoning and interact during execution'
+          ],
+          usage: 'rpd.int       # Devin interactive\nrpx.int       # Codex interactive\nrpd.wt.int    # Devin interactive + worktree'
+        },
+        7: {
+          how: [
+            'Monitors Devin/Codex output stream for RALPH_STATUS block',
+            'On detection, automatically exits the interactive session and proceeds to PR creation/cleanup'
+          ],
+          usage: '# Default in auto-exit mode\n# Disable with:\nrpd.int    # --no-devin-auto-exit\nrpx.int    # --no-codex-auto-exit'
+        },
+        8: {
+          how: [
+            'Adds engine-specific enable aliases (<code>rpc.enable</code>, <code>rpd.enable</code>, <code>rpx.enable</code>)',
+            '<code>rp.install</code> meta-alias chains all three engine installers sequentially'
+          ],
+          usage: 'rp.install     # install all 3 engines\nrpc.install    # Claude only\nrpd.install    # Devin only\nrpx.install    # Codex only'
+        },
+        9: {
+          how: [
+            'Adds explicit error capture on <code>git push</code> with stderr forwarding',
+            'Runs remote reachability check (<code>git ls-remote</code>) before push to surface network issues early'
+          ],
+          usage: '# Transparent \u2014 better error messages when push fails'
+        },
+        10: {
+          how: [
+            'Traps SIGINT in interactive mode so Ctrl+C exits the AI session cleanly',
+            'PR creation and worktree cleanup steps still run after the interrupt'
+          ],
+          usage: '# Press Ctrl+C during interactive session \u2014 cleanup still runs'
+        },
+        11: {
+          how: [
+            'When <code>ralph-enable</code> is run on an already-enabled project, preserves existing <code>fix_plan.md</code>',
+            'Only template files (PROMPT.md, AGENT.md) are overwritten; work progress is protected'
+          ],
+          usage: 'ralph-enable --force   # overwrites templates but keeps fix_plan.md'
+        },
+        12: {
+          how: [
+            'Ensures <code>~/.ralph/lib</code> directory exists before copying shared library files during installation',
+            'Prevents "No such file or directory" errors on fresh systems'
+          ],
+          usage: '# Transparent \u2014 fixes installation on fresh systems'
+        },
+        13: {
+          how: [
+            'Replaces the while-loop architecture with a single-run model for all engines',
+            'Each invocation executes one task and exits \u2014 external orchestration handles looping'
+          ],
+          usage: '# Same CLI interface \u2014 internal architecture change only'
+        }
+      },
+
+      'parallel-worktree': {
+        0: {
+          how: [
+            'Spawns N AI agents in parallel, each in an isolated git worktree',
+            'Agents pick unclaimed tasks from <code>fix_plan.md</code> using atomic file locking',
+            'Each worktree gets a copy of <code>.ralph/</code> configuration'
+          ],
+          usage: 'rpc.int.p 3      # 3 parallel Claude agents\nrpd.p 4          # 4 parallel Devin agents\nrpx.int.p 2      # 2 parallel Codex agents'
+        },
+        1: {
+          how: [
+            'Detects IDE environment (VS Code, Windsurf, Cursor) from environment variables',
+            'Opens parallel agents in new terminal tabs within the IDE instead of separate windows'
+          ],
+          usage: '# Automatic detection \u2014 agents appear as tabs in your IDE terminal'
+        },
+        2: {
+          how: [
+            'Runs parallel agents as background processes in any terminal',
+            'Does not require IDE terminal tabs or tmux \u2014 works in plain terminals'
+          ],
+          usage: 'rpc.int.p.b 3    # 3 background Claude agents\nrpd.p.b 4        # 4 background Devin agents'
+        },
+        3: {
+          how: [
+            '<code>pick_next_task()</code> uses <code>flock</code>-based atomic locking to prevent race conditions',
+            'Acquires lock, marks next unclaimed <code>[ ]</code> task as in-progress <code>[~]</code>, releases lock',
+            'Multiple agents safely claim different tasks simultaneously'
+          ],
+          usage: '# Automatic in parallel mode \u2014 no user action needed'
+        },
+        4: {
+          how: [
+            'Copies full <code>.ralph/</code> directory into each worktree',
+            'Injects worktree-specific context (branch name, directory) into PROMPT.md'
+          ],
+          usage: '# Automatic \u2014 worktrees get complete Ralph configuration'
+        },
+        5: {
+          how: [
+            'After successful merge, marks the completed task as <code>[x]</code> in main branch\'s <code>fix_plan.md</code>',
+            'Syncs task status between worktree and main to prevent re-execution'
+          ],
+          usage: '# Automatic after merge \u2014 fix_plan.md stays in sync'
+        },
+        6: {
+          how: [
+            'After worktree execution, prompts "Merge to main? [y/n]" before integrating changes',
+            'Gives user control over when worktree changes are merged'
+          ],
+          usage: '# Interactive prompt in worktree mode\n# Answer y (merge) or n (keep branch)'
+        },
+        7: {
+          how: [
+            'Separates worktree CWD directive from loop context injection',
+            'Ensures agents operate in their worktree directory, not the main branch directory'
+          ],
+          usage: '# Transparent \u2014 fixes a critical bug where agents modified main instead of worktree'
+        },
+        8: {
+          how: [
+            '<code>pick_next_task()</code> uses <code>flock</code>-based atomic locking on <code>fix_plan.md</code>',
+            'Prevents duplicate task execution when multiple agents run simultaneously'
+          ],
+          usage: '# Transparent \u2014 prevents race conditions in parallel mode'
+        },
+        9: {
+          how: [
+            'Uses iTerm2\'s AppleScript API to open agents in tabs instead of separate windows',
+            'Provides a cleaner workspace with all agents visible in one window'
+          ],
+          usage: '# Automatic on macOS with iTerm2'
+        }
+      },
+
+      'planning-mode': {
+        0: {
+          how: [
+            'Reads PRD documents from a specified directory (interactive selection or <code>--prd-dir</code>)',
+            'Builds a focused prompt for the AI to analyze PRDs and generate structured <code>fix_plan.md</code> entries',
+            'Runs the AI engine in interactive TUI mode for visibility'
+          ],
+          usage: 'ralph-plan                        # interactive directory selection\nralph-plan --prd-dir ./docs/prds  # direct path\nrpc.plan                          # alias'
+        },
+        1: {
+          how: [
+            '<code>find_os_dir()</code> searches siblings (<code>../*-pm-os</code>) then cousins (<code>../../*/*-pm-os</code>)',
+            '<code>collect_pm_doe_sources()</code> gathers files from <code>outputs/prds</code>, <code>outputs/tdds</code>, <code>outputs/specs</code>',
+            'Auto-bootstraps <code>.ralph/</code> directory when not present'
+          ],
+          usage: '# Auto-detection (run from app dir without .ralph/)\nralph-plan\n\n# Explicit paths\nralph-plan --pm-os ../product/myapp-pm-os --doe-os ../eng/myapp-doe-os'
+        },
+        2: {
+          how: [
+            'Switches from background execution to interactive TUI mode',
+            'Users see AI reasoning in real-time during planning'
+          ],
+          usage: '# Automatic \u2014 ralph-plan always runs in interactive mode'
+        },
+        3: {
+          how: [
+            '<code>--yolo</code> adds <code>--dangerously-skip-permissions</code> to Claude CLI (bypasses ALL permission checks)',
+            '<code>--superpowers</code> loads <a class="change-issue" href="https://github.com/obra/superpowers">obra/superpowers</a> plugin via <code>--plugin-dir</code>',
+            'Plugin is auto-cloned on first use to <code>~/.claude/plugins/repos/superpowers</code>'
+          ],
+          usage: 'ralph-plan --yolo --superpowers\nrpc.plan.sup   # alias for --yolo --superpowers'
+        },
+        4: {
+          how: [
+            'Adds configurable timeout for Claude CLI execution during planning',
+            'Catches timeout exit code 124 gracefully instead of hanging indefinitely'
+          ],
+          usage: '# Transparent \u2014 prevents infinite hangs during planning'
+        }
+      },
+
+      'codex-engine': {
+        0: {
+          how: [
+            'Full Ralph for Codex implementation with complete feature parity to Claude engine',
+            'Uses Codex CLI with <code>--dangerously-bypass-approvals-and-sandbox</code> for auto mode',
+            'Parallel command structure matching Claude\'s architecture'
+          ],
+          usage: 'rpx            # start Codex loop\nrpx.live       # live streaming\nrpx.monitor    # tmux dashboard\nrpx.dev        # development mode'
+        },
+        1: {
+          how: [
+            '<code>--model</code> flag selects the model variant for Codex engine execution',
+            'Supports GPT-4, GPT-3.5, and Claude model options'
+          ],
+          usage: 'rpx.gpt4     # GPT-4\nrpx.gpt35    # GPT-3.5\nrpx.claude   # Claude model via Codex'
+        },
+        2: {
+          how: [
+            'Default mode auto-exits on RALPH_STATUS detection in output stream',
+            '<code>--no-codex-auto-exit</code> keeps the session open for interactive human-in-the-loop use'
+          ],
+          usage: 'rpx.int        # interactive TUI mode\nrpx.autoexit   # force auto-exit mode'
+        },
+        3: {
+          how: [
+            'Creates complete alias set for Codex engine mirroring Claude\'s <code>rpc.*</code> naming pattern',
+            'Covers all categories: basic, session, circuit breaker, config, model, worktree, interactive, workflow, task, management, planning'
+          ],
+          usage: 'rpx.live, rpx.monitor, rpx.plan, rpx.task N, rpx.dev, ...'
+        }
+      },
+
+      'devin-engine': {
+        0: {
+          how: [
+            'Adds Devin CLI as a third engine option alongside Claude and Codex',
+            'Parallel command structure matching the other engines\' architecture',
+            'Supports both local CLI and cloud session modes'
+          ],
+          usage: 'rpd            # start Devin loop\nrpd.live       # live streaming\nrpd.monitor    # tmux dashboard'
+        },
+        1: {
+          how: [
+            'Creates isolated git worktrees for Devin agent execution',
+            'Prevents interference with the main branch during development'
+          ],
+          usage: 'rpd              # worktree enabled by default\nrpd.nowt         # disable worktree isolation'
+        },
+        2: {
+          how: [
+            'Adds <code>--live</code> flag for real-time Devin output streaming',
+            'Max-loops limit prevents runaway execution'
+          ],
+          usage: 'rpd.live       # live streaming output\nrpd.hitl       # live + tmux monitor'
+        },
+        3: {
+          how: [
+            'Polls Devin cloud API for session status at configurable intervals',
+            'Tracks ACU (Agent Compute Units) usage against configured limits'
+          ],
+          usage: '# Automatic \u2014 monitors ACU consumption during cloud execution'
+        },
+        4: {
+          how: [
+            '<code>--model</code> flag selects the model variant: Opus, Sonnet, SWE, or GPT'
+          ],
+          usage: 'rpd.opus     # Opus model\nrpd.sonnet   # Sonnet model\nrpd.swe      # SWE model\nrpd.gpt      # GPT model'
+        },
+        5: {
+          how: [
+            '<code>--permission-mode auto</code> requires approval for destructive operations',
+            '<code>--permission-mode dangerous</code> skips all permission checks for fully autonomous execution'
+          ],
+          usage: 'rpd.safe     # auto-permission mode\nrpd.danger   # dangerous mode (skip permissions)'
+        },
+        6: {
+          how: [
+            'Syncs task status between beads (external task manager) and <code>fix_plan.md</code>',
+            'Changes in either direction are propagated automatically'
+          ],
+          usage: '# Automatic when beads are configured\nralph-check-beads   # verify beads integration'
+        },
+        7: {
+          how: [
+            'Keeps Devin interactive session open after execution instead of auto-exiting',
+            'Allows human-in-the-loop interaction during task execution'
+          ],
+          usage: 'rpd.int        # interactive TUI mode\nrpd.wt.int     # interactive + worktree + live + monitor'
+        },
+        8: {
+          how: [
+            'Creates complete alias set for Devin engine mirroring Claude\'s <code>rpc.*</code> naming pattern',
+            'Covers all categories: basic, session, circuit breaker, model, permission, worktree, interactive, workflow, task, management, planning'
+          ],
+          usage: 'rpd.live, rpd.plan, rpd.task N, rpd.dev, ...'
+        }
+      },
+
+      'upstream-sync': {
+        0: {
+          how: [
+            'Agent skill (<code>fork-sync</code>) automates syncing fork\'s main branch with upstream',
+            'Fetches upstream changes, detects conflicts, and resolves them intelligently'
+          ],
+          usage: '# Invoke from Claude Code as a skill\n# Syncs with frankbria/ralph-claude-code upstream'
+        },
+        1: {
+          how: [
+            'Merges upstream v0.11.5 changes into the fork\'s main branch',
+            'Includes all upstream fixes and improvements listed in the v0.11.5 section'
+          ]
+        }
+      },
+
+      'v0.11.5': {
+        0: {
+          how: [
+            'Parses Claude CLI streaming output for sub-agent events',
+            'Displays sub-agent names and progress in the tmux monitor pane'
+          ],
+          usage: '# Visible in tmux monitor when using --monitor flag\nralph --monitor'
+        },
+        1: {
+          how: [
+            'Catches broken-pipe errors from tmux pty disconnection',
+            'Prevents error spam when the monitor pane is closed mid-session'
+          ],
+          usage: '# Transparent \u2014 eliminates noisy error messages in tmux'
+        },
+        2: {
+          how: [
+            'Layer 4 of API limit detection: matches "You\'re out of extra usage" pattern',
+            'Uses the same noise filtering as Layer 3 to avoid false positives from echoed file content'
+          ],
+          usage: '# Automatic \u2014 Ralph auto-waits or prompts when Extra Usage quota is exhausted'
+        },
+        3: {
+          how: [
+            'Unconditionally resets <code>.exit_signals</code> and removes <code>.response_analysis</code> at startup',
+            'Prevents stale completion signals from a prior run (crash, SIGKILL, API-limit exit) from causing premature exit'
+          ],
+          usage: '# Transparent \u2014 prevents false exits after crashes or API-limit exits'
+        },
+        4: {
+          how: [
+            'On timeout (exit code 124), checks git for actual work done during execution',
+            'Files changed \u2192 productive timeout (returns 0, continues loop)',
+            'No files changed \u2192 idle timeout (returns 1, counts as error)'
+          ],
+          usage: '# Automatic \u2014 productive timeouts no longer break the loop'
+        },
+        5: {
+          how: [
+            'After exit code 0, reads <code>.is_error</code> from JSON output',
+            'If <code>true</code>: session is NOT persisted and is explicitly reset',
+            'Prevents infinite retry loops with bad session IDs (400 concurrency, 401 OAuth expiry)'
+          ],
+          usage: '# Transparent \u2014 protects session integrity on API errors'
+        },
+        6: {
+          how: [
+            'Replaces <code>set -e</code> throughout <code>ralph_loop.sh</code> with explicit error handling',
+            'Prevents unexpected script termination from non-zero exit codes in subcommands'
+          ],
+          usage: '# Transparent \u2014 more robust error handling throughout the loop'
+        }
+      },
+
+      'v0.11.0': {
+        0: {
+          how: [
+            '<code>QUESTION_PATTERNS</code> array matches common question indicators in Claude output',
+            '<code>detect_questions()</code> returns <code>asking_questions=true</code> with <code>question_count</code>',
+            'Suppresses circuit breaker no-progress counter to avoid false trips',
+            'Corrective guidance injected in the next loop iteration via <code>build_loop_context()</code>'
+          ],
+          usage: '# Automatic in headless mode\n# When Claude asks questions, Ralph injects guidance\n# to act autonomously instead'
+        },
+        1: {
+          how: [
+            'Multi-step interactive wizard with environment detection and task source selection',
+            'Supports importing from beads, GitHub Issues, or PRD documents',
+            'Generates <code>.ralphrc</code> project configuration and <code>.ralph/</code> directory'
+          ],
+          usage: 'cd my-project && ralph-enable\nralph-enable --from beads\nralph-enable --from github --label "sprint-1"\nralph-enable --from prd ./docs/requirements.md'
+        },
+        2: {
+          how: [
+            '<code>validate_claude_command()</code> checks if <code>CLAUDE_CODE_CMD</code> is available on the system',
+            'Displays clear error message with installation instructions if CLI is not found'
+          ],
+          usage: '# Automatic at startup \u2014 prevents confusing errors from missing CLI'
+        },
+        3: {
+          how: [
+            '<code>check_claude_version()</code> verifies minimum version (<code>CLAUDE_MIN_VERSION</code>)',
+            '<code>check_claude_updates()</code> queries npm registry for latest version',
+            'Uses <code>compare_semver()</code> for proper major\u2192minor\u2192patch comparison',
+            'Auto-updates via <code>npm update -g</code> (disable with <code>CLAUDE_AUTO_UPDATE=false</code>)'
+          ],
+          usage: '# Automatic at startup\n# Disable in .ralphrc:\nCLAUDE_AUTO_UPDATE=false'
+        },
+        4: {
+          how: [
+            'Diagnostic command verifying beads CLI installation, configuration, and connectivity with the project\'s bead store'
+          ],
+          usage: 'ralph-check-beads\nralph.check.beads   # alias'
+        },
+        5: {
+          how: [
+            'When previous loop\'s <code>asking_questions=true</code>, <code>build_loop_context()</code> injects a corrective message',
+            'Tells Claude to act autonomously and make decisions instead of asking questions'
+          ],
+          usage: '# Automatic \u2014 prevents question-only loops in headless mode'
+        },
+        6: {
+          how: [
+            'When <code>asking_questions=true</code>, <code>consecutive_no_progress</code> counter is held steady (not incremented)',
+            'Prevents circuit breaker from opening prematurely on question loops'
+          ],
+          usage: '# Transparent \u2014 prevents false circuit breaker trips'
+        },
+        7: {
+          how: [
+            'Redirects Claude CLI stderr to a separate file before JSON parsing',
+            'Prevents jq parse errors caused by stderr output mixing into the JSON stream'
+          ],
+          usage: '# Transparent \u2014 fixes live mode JSON parsing reliability'
+        },
+        8: {
+          how: [
+            'Writes <code>.call_count</code> immediately after each API call instead of only on success',
+            'Prevents counter reset if the script crashes mid-execution'
+          ],
+          usage: '# Transparent \u2014 more accurate rate limiting across crashes'
+        },
+        9: {
+          how: [
+            'Wraps API limit prompt timeout in a subshell so <code>set -e</code> doesn\'t kill the entire script',
+            'Allows the timeout to fail gracefully while the loop continues'
+          ],
+          usage: '# Transparent \u2014 prevents script death on API limit prompt timeout'
+        },
+        10: {
+          how: [
+            'Wraps GitHub/beads availability checks in conditional blocks',
+            'Non-zero exit codes from optional tool checks no longer trigger early wizard exit'
+          ],
+          usage: '# Transparent \u2014 enable wizard continues even when optional tools aren\'t installed'
+        }
+      },
+
+      'v0.10': {
+        0: {
+          how: [
+            '<strong>Layer 1:</strong> <code>ALLOWED_TOOLS</code> uses granular patterns to block destructive git commands',
+            '<strong>Layer 2:</strong> <code>PROMPT.md</code> includes "Protected Files" section listing <code>.ralph/</code> and <code>.ralphrc</code>',
+            '<strong>Layer 3:</strong> <code>validate_ralph_integrity()</code> checks required files before every loop iteration'
+          ],
+          usage: '# Automatic protection \u2014 no user action needed\n# Recovery if files deleted:\nralph-enable --force'
+        },
+        1: {
+          how: [
+            'After <code>CB_COOLDOWN_MINUTES</code> (default: 30) in OPEN state, transitions to HALF_OPEN',
+            'HALF_OPEN allows one attempt: progress \u2192 CLOSED, no progress \u2192 OPEN again',
+            '<code>CB_AUTO_RESET=true</code> bypasses cooldown and resets directly to CLOSED on startup'
+          ],
+          usage: '# Configure in .ralphrc:\nCB_COOLDOWN_MINUTES=30\nCB_AUTO_RESET=false\n\n# CLI flag for single run:\nralph --auto-reset-circuit'
+        },
+        2: {
+          how: [
+            'Uses <code>--output-format stream-json</code> for real-time Claude Code output',
+            'Pipes through a filter that displays formatted content as it streams'
+          ],
+          usage: 'ralph --live\nrpc.live'
+        },
+        3: {
+          how: [
+            'Parses <code>permission_denials</code> array from Claude JSON output',
+            'Extracts denied command names and halts the loop with instructions to update <code>ALLOWED_TOOLS</code>'
+          ],
+          usage: '# Automatic \u2014 displays guidance when permissions are denied\n# Fix in .ralphrc:\nALLOWED_TOOLS="Write,Read,Edit,Bash(npm *),..."'
+        },
+        4: {
+          how: [
+            'Moves Ralph configuration files from project root into <code>.ralph/</code> subdirectory',
+            'Updates all internal path references to use the new structure'
+          ],
+          usage: 'cd existing-project && ralph-migrate'
+        },
+        5: {
+          how: [
+            'Detects platform at startup and uses <code>gtimeout</code> (from Homebrew coreutils) on macOS',
+            '<code>portable_timeout()</code> function provides seamless cross-platform execution'
+          ],
+          usage: '# Install coreutils on macOS:\nbrew install coreutils\n# Then automatic \u2014 no configuration needed'
+        },
+        6: {
+          how: [
+            'Enables <code>dotglob</code> shell option so <code>.gitignore</code> template is included during file copy',
+            'Generates proper <code>.gitignore</code> with Ralph-specific entries during project setup'
+          ],
+          usage: '# Transparent \u2014 new projects get correct .gitignore automatically'
+        },
+        7: {
+          how: [
+            'Catches timeout exit code 124 from <code>portable_timeout</code> and handles it as a warning',
+            'Prevents the entire script from dying silently on Claude execution timeout'
+          ],
+          usage: '# Transparent \u2014 timeout events are logged and the loop continues'
+        },
+        8: {
+          how: [
+            'Detects text output format and auto-switches to JSON for <code>--live</code> mode',
+            'Prevents jq parse errors when <code>--output-format text</code> is combined with <code>--live</code>'
+          ],
+          usage: '# Transparent \u2014 ralph --live now works with any output format setting'
+        },
+        9: {
+          how: [
+            'Redirects interactive wizard prompts to stderr so stdout remains clean',
+            'Enables command substitution piping without prompt text contaminating the output'
+          ],
+          usage: '# Transparent \u2014 ralph-enable works correctly in scripts'
+        },
+        10: {
+          how: [
+            'Shows the actual tool/command names that were denied instead of a generic "permission denied" message'
+          ],
+          usage: '# Transparent \u2014 more helpful error messages when tools are blocked'
+        },
+        11: {
+          how: [
+            'Improves git change detection accuracy by checking both staged and unstaged changes',
+            'Handles edge cases with binary files and submodule changes'
+          ],
+          usage: '# Transparent \u2014 more accurate no-progress detection'
+        },
+        12: {
+          how: [
+            'Sets a flag file when the Ralph loop exits',
+            'Monitor process detects the flag and terminates its tmux session'
+          ],
+          usage: '# Transparent \u2014 tmux sessions auto-close when the loop finishes'
+        }
+      },
+
+      'v0.9': {
+        0: {
+          how: [
+            'Replaces confidence threshold with explicit <code>EXIT_SIGNAL</code> from RALPH_STATUS block',
+            'Exit requires BOTH: <code>completion_indicators >= 2</code> AND <code>EXIT_SIGNAL: true</code>',
+            'Prevents premature exits when Claude says "done" but is still working on the next phase'
+          ],
+          usage: '# Automatic \u2014 prevents premature exits during productive work\n# Claude explicitly sets EXIT_SIGNAL: true only when all work is done'
+        },
+        1: {
+          how: [
+            'Sessions stored in <code>.ralph/.claude_session_id</code> with timestamp',
+            'Expired after 24 hours by default (configurable)',
+            'Expired sessions trigger a fresh start instead of resuming stale context'
+          ],
+          usage: '# Automatic \u2014 sessions expire after 24h\n# Configure in .ralphrc if needed'
+        },
+        2: {
+          how: [
+            '<code>get_session_id()</code>, <code>reset_session()</code>, <code>log_session_transition()</code>, <code>init_session_tracking()</code>',
+            'History tracked in <code>.ralph/.ralph_session_history</code> (last 50 transitions)',
+            'Auto-reset on: circuit breaker open, manual interrupt, project completion'
+          ],
+          usage: 'ralph --reset-session\nrpc.reset'
+        },
+        3: {
+          how: [
+            'Parses both flat JSON format and Claude CLI format (<code>result</code>, <code>sessionId</code>, <code>metadata</code>)',
+            'Extracts structured fields: status, exit_signal, work_type, files_modified, asking_questions'
+          ],
+          usage: '# Automatic \u2014 supports multiple JSON output variants from Claude CLI'
+        },
+        4: {
+          how: [
+            'Uses <code>--output-format json</code>, <code>--allowed-tools</code>, <code>--continue</code> flags',
+            '<code>build_claude_command()</code> assembles the full CLI invocation with all configured options'
+          ],
+          usage: '# Configure in .ralphrc:\nCLAUDE_OUTPUT_FORMAT="json"\nCLAUDE_ALLOWED_TOOLS="Write,Read,Edit,Bash(git *),..."\nCLAUDE_USE_CONTINUE=true'
+        },
+        5: {
+          how: [
+            'Uses <code>--output-format json</code> for structured responses from Claude',
+            '<code>detect_response_format()</code> and <code>parse_conversion_response()</code> handle JSON with automatic text fallback'
+          ],
+          usage: 'ralph-import ./doc.md\nralph.import   # alias'
+        },
+        6: {
+          how: [
+            'Removes all Ralph commands from <code>~/.local/bin</code>, templates from <code>~/.ralph/templates</code>, and scripts from <code>~/.ralph/</code>'
+          ],
+          usage: './uninstall.sh'
+        },
+        7: {
+          how: [
+            'Detects tmux <code>base-index</code> configuration value',
+            'Adjusts window targeting to match the user\'s tmux settings'
+          ],
+          usage: '# Transparent \u2014 works with custom tmux base-index configs'
+        },
+        8: {
+          how: [
+            'Reads <code>CB_NO_PROGRESS_THRESHOLD</code>, <code>CB_SAME_ERROR_THRESHOLD</code>, <code>CB_OUTPUT_DECLINE_THRESHOLD</code> from environment or <code>.ralphrc</code>',
+            'Falls back to built-in defaults if not configured'
+          ],
+          usage: '# Configure in .ralphrc:\nCB_NO_PROGRESS_THRESHOLD=5\nCB_SAME_ERROR_THRESHOLD=7\nCB_OUTPUT_DECLINE_THRESHOLD=70'
+        },
+        9: {
+          how: [
+            '<code>reset_session()</code> now also clears <code>.exit_signals</code> file and removes <code>.response_analysis</code>',
+            'Prevents stale completion data from persisting after a session reset'
+          ],
+          usage: '# Transparent \u2014 cleaner session resets'
+        },
+        10: {
+          how: [
+            'When RALPH_STATUS has <code>STATUS: COMPLETE</code> but <code>EXIT_SIGNAL: false</code>, respects the explicit false',
+            'Phase complete \u2260 project complete \u2014 allows multi-phase workflows'
+          ],
+          usage: '# Transparent \u2014 prevents premature exits in multi-phase projects'
+        },
+        11: {
+          how: [
+            'Handles cases where Claude CLI outputs a JSON array instead of a single object',
+            'Extracts the result object from the array for analysis'
+          ],
+          usage: '# Transparent \u2014 supports both JSON output formats'
+        },
+        12: {
+          how: [
+            'Validates session ID format and ownership before use',
+            'Rejects invalid or foreign session IDs to prevent session hijacking'
+          ],
+          usage: '# Transparent \u2014 more reliable session management'
+        },
+        13: {
+          how: [
+            'Adds <code>--print</code> flag to output converted content to stdout instead of writing to file',
+            'Prevents the interactive session from hanging when used non-interactively'
+          ],
+          usage: 'ralph-import --print ./doc.md'
+        },
+        14: {
+          how: [
+            'All CLI parameters passed to <code>ralph --monitor</code> are forwarded to the inner <code>ralph_loop.sh</code> process in the tmux session'
+          ],
+          usage: 'ralph --monitor --calls 200   # calls flag reaches inner loop'
+        },
+        15: {
+          how: [
+            '<code>setup.sh</code> generates <code>.ralphrc</code> with <code>ALLOWED_TOOLS</code> matching the default whitelist',
+            'Ensures consistent tool permissions across new projects'
+          ],
+          usage: '# Transparent \u2014 new projects get correct .ralphrc permissions'
+        },
+        16: {
+          how: [
+            'Fixes extraction of denied command names from Claude JSON output by reading from the correct nested JSON path'
+          ],
+          usage: '# Transparent \u2014 accurate permission denial reporting'
+        },
+        17: {
+          how: [
+            'Comprehensive test suite for CLI argument parsing covering all flags and flag combinations'
+          ]
+        },
+        18: {
+          how: [
+            '14 tests covering global installation and uninstall workflows including dotfile template copying'
+          ]
+        },
+        19: {
+          how: [
+            '36 tests validating <code>setup.sh</code> project creation, <code>.ralphrc</code> permissions, and <code>.gitignore</code> generation'
+          ]
+        },
+        20: {
+          how: [
+            '22 tests for <code>ralph_import.sh</code> workflows including modern CLI JSON output parsing'
+          ]
+        }
+      },
+
+      'foundation': {
+        0: {
+          how: [
+            'Core bash loop that invokes Claude Code repeatedly with intelligent exit detection',
+            'Uses completion indicators, done-signal counting, and test-loop detection to decide when to stop',
+            'Configurable via CLI flags and <code>.ralphrc</code>'
+          ],
+          usage: 'ralph                    # start the loop\nralph --max-loops 10     # limit iterations\nralph --monitor          # with tmux dashboard'
+        },
+        1: {
+          how: [
+            'Tracks API calls per hour using <code>.call_count</code> file',
+            'Automatic hourly reset with countdown display',
+            'Default 100 calls/hour, configurable via <code>--calls</code> flag'
+          ],
+          usage: 'ralph --calls 200   # 200 calls/hour\nrpc.fast             # alias for 200\nrpc.slow             # alias for 50'
+        },
+        2: {
+          how: [
+            'Three states: CLOSED (normal), HALF_OPEN (monitoring), OPEN (halted)',
+            'Detects stagnation via no-progress counting, repeated errors, and output decline',
+            'Two-stage error filtering eliminates JSON field false positives'
+          ],
+          usage: 'ralph --circuit-status     # check state\nralph --reset-circuit      # manual reset\nrpc.cb.status              # alias'
+        },
+        3: {
+          how: [
+            'Analyzes Claude Code output for completion signals, error patterns, and work type',
+            'Semantic understanding of natural language to classify loop results'
+          ],
+          usage: '# Automatic \u2014 runs after every loop iteration'
+        },
+        4: {
+          how: [
+            'ISO timestamp generation for logging',
+            'Epoch time calculations for rate limiting and cooldown comparisons',
+            'Works on both macOS (BSD date) and Linux (GNU date)'
+          ],
+          usage: '# Internal library \u2014 used by other Ralph components'
+        },
+        5: {
+          how: [
+            'Creates a tmux session with split panes for loop execution and monitoring',
+            'Monitor pane shows real-time status, circuit breaker state, and progress'
+          ],
+          usage: 'ralph --monitor\nrpc.monitor'
+        },
+        6: {
+          how: [
+            'Installs <code>ralph</code>, <code>ralph-monitor</code>, <code>ralph-setup</code> to <code>~/.local/bin/</code>',
+            'Templates and scripts installed to <code>~/.ralph/</code>'
+          ],
+          usage: './install.sh          # install\n./install.sh uninstall # remove'
+        },
+        7: {
+          how: [
+            'Uses Claude Code to convert PRD/specification documents into Ralph\'s <code>fix_plan.md</code> format',
+            'Supports markdown, text, and other document formats'
+          ],
+          usage: 'ralph-import ./docs/prd.md\nralph.import   # alias'
+        },
+        8: {
+          how: [
+            '<code>CLAUDE_TIMEOUT_MINUTES</code> configures maximum execution time per loop iteration',
+            'Uses <code>portable_timeout()</code> for cross-platform timeout enforcement'
+          ],
+          usage: '# Configure in .ralphrc:\nCLAUDE_TIMEOUT_MINUTES=15'
+        },
+        9: {
+          how: [
+            '<code>--verbose</code> flag enables detailed progress updates during loop execution',
+            'Separates progress output from main Claude Code output for clarity'
+          ],
+          usage: 'ralph --verbose\nrpc.verbose'
+        },
+        10: {
+          how: [
+            'Uses BATS (Bash Automated Testing System) framework',
+            'Unit, integration, and E2E test suites covering all Ralph components'
+          ],
+          usage: 'npm test              # all tests\nnpm run test:unit     # unit only\nbats tests/unit/test_cli_parsing.bats   # specific file'
+        },
+        11: {
+          how: [
+            'Detects the Claude API 5-hour rate limit message using four-layer detection approach',
+            'Prompts user to wait or exit instead of retrying endlessly'
+          ],
+          usage: '# Automatic \u2014 Ralph detects the limit and waits or prompts'
+        },
+        12: {
+          how: [
+            'Fixes cases where the loop script would exit silently without logging an error',
+            'Adds explicit error messages for all failure paths'
+          ],
+          usage: '# Transparent \u2014 better error visibility'
+        },
+        13: {
+          how: [
+            'Corrects the exit condition logic in <code>ralph_loop.sh</code> to properly evaluate completion indicators'
+          ],
+          usage: '# Transparent \u2014 prevents premature or missed exits'
+        },
+        14: {
+          how: [
+            'Fixes arithmetic syntax from bash-4 specific <code>((loop_count++))</code> to portable <code>loop_count=$((loop_count + 1))</code>'
+          ],
+          usage: '# Transparent \u2014 bash 3.x compatibility (macOS default)'
+        },
+        15: {
+          how: [
+            'Filters out JSON field patterns like <code>"is_error": false</code> before error detection',
+            'Stage 1 removes JSON fields; Stage 2 detects actual error messages'
+          ],
+          usage: '# Transparent \u2014 eliminates false error detection'
+        },
+        16: {
+          how: [
+            'Uses literal fixed-string matching (<code>grep -qF</code>) instead of regex for multi-line error comparison',
+            'Verifies ALL error lines appear in ALL recent history files before flagging a stuck loop'
+          ],
+          usage: '# Transparent \u2014 prevents false negatives in stuck loop detection'
+        },
+        17: {
+          how: [
+            'Adds <code>lib/</code> directory to the installation copy step',
+            'Ensures <code>response_analyzer.sh</code> and other libraries are available after global install'
+          ],
+          usage: '# Transparent \u2014 fixes missing library errors after installation'
+        }
+      }
+    };
+
+    // Build detail panel HTML from data
+    function buildDetailHTML(d) {
+      let html = '<div class="change-detail-inner">';
+      if (d.how) {
+        html += '<h4>How it works</h4><ul>';
+        d.how.forEach(function(h) { html += '<li>' + h + '</li>'; });
+        html += '</ul>';
+      }
+      if (d.usage) {
+        html += '<h4>Usage</h4><pre><code>' + escHtml(d.usage) + '</code></pre>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // Inject detail panels into matching change items
+    document.querySelectorAll('.version-section').forEach(function(section) {
+      var version = section.dataset.version;
+      if (!CHANGE_DETAILS[version]) return;
+      var items = section.querySelectorAll('.change-item');
+      items.forEach(function(item, i) {
+        var detail = CHANGE_DETAILS[version][i];
+        if (!detail) return;
+        item.setAttribute('data-has-detail', '');
+        // Add toggle chevron
+        var toggle = document.createElement('span');
+        toggle.className = 'change-toggle';
+        toggle.textContent = '\u25B6';
+        item.appendChild(toggle);
+        // Add detail panel
+        var panel = document.createElement('div');
+        panel.className = 'change-detail';
+        panel.innerHTML = buildDetailHTML(detail);
+        item.appendChild(panel);
+      });
+    });
+
+    // Click handler for collapsible toggle
+    document.addEventListener('click', function(e) {
+      var item = e.target.closest('.change-item[data-has-detail]');
+      if (!item) return;
+      if (e.target.closest('a')) return; // don't toggle when clicking links
+      item.classList.toggle('expanded');
     });
 
     /* ===== COMMANDS & ALIASES DATA + RENDERING ===== */
@@ -1588,6 +2742,7 @@
       { alias: 'rpc.plan',       cmd: 'ralph-plan',                                                desc: 'AI-powered planning mode',             engine: 'claude', cat: 'planning' },
       { alias: 'rpc.plan.sup',   cmd: 'ralph-plan --yolo --superpowers',                           desc: 'Planning with yolo + superpowers',     engine: 'claude', cat: 'planning' },
       { alias: 'rpc.plan.s',     cmd: 'ralph-plan --status',                                       desc: 'Fix plan status',                      engine: 'claude', cat: 'planning' },
+      { alias: 'rpc.adhoc',      cmd: 'ralph-plan --adhoc',                                        desc: 'Ad-hoc task entry into fix_plan.md',   engine: 'claude', cat: 'planning' },
 
       // ── Codex (rpx.*) ───────────────────────────────────
       // Basic execution
@@ -1644,6 +2799,7 @@
       // Planning
       { alias: 'rpx.plan',       cmd: 'ralph-plan --engine codex',                                 desc: 'Planning mode with Codex',             engine: 'codex', cat: 'planning' },
       { alias: 'rpx.plan.s',     cmd: 'ralph-plan --engine codex --status',                        desc: 'Fix plan status (Codex)',               engine: 'codex', cat: 'planning' },
+      { alias: 'rpx.adhoc',      cmd: 'ralph-plan --engine codex --adhoc',                         desc: 'Ad-hoc task entry (Codex)',             engine: 'codex', cat: 'planning' },
 
       // ── Devin (rpd.*) ───────────────────────────────────
       // Basic execution
@@ -1698,6 +2854,7 @@
       // Planning
       { alias: 'rpd.plan',       cmd: 'ralph-plan --engine devin',                                 desc: 'Planning mode with Devin',             engine: 'devin', cat: 'planning' },
       { alias: 'rpd.plan.s',     cmd: 'ralph-plan --engine devin --status',                        desc: 'Fix plan status (Devin)',               engine: 'devin', cat: 'planning' },
+      { alias: 'rpd.adhoc',      cmd: 'ralph-plan --engine devin --adhoc',                         desc: 'Ad-hoc task entry (Devin)',             engine: 'devin', cat: 'planning' },
 
       // ── Shared (ralph.*, rp.*) ──────────────────────────
       { alias: 'ralph.setup',       cmd: 'ralph-setup',                                            desc: 'Create a new Ralph project',           engine: 'shared', cat: 'management' },

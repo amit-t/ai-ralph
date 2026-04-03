@@ -71,6 +71,11 @@ alias rpc.plan.sup='ralph-plan --yolo --superpowers'
 # Fix plan status (note: rpc.status is agent session status; rpc.plan.s is fix plan status)
 alias rpc.plan.s='ralph-plan --status'
 
+# Ad-hoc task mode (interactive one-liner to fix_plan entry)
+# Usage: rpc.adhoc                        -> prompts for task description
+# Usage: rpc.adhoc "Login broken on iOS"  -> inline description
+alias rpc.adhoc='ralph-plan --adhoc'
+
 # Task-specific execution (pass fix_plan.md task number)
 # Usage: rpc.task 3        -> execute task #3
 # Usage: rpc.task.int 3    -> interactive (live + monitor) for task #3

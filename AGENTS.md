@@ -44,6 +44,10 @@ The system consists of four main bash scripts and a modular library system:
    - `--pm-os <dir>` and `--doe-os <dir>` flags for explicit paths
    - `find_os_dir()` searches siblings (`../*-pm-os`) then cousins (`../../*/*-pm-os`)
    - `collect_pm_doe_sources()` gathers files from `outputs/prds`, `outputs/tdds`, `outputs/specs`, etc.
+   - `--adhoc` flag: Ad-hoc task mode -- prompts for a one-liner bug/task description, uses AI to
+     analyze the codebase and create a structured fix_plan.md entry with subtasks
+   - Supports inline description: `--adhoc "Login broken on mobile"`
+   - Works with all three engines (claude, codex, devin)
 
 ### Library Components (lib/)
 
@@ -106,6 +110,45 @@ The system uses a modular architecture with reusable components in the `lib/` di
    - `validate_ralph_integrity()`: checks all required paths exist, sets `RALPH_MISSING_FILES`
    - `get_integrity_report()`: human-readable report with missing files and recovery instructions
    - Lightweight validation that runs every loop iteration
+
+9. **lib/worktree_manager.sh** - Git worktree lifecycle management
+   - Creates isolated worktrees per loop iteration
+   - `worktree_run_quality_gates()`: auto-detects and runs lint/test/build gates
+   - `worktree_build_qg_fix_prompt()`: builds a focused prompt for the AI to fix quality gate failures
+   - Includes full error output from failed commands (last 80 lines per command)
+
+10. **lib/pr_manager.sh** - PR lifecycle management
+    - `pr_preflight_check()`: validates git remote, gh CLI, authentication
+    - `worktree_commit_and_pr()`: commit, push, and create PR from worktree
+    - `worktree_fallback_branch_pr()`: non-worktree fallback for PR creation
+    - Adds `quality-gates-failed` label when gates fail after all retries
+
+11. **lib/adhoc_task.sh** - Ad-hoc task mode for interactive bug/task entry
+    - `find_fix_plan_for_adhoc()`: walks upward from CWD to locate `.ralph/fix_plan.md`
+    - `prompt_task_description()`: interactive prompt with examples for one-liner input
+    - `run_adhoc_task()`: main entry point -- validates engine, gathers codebase context,
+      builds prompt from `PROMPT_ADHOC.md` template, invokes AI in TUI mode
+    - Creates `.ralph/` directory if not present (auto-bootstrap)
+    - Detects project type from config files (package.json, Cargo.toml, etc.)
+    - Includes AGENT.md build instructions in prompt for context
+
+### Quality Gate Retry Behaviour
+
+When quality gates fail, Ralph re-invokes the AI engine with subagent instructions to fix the failures before creating a PR. The retry loop:
+
+1. Quality gates fail after initial AI execution
+2. `worktree_build_qg_fix_prompt()` generates a focused prompt with failed gate commands, full error output, and a **subagent strategy** section
+3. The prompt instructs the AI to spawn **one subagent per failing gate** for parallel fixing (or a single subagent when only one gate fails)
+4. For Claude: `Task` tool is temporarily added to `CLAUDE_ALLOWED_TOOLS` during QG fix invocations (saved and restored)
+5. For Codex/Devin: subagent access is already available via `--permission-mode dangerous`
+6. Quality gates are re-run after each fix attempt
+7. If gates pass → PR is created with success status
+8. If gates still fail after `MAX_QG_RETRIES` (default: 3) → PR is created with `quality-gates-failed` label
+
+**Configuration:**
+```bash
+MAX_QG_RETRIES=3    # max quality gate fix attempts before creating failure PR (in .ralphrc)
+```
 
 ## Key Commands
 
@@ -182,6 +225,25 @@ ralph-plan --pm-os ../product/myapp-pm-os --doe-os ../engineering/myapp-doe-os
 
 # PM-OS/DoE-OS with specific engine
 ralph-plan --pm-os ../product/myapp-pm-os --doe-os ../engineering/myapp-doe-os --engine codex
+```
+
+### Ad-hoc Task Mode (quick bug/task entry)
+```bash
+# Interactive - prompts for task description
+ralph-plan --adhoc
+
+# Inline description
+ralph-plan --adhoc "Login button unresponsive on mobile Safari"
+
+# With specific engine
+ralph-plan --engine devin --adhoc "API returns 500 on null email"
+ralph-plan --engine codex --adhoc
+
+# Using aliases (recommended)
+rpc.adhoc                                    # Claude, interactive prompt
+rpc.adhoc "Dark mode toggle doesn't persist" # Claude, inline
+rpd.adhoc "Fix pagination on /users endpoint" # Devin
+rpx.adhoc                                    # Codex, interactive prompt
 ```
 
 ### Running the Ralph Loop
@@ -603,7 +665,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (584 tests total)
+### Test Files (631 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -625,6 +687,8 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_wizard_utils.bats` | 20 | Wizard utility functions (stdout/stderr separation, prompt functions) |
 | `test_file_protection.bats` | 15 | File integrity validation (RALPH_REQUIRED_PATHS, validate_ralph_integrity, get_integrity_report) (Issue #149) |
 | `test_integrity_check.bats` | 10 | Pre-loop integrity check in ralph_loop.sh (startup + in-loop validation) (Issue #149) |
+| `test_qg_retry.bats` | 36 | Quality gate retry behaviour (worktree_build_qg_fix_prompt, subagent strategy, MAX_QG_RETRIES, retry loop structure, Task tool injection) |
+| `test_adhoc_task.bats` | 18 | Ad-hoc task mode (CLI parsing, find_fix_plan_for_adhoc, prompt_task_description, run_adhoc_task engine validation, prompt construction) |
 
 ### Running Tests
 ```bash
