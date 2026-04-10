@@ -1605,6 +1605,32 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="fix" data-has-detail><span
+            class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">parallel:</span> Inject picked task info into AI prompt
+            &mdash; prevents agents from working on the wrong task in parallel mode</span><span
+            class="change-hash">1086032</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it fixes</h4>
+              <ul>
+                <li><code>pick_next_task()</code> correctly picks and locks a task (<code>[~]</code>) in
+                  <code>fix_plan.md</code>, but the picked task info was never passed to the AI in the prompt</li>
+                <li>The AI would independently read <code>fix_plan.md</code> and choose its own task &mdash; causing
+                  mismatches, especially in parallel mode where multiple agents run simultaneously</li>
+              </ul>
+              <h4>How it works</h4>
+              <ul>
+                <li>All three engine loops (Claude, Devin, Codex) now pass the picked task ID, line number, and
+                  description through their <code>execute_*_session()</code> functions</li>
+                <li>A &ldquo;task assignment directive&rdquo; is injected at the top of the prompt, telling the AI
+                  exactly which task to work on</li>
+                <li>The directive includes task ID, line number in <code>fix_plan.md</code>, and the full task
+                  description</li>
+              </ul>
+            </div>
+          </div>
+        </li>
         <li class="change-item" data-type="feat" data-has-detail><span
             class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">planning:</span> Fix plan compression mode &mdash;
@@ -2453,9 +2479,10 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
     // Detail data keyed by section data-version → item index
     const CHANGE_DETAILS = {
       'latest': {
-        // 0 = compress mode (uses inline HTML detail, no JS entry needed)
-        // 1 = file-based planning mode (uses inline HTML detail, no JS entry needed)
-        2: {
+        // 0 = task assignment directive fix (uses inline HTML detail, no JS entry needed)
+        // 1 = compress mode (uses inline HTML detail, no JS entry needed)
+        // 2 = file-based planning mode (uses inline HTML detail, no JS entry needed)
+        3: {
           how: [
             'Removed the inline QG retry <code>while</code> loop from all 3 engine loop scripts (~80 lines each)',
             'Main loop now runs quality gates once and always creates a PR &mdash; success or failure (with <code>quality-gates-failed</code> label)',
@@ -2466,7 +2493,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Run quality gate fix mode after a failed PR\nralph --qg\nrpc.qg\n\n# With specific engine\nralph-codex --qg\nrpx.qg\nralph-devin --qg\nrpd.qg\n\n# Configure max retry attempts in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts'
         },
-        3: {
+        4: {
           how: [
             '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
             'The task ID is pre-generated before AI invocation and injected into the prompt',
@@ -2475,7 +2502,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
         },
-        4: {
+        5: {
           how: [
             '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
             'Prompts for a one-liner task description (interactive or inline via argument)',
@@ -2485,28 +2512,28 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
         },
-        5: {
+        6: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: subagent strategy for parallel gate fixing within the main loop'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        6: {
+        7: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: inline retry loop after worktree execution'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        7: {
+        8: {
           how: [
             'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
             'Helps correlate loop iterations with Claude conversation context'
           ],
           usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
         },
-        8: {
+        9: {
           how: [
             'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
             'Matches the latest Codex CLI API naming convention'
