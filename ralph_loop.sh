@@ -1216,6 +1216,9 @@ ${prompt_content}"
 execute_claude_code() {
     local loop_count=$1
     local work_dir="${2:-$(pwd)}"
+    local task_id="${3:-}"
+    local task_line="${4:-}"
+    local task_name="${5:-}"
     local main_dir
     main_dir="$(pwd)"
     local timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
@@ -1282,6 +1285,31 @@ You are running in **non-interactive, autonomous mode**. There is no human to re
 ${non_interactive_directive}"
     else
         worktree_directive="$non_interactive_directive"
+    fi
+
+    # ── Task assignment directive ────────────────────────────────
+    # Inject the specific task that was picked by pick_next_task() so the AI
+    # works on the correct task instead of choosing its own from fix_plan.md.
+    # This is critical for parallel mode where multiple agents run simultaneously.
+    if [[ -n "$task_id" && -n "$task_name" ]]; then
+        local task_directive="# 🎯 ASSIGNED TASK — WORK ON THIS AND ONLY THIS
+
+You have been assigned a **specific task** from fix_plan.md. Do NOT pick a different task.
+
+- **Task ID**: \`${task_id}\`
+- **Line in fix_plan.md**: ${task_line}
+- **Description**: ${task_name}
+
+Work **exclusively** on this task. Do not start, modify, or plan any other task from fix_plan.md.
+This task has already been marked as in-progress (\`[~]\`) in fix_plan.md — do not change its checkbox state."
+
+        if [[ -n "$worktree_directive" ]]; then
+            worktree_directive="${worktree_directive}
+
+${task_directive}"
+        else
+            worktree_directive="$task_directive"
+        fi
     fi
 
     # Initialize or resume session
@@ -2043,14 +2071,14 @@ main() {
         fi
     fi
 
-    # Execute Claude Code
+    # Execute Claude Code (pass picked task info so the AI works on the correct task)
     # CRITICAL: Disable set -e for the entire execution + error detection block.
     # set -e causes silent script death at multiple points:
     #   1. Live mode pipeline when jq fails on non-stream-json (rate limit)
     #   2. grep commands returning 1 on no-match during error detection
     #   3. Function return codes triggering script exit
     set +e
-    execute_claude_code 1 "$work_dir"
+    execute_claude_code 1 "$work_dir" "$picked_task_id" "$picked_line_num" "$picked_task_name"
     local exec_result=$?
 
     # Check latest output log for API errors (rate limits return exit 0)
