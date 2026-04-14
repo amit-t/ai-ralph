@@ -1,6 +1,6 @@
-# Contributing to Ralph for Claude Code
+# Contributing to AI Ralph
 
-Thank you for your interest in contributing to Ralph! This guide will help you get started and ensure your contributions follow our established patterns and quality standards.
+Thank you for your interest in contributing to AI Ralph. This guide covers local setup, code and test expectations, and how to open pull requests against this fork.
 
 **Every contribution matters** - from fixing typos to implementing major features. We appreciate your help in making Ralph better!
 
@@ -33,8 +33,8 @@ Before contributing, ensure you have the following installed:
 
 ```bash
 # Fork the repository on GitHub first, then clone your fork
-git clone https://github.com/YOUR_USERNAME/ralph-claude-code.git
-cd ralph-claude-code
+git clone https://github.com/YOUR_USERNAME/ai-ralph.git
+cd ai-ralph
 ```
 
 ### Install Dependencies
@@ -63,12 +63,14 @@ npm test
 ### Project Structure
 
 ```
-ralph-claude-code/
+ai-ralph/
 ├── ralph_loop.sh        # Main loop script
 ├── ralph_monitor.sh     # Live monitoring dashboard
 ├── setup.sh             # Project initialization
 ├── ralph_import.sh      # PRD import tool
 ├── install.sh           # Global installation script
+├── codex/               # Codex engine wrappers and adapters
+├── devin/               # Devin engine wrappers and adapters
 ├── lib/                 # Modular library components
 │   ├── circuit_breaker.sh
 │   ├── response_analyzer.sh
@@ -427,7 +429,7 @@ Run through this checklist:
    git push origin feature/my-feature
    ```
 
-2. **Open a Pull Request** on GitHub with:
+2. **Open a Pull Request** against the `main` branch on GitHub with:
 
 **PR Title:** Follow conventional commit format
 ```
@@ -468,7 +470,7 @@ Related to #456
 
 1. **Wait for CI/CD** - GitHub Actions will run all tests
 2. **Address review feedback** - Make requested changes promptly
-3. **Keep PR updated** - Rebase if main branch has changed
+3. **Keep PR updated** - Sync with `main` if the base branch moves
 
 ---
 
@@ -624,7 +626,7 @@ Before marking any feature complete:
 - [CLAUDE.md](CLAUDE.md) - Technical specifications
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Development roadmap
 - [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) - Progress tracking
-- [GitHub Issues](https://github.com/frankbria/ralph-claude-code/issues) - Bug reports and feature requests
+- [GitHub Issues](https://github.com/amit-t/ai-ralph/issues) - Bug reports and feature requests
 
 ---
 

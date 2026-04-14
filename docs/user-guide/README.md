@@ -33,5 +33,5 @@ Check out the [examples/](../../examples/) directory for complete, realistic pro
 ## Need Help?
 
 - **[Main README](../../README.md)** - Full documentation and configuration options
-- **[CONTRIBUTING.md](../../CONTRIBUTING.md)** - How to contribute to Ralph
-- **[GitHub Issues](https://github.com/frankbria/ralph-claude-code/issues)** - Report bugs or request features
+- **[CONTRIBUTING.md](../../CONTRIBUTING.md)** - How to contribute to AI Ralph
+- **[GitHub Issues](https://github.com/amit-t/ai-ralph/issues)** - Report bugs or request features

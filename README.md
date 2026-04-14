@@ -39,6 +39,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 ## Table of Contents
 
 - [Installation](#installation)
+- [Documentation](#documentation)
 - [Enabling Ralph in a Project](#enabling-ralph-in-a-project)
 - [Quick Start](#quick-start)
 - [Aliases Reference](#aliases-reference)
@@ -146,6 +147,17 @@ source ~/Projects/Tools-Utilities/ai-ralph/codex/ALIASES.sh    # rpx.* aliases (
 ```
 
 Then `source ~/.zshrc` (or restart your terminal).
+
+---
+
+## Documentation
+
+If you are evaluating, operating, or contributing to this fork, start with the docs that match your task:
+
+- [User Guide](docs/user-guide/README.md) -- onboarding, project structure, and requirement-writing guidance
+- [Contributing Guide](CONTRIBUTING.md) -- local setup, test expectations, and pull request workflow
+- [Interactive Docs](docs/index.html) -- generated project overview, change history, and alias reference
+- [GitHub Issues](https://github.com/amit-t/ai-ralph/issues) -- bug reports, feature requests, and discussion threads
 
 ---
 

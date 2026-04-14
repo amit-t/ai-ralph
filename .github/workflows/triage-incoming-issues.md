@@ -13,7 +13,7 @@ safe-outputs:
   add-comment:
     max: 10
   assign-to-user:
-    allowed: [frankbria]
+    allowed: [amit-t]
   close-issue:
     target: "triggering"
 ---
@@ -30,7 +30,7 @@ safe-outputs:
 
 For each issue, analyze the title and description to determine its category:
 
-1. **Bug reports**: If the issue is a true bug not already identified elsewhere, apply the label "bug" and assign it to "@frankbria".
+1. **Bug reports**: If the issue is a true bug not already identified elsewhere, apply the label "bug" and assign it to "@amit-t".
 
 2. **Duplicates**: If the issue is already addressed in another open issue, comment explaining which issue it duplicates and close it.
 
