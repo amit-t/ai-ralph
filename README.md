@@ -26,6 +26,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Parallel agent spawning** via `lib/parallel_spawn.sh` (iTerm2 tabs, IDE terminals, or background processes)
 - **Interactive TUI mode** for Devin and Codex (`--no-devin-auto-exit` / `--no-codex-auto-exit`)
 - **Task-specific execution** via `--task NUM|ID` flag -- run a specific task from `fix_plan.md` by ordinal number or bold task ID (e.g. `--task R05`)
+- **Task assignment directive injection** -- the picked task (ID, line number, description) is injected into the prompt so the AI works on the correct task, critical for parallel mode
 - **Non-interactive directive injection** -- prevents "Shall I proceed?" stalls in headless loop mode
 - **Automatic dependency installation** in worktrees -- detects package manager and installs before quality gates
 - **Change detection with execution summary** -- shows files changed, lines added/removed after each run; no-change early exit reverts the task marker so it can be retried
@@ -38,6 +39,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 ## Table of Contents
 
 - [Installation](#installation)
+- [Documentation](#documentation)
 - [Enabling Ralph in a Project](#enabling-ralph-in-a-project)
 - [Quick Start](#quick-start)
 - [Aliases Reference](#aliases-reference)
@@ -50,6 +52,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - [How It Works](#how-it-works)
   - [Task Selection](#task-selection)
   - [Non-Interactive Directive](#non-interactive-directive)
+  - [Task Assignment Directive](#task-assignment-directive)
   - [Change Detection and Execution Summary](#change-detection-and-execution-summary)
   - [Git Worktree Isolation](#git-worktree-isolation)
 - [System Requirements](#system-requirements)
@@ -144,6 +147,17 @@ source ~/Projects/Tools-Utilities/ai-ralph/codex/ALIASES.sh    # rpx.* aliases (
 ```
 
 Then `source ~/.zshrc` (or restart your terminal).
+
+---
+
+## Documentation
+
+If you are evaluating, operating, or contributing to this fork, start with the docs that match your task:
+
+- [User Guide](docs/user-guide/README.md) -- onboarding, project structure, and requirement-writing guidance
+- [Contributing Guide](CONTRIBUTING.md) -- local setup, test expectations, and pull request workflow
+- [Interactive Docs](docs/index.html) -- generated project overview, change history, and alias reference
+- [GitHub Issues](https://github.com/amit-t/ai-ralph/issues) -- bug reports, feature requests, and discussion threads
 
 ---
 
@@ -778,7 +792,7 @@ Ralph operates on a loop cycle:
 
 1. **Read instructions** -- Loads `.ralph/PROMPT.md` with your project goals
 2. **Pick a task** -- Selects the next unclaimed `[ ]` task from `fix_plan.md` (or a specific task via `--task NUM` or `--task ID`), marks it in-progress `[~]`
-3. **Inject directives** -- Prepends worktree constraints and a non-interactive directive to prevent "Shall I proceed?" stalls
+3. **Inject directives** -- Prepends worktree constraints, a task assignment directive (task ID, line number, and description from `fix_plan.md`), and a non-interactive directive to prevent "Shall I proceed?" stalls
 4. **Execute AI agent** -- Runs the configured engine (Devin / Claude / Codex) with current context
 5. **Detect changes** -- Compares git state before and after execution to count files changed, lines added/removed
 6. **Early exit on no changes** -- If zero files changed, prints a yellow summary, reverts the `[~]` marker back to `[ ]` so the task can be retried, and exits cleanly
@@ -819,6 +833,16 @@ When running in autonomous mode (default for all engines), Ralph injects a **"NO
 - Make pragmatic decisions on ambiguities and document them
 
 This prevents stalls where the agent outputs "Shall I proceed?" and waits indefinitely for a human response that will never come.
+
+### Task Assignment Directive
+
+After picking a task from `fix_plan.md`, Ralph injects a **"ASSIGNED TASK"** directive into the prompt that tells the AI exactly which task to work on:
+
+- **Task ID** -- the sanitized identifier (from bead ID or title)
+- **Line number** -- the 1-based line in `fix_plan.md` where the task lives
+- **Description** -- the full task description text
+
+This ensures the AI works on the correct task rather than independently reading `fix_plan.md` and choosing its own. It is critical for **parallel mode** (`rpd.p`, `rpc.int.p`, etc.) where multiple agents run simultaneously -- without this directive, agents could all pick the same task or work on tasks that don't match what Ralph selected and locked.
 
 ### Change Detection and Execution Summary
 
@@ -954,6 +978,12 @@ Uninstalling one engine does not affect the others.
 - **CI/CD pipeline** with GitHub Actions for automated testing
 
 ### Recent Changes
+
+**Task Assignment Directive** (latest)
+- Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"
+- Prevents the AI from choosing a different task than what Ralph selected and locked in `fix_plan.md`
+- Critical fix for parallel mode (`rpd.p`, `rpc.int.p`) where multiple agents run simultaneously
+- Applied across all 3 engine loops: Claude (`ralph_loop.sh`), Devin (`ralph_loop_devin.sh`), Codex (`ralph_loop_codex.sh`)
 
 **Fix Plan Compression Mode** (latest)
 - `ralph-plan --compress` to compress `fix_plan.md` and reduce token consumption

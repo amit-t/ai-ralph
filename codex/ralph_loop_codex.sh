@@ -494,6 +494,9 @@ reset_session() {
 execute_codex_session() {
     local loop_count=$1
     local work_dir="${2:-$(pwd)}"
+    local task_id="${3:-}"
+    local task_line="${4:-}"
+    local task_name="${5:-}"
     local main_dir
     main_dir="$(pwd)"
     local timestamp
@@ -563,6 +566,31 @@ You are running in **non-interactive, autonomous mode**. There is no human to re
 ${non_interactive_directive}"
         else
             worktree_directive="$non_interactive_directive"
+        fi
+    fi
+
+    # ── Task assignment directive ────────────────────────────────
+    # Inject the specific task that was picked by pick_next_task() so the AI
+    # works on the correct task instead of choosing its own from fix_plan.md.
+    # This is critical for parallel mode where multiple agents run simultaneously.
+    if [[ -n "$task_id" && -n "$task_name" ]]; then
+        local task_directive="# 🎯 ASSIGNED TASK — WORK ON THIS AND ONLY THIS
+
+You have been assigned a **specific task** from fix_plan.md. Do NOT pick a different task.
+
+- **Task ID**: \`${task_id}\`
+- **Line in fix_plan.md**: ${task_line}
+- **Description**: ${task_name}
+
+Work **exclusively** on this task. Do not start, modify, or plan any other task from fix_plan.md.
+This task has already been marked as in-progress (\`[~]\`) in fix_plan.md — do not change its checkbox state."
+
+        if [[ -n "$worktree_directive" ]]; then
+            worktree_directive="${worktree_directive}
+
+${task_directive}"
+        else
+            worktree_directive="$task_directive"
         fi
     fi
 
@@ -1069,8 +1097,8 @@ main() {
         fi
     fi
 
-    # Execute Codex session
-    execute_codex_session 1 "$work_dir"
+    # Execute Codex session (pass picked task info so the AI works on the correct task)
+    execute_codex_session 1 "$work_dir" "$picked_task_id" "$picked_line_num" "$picked_task_name"
     local exec_result=$?
 
     if [[ $exec_result -eq 0 ]]; then
