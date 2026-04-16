@@ -33,6 +33,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
+- **Workspace mode** (`ralph --workspace`) for multi-repo orchestration -- run tasks across multiple git repos from a parent directory with a single workspace-level fix_plan.md
 
 ---
 
@@ -394,6 +395,13 @@ Source: `devin/ALIASES.sh`
 | `rpd.task N\|ID` | `rpd.task 3` or `rpd.task R05` | Execute task #N or task ID from fix_plan.md (non-interactive) |
 | `rpd.task.int N\|ID` | `rpd.task.int 3` or `rpd.task.int R05` | Execute task #N or task ID in interactive TUI mode |
 
+#### Workspace Mode (Multi-Repo)
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.ws` | `ralph-devin --workspace` | Multi-repo workspace mode |
+| `rpd.ws.int` | `ralph-devin --workspace --live --monitor` | Workspace mode interactive |
+
 #### Workflow Presets
 
 | Alias | Expands To | Description |
@@ -495,6 +503,13 @@ Source: `ALIASES.sh`
 |---|---|---|
 | `rpc.task N\|ID` | `rpc.task 3` or `rpc.task R05` | Execute task #N or task ID from fix_plan.md |
 | `rpc.task.int N\|ID` | `rpc.task.int 3` or `rpc.task.int R05` | Execute task #N or task ID in interactive mode (live + monitor) |
+
+#### Workspace Mode (Multi-Repo)
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.ws` | `ralph --workspace` | Multi-repo workspace mode |
+| `rpc.ws.int` | `ralph --workspace --live --monitor` | Workspace mode interactive |
 
 #### Workflow Presets
 
@@ -599,6 +614,13 @@ Source: `codex/ALIASES.sh`
 |---|---|---|
 | `rpx.task N\|ID` | `rpx.task 3` or `rpx.task R05` | Execute task #N or task ID from fix_plan.md (non-interactive) |
 | `rpx.task.int N\|ID` | `rpx.task.int 3` or `rpx.task.int R05` | Execute task #N or task ID in interactive TUI mode |
+
+#### Workspace Mode (Multi-Repo)
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.ws` | `ralph-codex --workspace` | Multi-repo workspace mode |
+| `rpx.ws.int` | `ralph-codex --workspace --live --monitor` | Workspace mode interactive |
 
 #### Workflow Presets
 
@@ -979,7 +1001,16 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Task Assignment Directive** (latest)
+**Workspace Mode — Multi-Repo Orchestration** (latest)
+- `ralph --workspace` to orchestrate tasks across multiple git repositories from a parent directory
+- Workspace-level `.ralph/fix_plan.md` with `## repo-name` section headers for per-repo tasks
+- `lib/workspace_manager.sh` with repo discovery, workspace fix_plan parsing, task lifecycle management
+- Detects default branch per repo, creates branches and PRs in each target repository
+- Supports `cross-repo` section for tasks spanning multiple repositories
+- Aliases: `rpc.ws`, `rpd.ws`, `rpx.ws` (+ `.int` variants for interactive mode)
+- 63 new tests covering all workspace functions and edge cases
+
+**Task Assignment Directive**
 - Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"
 - Prevents the AI from choosing a different task than what Ralph selected and locked in `fix_plan.md`
 - Critical fix for parallel mode (`rpd.p`, `rpc.int.p`) where multiple agents run simultaneously

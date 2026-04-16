@@ -95,3 +95,7 @@ rpx.plan.file() { ralph-plan --engine codex --file "${1:?Usage: rpx.plan.file <f
 # Usage: rpx.task.int 3    -> interactive TUI, execute task #3
 rpx.task() { ralph-codex --task "${1:?Usage: rpx.task <task_number>}"; }
 rpx.task.int() { ralph-codex --no-codex-auto-exit --task "${1:?Usage: rpx.task.int <task_number>}"; }
+
+# Workspace mode (multi-repo orchestration)
+alias rpx.ws='ralph-codex --workspace'
+alias rpx.ws.int='ralph-codex --workspace --live --monitor'

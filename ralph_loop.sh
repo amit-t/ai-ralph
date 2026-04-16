@@ -19,6 +19,7 @@ source "$SCRIPT_DIR/lib/task_sources.sh" || { echo "FATAL: Failed to source lib/
 source "$SCRIPT_DIR/lib/parallel_spawn.sh" || { echo "FATAL: Failed to source lib/parallel_spawn.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/worktree_manager.sh" || { echo "FATAL: Failed to source lib/worktree_manager.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/pr_manager.sh" || { echo "FATAL: Failed to source lib/pr_manager.sh" >&2; exit 1; }
+source "$SCRIPT_DIR/lib/workspace_manager.sh" || { echo "FATAL: Failed to source lib/workspace_manager.sh" >&2; exit 1; }
 
 # Configuration
 # Ralph-specific files live in .ralph/ subfolder
@@ -40,6 +41,7 @@ TIMESTAMP_FILE="$RALPH_DIR/.last_reset"
 USE_TMUX=false
 SPECIFIC_TASK_NUM=""
 QG_MODE=false
+WORKSPACE_MODE=false
 
 # Save environment variable state BEFORE setting defaults
 # These are used by load_ralphrc() to determine which values came from environment
@@ -2432,6 +2434,11 @@ Quality Gate Mode:
                             Does not execute tasks — only runs gates and loops to fix them
                             Configurable: MAX_QG_RETRIES (default: 3) in .ralphrc
 
+Workspace Mode:
+    --workspace             Enable multi-repo workspace mode
+                            Run from a parent directory containing multiple git repos
+                            Uses workspace-level .ralph/fix_plan.md with per-repo sections
+
 Files created:
     - $LOG_DIR/: All execution logs
     - $DOCS_DIR/: Generated documentation
@@ -2462,6 +2469,7 @@ Examples:
     ralph --task 5 --live          # Live mode for task #5
     ralph --qg                     # Run quality gates and fix failures
     ralph --qg --quality-gates "npm run lint;npm test"  # Custom gates
+    ralph --workspace               # Multi-repo workspace mode
 
 Bash Aliases (rpc):
     Add to ~/.bashrc or ~/.zshrc: source ~/.ralph/ALIASES.sh
@@ -2628,6 +2636,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --qg)
             QG_MODE=true
+            shift
+            ;;
+        --workspace)
+            WORKSPACE_MODE=true
             shift
             ;;
         *)

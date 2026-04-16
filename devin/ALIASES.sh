@@ -96,3 +96,7 @@ rpd.plan.file() { ralph-plan --engine devin --file "${1:?Usage: rpd.plan.file <f
 # Usage: rpd.task.int 3    -> interactive TUI, execute task #3
 rpd.task() { ralph-devin --task "${1:?Usage: rpd.task <task_number>}"; }
 rpd.task.int() { ralph-devin --no-devin-auto-exit --task "${1:?Usage: rpd.task.int <task_number>}"; }
+
+# Workspace mode (multi-repo orchestration)
+alias rpd.ws='ralph-devin --workspace'
+alias rpd.ws.int='ralph-devin --workspace --live --monitor'

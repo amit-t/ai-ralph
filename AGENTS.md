@@ -162,6 +162,19 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - Includes AGENT.md build instructions in prompt for context
     - Works with all three engines (claude, codex, devin)
 
+14. **lib/workspace_manager.sh** - Multi-repo workspace orchestration
+    - `discover_workspace_repos()`: finds git repos (directories with `.git/`) in a workspace, sorted alphabetically, skips hidden dirs
+    - `parse_workspace_fix_plan()`: extracts pending tasks grouped by repo from `## repo-name` sections in workspace fix_plan.md
+    - `pick_workspace_task()`: picks first unclaimed task, atomically marks `[~]`, returns `repo_name|task_id|line_num|description`
+    - `get_repo_default_branch()`: detects default branch of a git repository via `git symbolic-ref`
+    - `validate_workspace()`: validates workspace structure (`.ralph/fix_plan.md` exists, repos found, warns about missing repos)
+    - `build_workspace_repo_context()`: builds AI prompt context with repo name, task, and working directory constraint
+    - `mark_workspace_task_complete()`: changes `[~]` to `[x]` on specified line
+    - `revert_workspace_task()`: reverts `[~]` back to `[ ]` on failure
+    - `is_workspace_mode()`: detects if directory is a workspace (has `.ralph/fix_plan.md`, child git repos, is NOT itself a git repo)
+    - Workspace fix_plan.md format uses `## repo-name` section headers with standard checkbox tasks underneath
+    - Supports `cross-repo` section for tasks spanning multiple repositories
+
 ### Quality Gate Behaviour
 
 During the main loop, quality gates are run **once** after Claude completes a task. A PR is always created regardless of gate status:
@@ -328,6 +341,40 @@ ralph --qg
 
 # With custom quality gates
 ralph --qg --quality-gates "npm run lint;npm test;npm run build"
+```
+
+### Workspace Mode (multi-repo orchestration)
+```bash
+# Run from a parent directory containing multiple git repos
+cd ~/work/my-workspace
+ralph --workspace
+
+# With monitoring
+ralph --workspace --monitor
+
+# With live output
+ralph --workspace --live --monitor
+
+# Using aliases (all three engines)
+rpc.ws                    # Claude
+rpd.ws                    # Devin
+rpx.ws                    # Codex
+rpc.ws.int                # Claude interactive (live + monitor)
+```
+
+Workspace fix_plan.md format:
+```markdown
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Fix authentication bug
+- [ ] Add rate limiting
+
+## repo-beta
+- [ ] Update database schema
+
+## cross-repo
+- [ ] Ensure API compatibility across repos
 ```
 
 ### Running the Ralph Loop
@@ -539,7 +586,7 @@ Ralph installs to:
 - **Commands**: `~/.local/bin/` (ralph, ralph-monitor, ralph-setup, ralph-import, ralph-migrate, ralph-enable, ralph-enable-ci)
 - **Templates**: `~/.ralph/templates/`
 - **Scripts**: `~/.ralph/` (ralph_loop.sh, ralph_monitor.sh, setup.sh, ralph_import.sh, migrate_to_ralph_folder.sh, ralph_enable.sh, ralph_enable_ci.sh)
-- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh)
+- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh, workspace_manager.sh)
 
 After installation, the following global commands are available:
 - `ralph` - Start the autonomous development loop
@@ -749,7 +796,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (664 tests total)
+### Test Files (727 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -775,6 +822,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_adhoc_task.bats` | 18 | Ad-hoc task mode (CLI parsing, find_fix_plan_for_adhoc, prompt_task_description, run_adhoc_task engine validation, prompt construction) |
 | `test_compress_plan.bats` | 33 | Fix plan compression mode (CLI parsing, find_fix_plan_for_compress, count_plan_items, archive_fix_plan, run_compress_plan engine validation, template validation) |
 | `test_file_plan.bats` | 30 | File-based planning mode (CLI parsing, detect_file_type, find_fix_plan_for_file_plan, run_file_plan engine/file validation, template validation) |
+| `test_workspace_mode.bats` | 63 | Workspace mode (discover_workspace_repos, parse_workspace_fix_plan, pick_workspace_task, get_repo_default_branch, validate_workspace, is_workspace_mode, CLI --workspace flag, PROMPT_WORKSPACE.md template, edge cases) |
 
 ### Running Tests
 ```bash
