@@ -390,6 +390,293 @@ is_workspace_mode() {
     return 0
 }
 
+# get_workspace_parallel_limit — Determine max parallelism for workspace execution
+# Returns the minimum of: repos with pending tasks, requested count, and actual repos on disk.
+# When requested count is 0, auto-selects based on available repos with pending tasks.
+#
+# Args:
+#   $1 - fix_plan_file: Path to workspace fix_plan.md
+#   $2 - workspace_dir: Path to the workspace directory
+#   $3 - requested: Requested parallelism (0 = auto)
+# Returns:
+#   0 - Limit on stdout
+get_workspace_parallel_limit() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local workspace_dir="${2:-.}"
+    local requested="${3:-0}"
+
+    # Collect unique repos that have at least one pending task and no in-progress task
+    local repos_with_pending=()
+    local current_repo=""
+    local repo_has_pending=false
+    local repo_has_inprogress=false
+    local prev_repo=""
+
+    while IFS= read -r line; do
+        # Match section headers
+        if echo "$line" | grep -qE '^#{2,3} [A-Za-z0-9]'; then
+            # Flush previous repo
+            if [[ -n "$prev_repo" ]] && $repo_has_pending && ! $repo_has_inprogress; then
+                # Skip cross-repo section
+                if [[ "$prev_repo" != "cross-repo" ]]; then
+                    repos_with_pending+=("$prev_repo")
+                fi
+            fi
+            current_repo=$(echo "$line" | sed 's/^#\{2,3\} *//' | sed 's/[[:space:]]*$//')
+            prev_repo="$current_repo"
+            repo_has_pending=false
+            repo_has_inprogress=false
+            continue
+        fi
+
+        [[ -z "$current_repo" ]] && continue
+
+        # Check for in-progress tasks
+        if echo "$line" | grep -qE '^- \[~\] '; then
+            repo_has_inprogress=true
+        fi
+
+        # Check for pending tasks (top-level only)
+        if echo "$line" | grep -qE '^- \[ \] '; then
+            repo_has_pending=true
+        fi
+    done < "$fix_plan_file"
+
+    # Flush last repo
+    if [[ -n "$prev_repo" ]] && $repo_has_pending && ! $repo_has_inprogress; then
+        if [[ "$prev_repo" != "cross-repo" ]]; then
+            repos_with_pending+=("$prev_repo")
+        fi
+    fi
+
+    local available=${#repos_with_pending[@]}
+
+    if [[ "$requested" -eq 0 ]]; then
+        echo "$available"
+    elif [[ "$requested" -lt "$available" ]]; then
+        echo "$requested"
+    else
+        echo "$available"
+    fi
+    return 0
+}
+
+# pick_workspace_tasks_parallel — Pick up to N tasks, one per repo, for parallel execution
+# Skips repos that already have in-progress tasks and the cross-repo section.
+# Atomically marks each picked task as in-progress [~].
+#
+# Output format (one line per picked task):
+#   repo_name|task_id|line_num|task_description
+#
+# Args:
+#   $1 - fix_plan_file: Path to workspace fix_plan.md
+#   $2 - max_count: Maximum number of tasks to pick
+# Returns:
+#   0 - Picked at least one task
+#   1 - No tasks available
+pick_workspace_tasks_parallel() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local max_count="${2:-1}"
+
+    if [[ ! -f "$fix_plan_file" ]]; then
+        return 1
+    fi
+
+    # First pass: identify repos that already have in-progress tasks
+    # Store as newline-separated list for bash 3.x compatibility (no associative arrays)
+    local repos_in_progress=""
+    local current_repo=""
+
+    while IFS= read -r line; do
+        if echo "$line" | grep -qE '^#{2,3} [A-Za-z0-9]'; then
+            current_repo=$(echo "$line" | sed 's/^#\{2,3\} *//' | sed 's/[[:space:]]*$//')
+            continue
+        fi
+        [[ -z "$current_repo" ]] && continue
+        if echo "$line" | grep -qE '^- \[~\] '; then
+            repos_in_progress="${repos_in_progress}${current_repo}"$'\n'
+        fi
+    done < "$fix_plan_file"
+
+    # Second pass: collect eligible tasks (one per repo, skip cross-repo and in-progress repos)
+    local repos_picked=""
+    local picked_count=0
+    local tasks=()
+    local task_lines=()
+    current_repo=""
+    local line_num=0
+
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+
+        if echo "$line" | grep -qE '^#{2,3} [A-Za-z0-9]'; then
+            current_repo=$(echo "$line" | sed 's/^#\{2,3\} *//' | sed 's/[[:space:]]*$//')
+            continue
+        fi
+
+        [[ -z "$current_repo" ]] && continue
+        # Skip cross-repo section
+        [[ "$current_repo" == "cross-repo" ]] && continue
+        # Skip repos with in-progress tasks
+        if echo "$repos_in_progress" | grep -qxF "$current_repo"; then
+            continue
+        fi
+        # Skip repos already picked
+        if echo "$repos_picked" | grep -qxF "$current_repo"; then
+            continue
+        fi
+
+        # Match unclaimed top-level task
+        if echo "$line" | grep -qE '^- \[ \] '; then
+            local task_desc
+            task_desc=$(echo "$line" | sed 's/^- \[ \] //')
+
+            local bead_id=""
+            bead_id=$(echo "$line" | sed -n 's/.*\[ \] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
+
+            local task_id=""
+            if [[ -n "$bead_id" ]]; then
+                task_id="$bead_id"
+            else
+                task_id=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+            fi
+
+            tasks+=("${current_repo}|${task_id}|${line_num}|${task_desc}")
+            task_lines+=("$line_num")
+            repos_picked="${repos_picked}${current_repo}"$'\n'
+            picked_count=$((picked_count + 1))
+
+            if [[ "$picked_count" -ge "$max_count" ]]; then
+                break
+            fi
+        fi
+    done < "$fix_plan_file"
+
+    if [[ "$picked_count" -eq 0 ]]; then
+        return 1
+    fi
+
+    # Atomically mark all picked tasks as in-progress
+    local awk_cond=""
+    for ln in "${task_lines[@]}"; do
+        if [[ -n "$awk_cond" ]]; then
+            awk_cond="${awk_cond} || "
+        fi
+        awk_cond="${awk_cond}NR==${ln}"
+    done
+
+    local tmp_file="${fix_plan_file}.tmp.$$"
+    awk "($awk_cond) { sub(/- \\[ \\]/, \"- [~]\") } 1" "$fix_plan_file" > "$tmp_file" \
+        && mv "$tmp_file" "$fix_plan_file"
+
+    # Output all picked tasks
+    for task in "${tasks[@]}"; do
+        echo "$task"
+    done
+
+    return 0
+}
+
+# run_workspace_tasks_parallel — Execute workspace tasks in parallel via background subshells
+# Picks up to N tasks (one per repo), spawns a background worker for each, waits for
+# completion, then marks succeeded tasks as [x] and reverts failed tasks to [ ].
+#
+# The executor function receives: repo_name, task_description, workspace_dir
+# and should return 0 on success, non-zero on failure.
+#
+# Args:
+#   $1 - fix_plan_file: Path to workspace fix_plan.md
+#   $2 - workspace_dir: Path to the workspace root
+#   $3 - max_count: Maximum number of parallel tasks
+#   $4 - executor_fn: Name of the function to call for each task
+# Returns:
+#   0 - All tasks completed successfully
+#   1 - Some tasks failed (partial success)
+run_workspace_tasks_parallel() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local workspace_dir="${2:-.}"
+    local max_count="${3:-1}"
+    local executor_fn="${4}"
+
+    if [[ -z "$executor_fn" ]]; then
+        echo "ERROR: No executor function specified" >&2
+        return 1
+    fi
+
+    # Pick tasks
+    local task_output
+    task_output=$(pick_workspace_tasks_parallel "$fix_plan_file" "$max_count")
+    local pick_rc=$?
+    if [[ $pick_rc -ne 0 || -z "$task_output" ]]; then
+        echo "No tasks available for parallel execution" >&2
+        return 1
+    fi
+
+    # Create log directory
+    local log_dir
+    if [[ "$workspace_dir" == "." ]]; then
+        log_dir="$(pwd)/.ralph/logs/parallel"
+    else
+        log_dir="${workspace_dir}/.ralph/logs/parallel"
+    fi
+    mkdir -p "$log_dir"
+
+    # Spawn a background worker for each task
+    local -a pids=()
+    local -a task_repos=()
+    local -a task_line_nums=()
+    local -a task_descs=()
+
+    while IFS= read -r task_line; do
+        local repo_name task_id line_num task_desc
+        repo_name=$(echo "$task_line" | cut -d'|' -f1)
+        task_id=$(echo "$task_line" | cut -d'|' -f2)
+        line_num=$(echo "$task_line" | cut -d'|' -f3)
+        task_desc=$(echo "$task_line" | cut -d'|' -f4)
+
+        local log_file="${log_dir}/ws_worker_${repo_name}_$$.log"
+
+        # Spawn background worker
+        (
+            "$executor_fn" "$repo_name" "$task_desc" "$workspace_dir"
+        ) > "$log_file" 2>&1 &
+
+        pids+=($!)
+        task_repos+=("$repo_name")
+        task_line_nums+=("$line_num")
+        task_descs+=("$task_desc")
+    done <<< "$task_output"
+
+    # Wait for all workers and collect exit codes
+    local -a exit_codes=()
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null
+        exit_codes+=($?)
+    done
+
+    # Mark tasks complete or revert based on exit codes
+    local failed=0
+    local succeeded=0
+    for i in "${!exit_codes[@]}"; do
+        if [[ "${exit_codes[$i]}" -eq 0 ]]; then
+            mark_workspace_task_complete "$fix_plan_file" "${task_line_nums[$i]}"
+            succeeded=$((succeeded + 1))
+        else
+            revert_workspace_task "$fix_plan_file" "${task_line_nums[$i]}"
+            failed=$((failed + 1))
+            echo "WARN: Task failed in ${task_repos[$i]}: ${task_descs[$i]} (reverted)" >&2
+        fi
+    done
+
+    local total=$((succeeded + failed))
+    echo "Parallel workspace: ${succeeded}/${total} tasks completed, ${failed} failed"
+
+    if [[ $failed -gt 0 ]]; then
+        return 1
+    fi
+    return 0
+}
+
 # Export all functions for use in subshells
 export -f discover_workspace_repos
 export -f parse_workspace_fix_plan
@@ -400,3 +687,6 @@ export -f build_workspace_repo_context
 export -f mark_workspace_task_complete
 export -f revert_workspace_task
 export -f is_workspace_mode
+export -f get_workspace_parallel_limit
+export -f pick_workspace_tasks_parallel
+export -f run_workspace_tasks_parallel

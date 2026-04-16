@@ -99,3 +99,4 @@ rpx.task.int() { ralph-codex --no-codex-auto-exit --task "${1:?Usage: rpx.task.i
 # Workspace mode (multi-repo orchestration)
 alias rpx.ws='ralph-codex --workspace'
 alias rpx.ws.int='ralph-codex --workspace --live --monitor'
+rpx.ws.p() { ralph-codex --workspace --parallel "${1:?Usage: rpx.ws.p <N>}"; }

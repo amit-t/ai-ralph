@@ -172,6 +172,9 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - `mark_workspace_task_complete()`: changes `[~]` to `[x]` on specified line
     - `revert_workspace_task()`: reverts `[~]` back to `[ ]` on failure
     - `is_workspace_mode()`: detects if directory is a workspace (has `.ralph/fix_plan.md`, child git repos, is NOT itself a git repo)
+    - `get_workspace_parallel_limit()`: calculates safe parallelism — min of repos with pending tasks (excluding in-progress and cross-repo), and requested count; 0 = auto
+    - `pick_workspace_tasks_parallel()`: picks up to N tasks (one per repo), skips repos with in-progress tasks and cross-repo section, atomically marks all `[~]`
+    - `run_workspace_tasks_parallel()`: orchestrates parallel execution — picks tasks, spawns background workers with per-worker logs, waits for completion, marks `[x]` or reverts `[ ]`
     - Workspace fix_plan.md format uses `## repo-name` section headers with standard checkbox tasks underneath
     - Supports `cross-repo` section for tasks spanning multiple repositories
 
@@ -355,11 +358,17 @@ ralph --workspace --monitor
 # With live output
 ralph --workspace --live --monitor
 
+# Parallel execution across N repos simultaneously
+ralph --workspace --parallel 3
+
 # Using aliases (all three engines)
 rpc.ws                    # Claude
 rpd.ws                    # Devin
 rpx.ws                    # Codex
 rpc.ws.int                # Claude interactive (live + monitor)
+rpc.ws.p 3                # Claude parallel (3 repos)
+rpd.ws.p 3                # Devin parallel (3 repos)
+rpx.ws.p 3                # Codex parallel (3 repos)
 ```
 
 Workspace fix_plan.md format:
@@ -796,7 +805,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (727 tests total)
+### Test Files (750 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -822,7 +831,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_adhoc_task.bats` | 18 | Ad-hoc task mode (CLI parsing, find_fix_plan_for_adhoc, prompt_task_description, run_adhoc_task engine validation, prompt construction) |
 | `test_compress_plan.bats` | 33 | Fix plan compression mode (CLI parsing, find_fix_plan_for_compress, count_plan_items, archive_fix_plan, run_compress_plan engine validation, template validation) |
 | `test_file_plan.bats` | 30 | File-based planning mode (CLI parsing, detect_file_type, find_fix_plan_for_file_plan, run_file_plan engine/file validation, template validation) |
-| `test_workspace_mode.bats` | 63 | Workspace mode (discover_workspace_repos, parse_workspace_fix_plan, pick_workspace_task, get_repo_default_branch, validate_workspace, is_workspace_mode, CLI --workspace flag, PROMPT_WORKSPACE.md template, edge cases) |
+| `test_workspace_mode.bats` | 86 | Workspace mode (discover_workspace_repos, parse_workspace_fix_plan, pick_workspace_task, get_repo_default_branch, validate_workspace, is_workspace_mode, CLI --workspace flag, PROMPT_WORKSPACE.md template, edge cases) + parallel workspace (get_workspace_parallel_limit, pick_workspace_tasks_parallel, run_workspace_tasks_parallel, --workspace --parallel CLI, parallel edge cases) |
 
 ### Running Tests
 ```bash

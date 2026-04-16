@@ -34,6 +34,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
 - **Workspace mode** (`ralph --workspace`) for multi-repo orchestration -- run tasks across multiple git repos from a parent directory with a single workspace-level fix_plan.md
+- **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
 
 ---
 
@@ -401,6 +402,7 @@ Source: `devin/ALIASES.sh`
 |---|---|---|
 | `rpd.ws` | `ralph-devin --workspace` | Multi-repo workspace mode |
 | `rpd.ws.int` | `ralph-devin --workspace --live --monitor` | Workspace mode interactive |
+| `rpd.ws.p N` | `ralph-devin --workspace --parallel N` | Parallel workspace (N repos) |
 
 #### Workflow Presets
 
@@ -510,6 +512,7 @@ Source: `ALIASES.sh`
 |---|---|---|
 | `rpc.ws` | `ralph --workspace` | Multi-repo workspace mode |
 | `rpc.ws.int` | `ralph --workspace --live --monitor` | Workspace mode interactive |
+| `rpc.ws.p N` | `ralph --workspace --parallel N` | Parallel workspace (N repos) |
 
 #### Workflow Presets
 
@@ -621,6 +624,7 @@ Source: `codex/ALIASES.sh`
 |---|---|---|
 | `rpx.ws` | `ralph-codex --workspace` | Multi-repo workspace mode |
 | `rpx.ws.int` | `ralph-codex --workspace --live --monitor` | Workspace mode interactive |
+| `rpx.ws.p N` | `ralph-codex --workspace --parallel N` | Parallel workspace (N repos) |
 
 #### Workflow Presets
 
@@ -1001,7 +1005,16 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Workspace Mode — Multi-Repo Orchestration** (latest)
+**Parallel Workspace Execution** (latest)
+- `ralph --workspace --parallel N` to execute tasks across N repos simultaneously
+- `pick_workspace_tasks_parallel()` picks one task per repo, skips repos with in-progress tasks and `cross-repo` section
+- `get_workspace_parallel_limit()` calculates safe parallelism (min of repos, pending tasks, requested N)
+- `run_workspace_tasks_parallel()` spawns background workers, waits for completion, marks complete or reverts
+- Per-worker log files in `.ralph/logs/parallel/ws_worker_<repo>_<pid>.log`
+- Aliases: `rpc.ws.p N`, `rpd.ws.p N`, `rpx.ws.p N`
+- 23 new tests covering parallel picking, execution, lifecycle, CLI flags, and edge cases
+
+**Workspace Mode — Multi-Repo Orchestration**
 - `ralph --workspace` to orchestrate tasks across multiple git repositories from a parent directory
 - Workspace-level `.ralph/fix_plan.md` with `## repo-name` section headers for per-repo tasks
 - `lib/workspace_manager.sh` with repo discovery, workspace fix_plan parsing, task lifecycle management

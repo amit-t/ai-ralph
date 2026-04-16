@@ -96,6 +96,7 @@ rpc.task.int() { ralph --live --monitor --task "${1:?Usage: rpc.task.int <task_n
 # Workspace mode (multi-repo orchestration)
 alias rpc.ws='ralph --workspace'
 alias rpc.ws.int='ralph --workspace --live --monitor'
+rpc.ws.p() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p <N>}"; }
 
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'

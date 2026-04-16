@@ -815,3 +815,459 @@ EOF
     assert_success
     [[ "$output" == *"Main task"* ]]
 }
+
+# =============================================================================
+# Parallel workspace execution
+# =============================================================================
+
+# --- get_workspace_parallel_limit ---
+
+@test "get_workspace_parallel_limit returns min of repos, pending tasks, and requested count" {
+    mkdir -p .ralph repo-alpha/.git repo-beta/.git repo-gamma/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Task alpha
+
+## repo-beta
+- [ ] Task beta
+
+## repo-gamma
+- [ ] Task gamma
+EOF
+
+    # Request 2 parallel, 3 repos with tasks available → limit is 2
+    run get_workspace_parallel_limit ".ralph/fix_plan.md" "." 2
+    assert_success
+    [[ "$output" == "2" ]]
+}
+
+@test "get_workspace_parallel_limit capped by number of repos with pending tasks" {
+    mkdir -p .ralph repo-alpha/.git repo-beta/.git repo-gamma/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Task alpha
+
+## repo-beta
+- [x] Task beta done
+EOF
+
+    # Request 5 parallel but only 1 repo has pending tasks → limit is 1
+    run get_workspace_parallel_limit ".ralph/fix_plan.md" "." 5
+    assert_success
+    [[ "$output" == "1" ]]
+}
+
+@test "get_workspace_parallel_limit returns 0 when no pending tasks" {
+    mkdir -p .ralph repo-alpha/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [x] Done
+EOF
+
+    run get_workspace_parallel_limit ".ralph/fix_plan.md" "." 3
+    assert_success
+    [[ "$output" == "0" ]]
+}
+
+@test "get_workspace_parallel_limit defaults requested to repo count when 0" {
+    mkdir -p .ralph repo-alpha/.git repo-beta/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Task alpha
+
+## repo-beta
+- [ ] Task beta
+EOF
+
+    # Request 0 means "auto" → use all available repos with tasks
+    run get_workspace_parallel_limit ".ralph/fix_plan.md" "." 0
+    assert_success
+    [[ "$output" == "2" ]]
+}
+
+# --- pick_workspace_tasks_parallel ---
+
+@test "pick_workspace_tasks_parallel picks one task per repo up to count" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task 1
+- [ ] Alpha task 2
+
+## repo-beta
+- [ ] Beta task 1
+
+## repo-gamma
+- [ ] Gamma task 1
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 2
+    assert_success
+    # Should pick exactly 2 tasks from different repos
+    local count
+    count=$(echo "$output" | wc -l | tr -d ' ')
+    [[ "$count" -eq 2 ]]
+    # First two repos alphabetically: repo-alpha and repo-beta
+    [[ "$output" == *"repo-alpha|"* ]]
+    [[ "$output" == *"repo-beta|"* ]]
+}
+
+@test "pick_workspace_tasks_parallel marks all picked tasks as in-progress" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 2
+    assert_success
+
+    # Both tasks should now be [~]
+    local tilde_count
+    tilde_count=$(grep -c '\[~\]' .ralph/fix_plan.md)
+    [[ "$tilde_count" -eq 2 ]]
+}
+
+@test "pick_workspace_tasks_parallel skips repos with in-progress tasks" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [~] Alpha in-progress
+- [ ] Alpha pending
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 2
+    assert_success
+    # Only repo-beta should be picked (repo-alpha already has in-progress)
+    local count
+    count=$(echo "$output" | wc -l | tr -d ' ')
+    [[ "$count" -eq 1 ]]
+    [[ "$output" == *"repo-beta|"* ]]
+    [[ "$output" != *"repo-alpha|"* ]]
+}
+
+@test "pick_workspace_tasks_parallel returns failure when no tasks available" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [x] All done
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 3
+    assert_failure
+}
+
+@test "pick_workspace_tasks_parallel picks only one task per repo even with multiple pending" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task 1
+- [ ] Alpha task 2
+- [ ] Alpha task 3
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 3
+    assert_success
+    # Should only pick 1 task (one repo = max 1 parallel task)
+    local count
+    count=$(echo "$output" | wc -l | tr -d ' ')
+    [[ "$count" -eq 1 ]]
+}
+
+@test "pick_workspace_tasks_parallel handles fewer repos than requested count" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    # Request 5 but only 2 repos have tasks
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 5
+    assert_success
+    local count
+    count=$(echo "$output" | wc -l | tr -d ' ')
+    [[ "$count" -eq 2 ]]
+}
+
+@test "pick_workspace_tasks_parallel output format matches pick_workspace_task" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] My task here
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 1
+    assert_success
+    # Format: repo_name|task_id|line_num|description (4 pipe-separated fields)
+    local field_count
+    field_count=$(echo "$output" | head -1 | awk -F'|' '{print NF}')
+    [[ "$field_count" -eq 4 ]]
+}
+
+@test "pick_workspace_tasks_parallel skips cross-repo section for parallel picking" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+
+## cross-repo
+- [ ] Cross-repo task
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 3
+    assert_success
+    # cross-repo tasks should NOT be picked in parallel mode
+    [[ "$output" != *"cross-repo|"* ]]
+    [[ "$output" == *"repo-alpha|"* ]]
+    [[ "$output" == *"repo-beta|"* ]]
+}
+
+# --- run_workspace_tasks_parallel ---
+
+@test "run_workspace_tasks_parallel spawns background jobs for each task" {
+    mkdir -p .ralph repo-alpha/.git repo-beta/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    # Use a mock executor that just creates a marker file
+    _mock_workspace_executor() {
+        local repo_name="$1"
+        local task_desc="$2"
+        local workspace_dir="$3"
+        touch "${workspace_dir}/.ralph/.parallel_ran_${repo_name}"
+        return 0
+    }
+    export -f _mock_workspace_executor
+
+    run run_workspace_tasks_parallel ".ralph/fix_plan.md" "." 2 "_mock_workspace_executor"
+    assert_success
+
+    # Both marker files should exist
+    [[ -f .ralph/.parallel_ran_repo-alpha ]]
+    [[ -f .ralph/.parallel_ran_repo-beta ]]
+}
+
+@test "run_workspace_tasks_parallel marks tasks complete on success" {
+    mkdir -p .ralph repo-alpha/.git repo-beta/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    _mock_workspace_executor() { return 0; }
+    export -f _mock_workspace_executor
+
+    run run_workspace_tasks_parallel ".ralph/fix_plan.md" "." 2 "_mock_workspace_executor"
+    assert_success
+
+    # Both tasks should be [x]
+    local done_count
+    done_count=$(grep -c '\[x\]' .ralph/fix_plan.md)
+    [[ "$done_count" -eq 2 ]]
+}
+
+@test "run_workspace_tasks_parallel reverts tasks on failure" {
+    mkdir -p .ralph repo-alpha/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+EOF
+
+    _mock_workspace_executor() { return 1; }
+    export -f _mock_workspace_executor
+
+    run run_workspace_tasks_parallel ".ralph/fix_plan.md" "." 1 "_mock_workspace_executor"
+    # Should report partial failure
+    [[ "$output" == *"failed"* ]] || [[ "$output" == *"reverted"* ]] || [[ "$status" -ne 0 ]]
+
+    # Task should be reverted to [ ]
+    local unclaimed_count
+    unclaimed_count=$(grep -c '\[ \]' .ralph/fix_plan.md)
+    [[ "$unclaimed_count" -eq 1 ]]
+}
+
+@test "run_workspace_tasks_parallel creates per-worker log files" {
+    mkdir -p .ralph repo-alpha/.git repo-beta/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    _mock_workspace_executor() {
+        echo "Working on $1: $2"
+        return 0
+    }
+    export -f _mock_workspace_executor
+
+    run run_workspace_tasks_parallel ".ralph/fix_plan.md" "." 2 "_mock_workspace_executor"
+    assert_success
+
+    # Log directory should exist with worker logs
+    [[ -d .ralph/logs/parallel ]]
+    local log_count
+    log_count=$(ls .ralph/logs/parallel/ws_worker_*.log 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$log_count" -ge 1 ]]
+}
+
+@test "run_workspace_tasks_parallel returns 0 when all tasks succeed" {
+    mkdir -p .ralph repo-alpha/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+EOF
+
+    _mock_workspace_executor() { return 0; }
+    export -f _mock_workspace_executor
+
+    run run_workspace_tasks_parallel ".ralph/fix_plan.md" "." 1 "_mock_workspace_executor"
+    assert_success
+}
+
+@test "run_workspace_tasks_parallel handles mixed success and failure" {
+    mkdir -p .ralph repo-alpha/.git repo-beta/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Alpha task
+
+## repo-beta
+- [ ] Beta task
+EOF
+
+    # repo-alpha succeeds, repo-beta fails
+    _mock_workspace_executor() {
+        if [[ "$1" == "repo-alpha" ]]; then return 0; fi
+        return 1
+    }
+    export -f _mock_workspace_executor
+
+    run run_workspace_tasks_parallel ".ralph/fix_plan.md" "." 2 "_mock_workspace_executor"
+
+    # repo-alpha should be [x], repo-beta should be reverted to [ ]
+    local line_alpha line_beta
+    line_alpha=$(grep "Alpha task" .ralph/fix_plan.md)
+    line_beta=$(grep "Beta task" .ralph/fix_plan.md)
+    [[ "$line_alpha" == *"[x]"* ]]
+    [[ "$line_beta" == *"[ ]"* ]]
+}
+
+# --- CLI parsing: --workspace --parallel ---
+
+@test "--workspace --parallel N flags are recognized together" {
+    run bash "$RALPH_SCRIPT" --workspace --parallel 3 --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "--help mentions parallel workspace usage" {
+    run bash "$RALPH_SCRIPT" --help
+    assert_success
+    [[ "$output" == *"--workspace"* ]]
+    [[ "$output" == *"--parallel"* ]]
+}
+
+@test "--workspace --parallel rejects zero" {
+    run bash "$RALPH_SCRIPT" --workspace --parallel 0
+    assert_failure
+    [[ "$output" == *"positive integer"* ]]
+}
+
+# --- Edge cases for parallel workspace ---
+
+@test "parallel workspace with single repo picks only that repo" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## only-repo
+- [ ] Single task
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 5
+    assert_success
+    local count
+    count=$(echo "$output" | wc -l | tr -d ' ')
+    [[ "$count" -eq 1 ]]
+    [[ "$output" == *"only-repo|"* ]]
+}
+
+@test "parallel workspace respects existing in-progress across multiple repos" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [~] Alpha in-progress
+
+## repo-beta
+- [~] Beta in-progress
+
+## repo-gamma
+- [ ] Gamma pending
+EOF
+
+    run pick_workspace_tasks_parallel ".ralph/fix_plan.md" 3
+    assert_success
+    local count
+    count=$(echo "$output" | wc -l | tr -d ' ')
+    [[ "$count" -eq 1 ]]
+    [[ "$output" == *"repo-gamma|"* ]]
+}

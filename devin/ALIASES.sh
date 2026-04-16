@@ -100,3 +100,4 @@ rpd.task.int() { ralph-devin --no-devin-auto-exit --task "${1:?Usage: rpd.task.i
 # Workspace mode (multi-repo orchestration)
 alias rpd.ws='ralph-devin --workspace'
 alias rpd.ws.int='ralph-devin --workspace --live --monitor'
+rpd.ws.p() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.p <N>}"; }

@@ -1605,6 +1605,30 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="feat" data-has-detail><span
+            class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">workspace:</span> Parallel execution across multiple repos
+            &mdash; <code>ralph --workspace --parallel N</code> runs tasks in N repos simultaneously</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>How it works</h4>
+              <ul>
+                <li><code>pick_workspace_tasks_parallel()</code> picks up to N tasks (one per repo), skips repos with
+                  in-progress tasks and the <code>cross-repo</code> section, atomically marks all <code>[~]</code></li>
+                <li><code>run_workspace_tasks_parallel()</code> spawns background workers for each task, waits for
+                  completion, marks <code>[x]</code> on success or reverts <code>[ ]</code> on failure</li>
+                <li><code>get_workspace_parallel_limit()</code> calculates safe parallelism (min of repos with pending
+                  tasks and requested count; 0 = auto)</li>
+                <li>Per-worker log files in <code>.ralph/logs/parallel/ws_worker_&lt;repo&gt;_&lt;pid&gt;.log</code></li>
+              </ul>
+              <h4>Usage</h4>
+              <pre><code>ralph --workspace --parallel 3
+rpc.ws.p 3    # Claude alias
+rpd.ws.p 3    # Devin alias
+rpx.ws.p 3    # Codex alias</code></pre>
+            </div>
+          </div>
+        </li>
         <li class="change-item" data-type="fix" data-has-detail><span
             class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">parallel:</span> Inject picked task info into AI prompt
@@ -3584,6 +3608,10 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       // Task
       { alias: 'rpc.task N', cmd: 'ralph --task N', desc: 'Execute task #N from fix_plan.md', engine: 'claude', cat: 'task' },
       { alias: 'rpc.task.int N', cmd: 'ralph --live --monitor --task N', desc: 'Task #N in interactive mode', engine: 'claude', cat: 'task' },
+      // Workspace
+      { alias: 'rpc.ws', cmd: 'ralph --workspace', desc: 'Multi-repo workspace mode', engine: 'claude', cat: 'workspace' },
+      { alias: 'rpc.ws.int', cmd: 'ralph --workspace --live --monitor', desc: 'Workspace mode interactive', engine: 'claude', cat: 'workspace' },
+      { alias: 'rpc.ws.p N', cmd: 'ralph --workspace --parallel N', desc: 'Parallel workspace (N repos)', engine: 'claude', cat: 'workspace' },
       // Management
       { alias: 'rpc.install', cmd: './install.sh', desc: 'Install/reinstall Claude engine', engine: 'claude', cat: 'management' },
       { alias: 'rpc.uninstall', cmd: './uninstall.sh', desc: 'Uninstall Claude engine', engine: 'claude', cat: 'management' },
@@ -3644,6 +3672,10 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       // Task
       { alias: 'rpx.task N', cmd: 'ralph-codex --task N', desc: 'Execute task #N from fix_plan.md', engine: 'codex', cat: 'task' },
       { alias: 'rpx.task.int N', cmd: 'ralph-codex --no-codex-auto-exit --task N', desc: 'Task #N in interactive TUI', engine: 'codex', cat: 'task' },
+      // Workspace
+      { alias: 'rpx.ws', cmd: 'ralph-codex --workspace', desc: 'Multi-repo workspace mode', engine: 'codex', cat: 'workspace' },
+      { alias: 'rpx.ws.int', cmd: 'ralph-codex --workspace --live --monitor', desc: 'Workspace mode interactive', engine: 'codex', cat: 'workspace' },
+      { alias: 'rpx.ws.p N', cmd: 'ralph-codex --workspace --parallel N', desc: 'Parallel workspace (N repos)', engine: 'codex', cat: 'workspace' },
       // Management
       { alias: 'rpx.install', cmd: './install_codex.sh', desc: 'Install/reinstall Codex engine', engine: 'codex', cat: 'management' },
       { alias: 'rpx.uninstall', cmd: './uninstall_codex.sh', desc: 'Uninstall Codex engine', engine: 'codex', cat: 'management' },
@@ -3702,6 +3734,10 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       // Task
       { alias: 'rpd.task N', cmd: 'ralph-devin --task N', desc: 'Execute task #N from fix_plan.md', engine: 'devin', cat: 'task' },
       { alias: 'rpd.task.int N', cmd: 'ralph-devin --no-devin-auto-exit --task N', desc: 'Task #N in interactive TUI', engine: 'devin', cat: 'task' },
+      // Workspace
+      { alias: 'rpd.ws', cmd: 'ralph-devin --workspace', desc: 'Multi-repo workspace mode', engine: 'devin', cat: 'workspace' },
+      { alias: 'rpd.ws.int', cmd: 'ralph-devin --workspace --live --monitor', desc: 'Workspace mode interactive', engine: 'devin', cat: 'workspace' },
+      { alias: 'rpd.ws.p N', cmd: 'ralph-devin --workspace --parallel N', desc: 'Parallel workspace (N repos)', engine: 'devin', cat: 'workspace' },
       // Management
       { alias: 'rpd.install', cmd: './install_devin.sh', desc: 'Install/reinstall Devin engine', engine: 'devin', cat: 'management' },
       { alias: 'rpd.uninstall', cmd: './uninstall_devin.sh', desc: 'Uninstall Devin engine', engine: 'devin', cat: 'management' },
@@ -3736,6 +3772,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       interactive: 'Interactive / Parallel',
       workflow: 'Workflow Presets',
       task: 'Task Execution',
+      workspace: 'Workspace Mode',
       management: 'Setup & Management',
       planning: 'Planning Mode',
     };
