@@ -1605,6 +1605,13 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="feat"><span
+            class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">workspace:</span> Enable Ralph at workspace level
+            &mdash; <code>ralph-enable --workspace</code> / <code>ralph-enable-ci --workspace</code> bootstraps
+            <code>.ralph/</code> with per-repo <code>fix_plan.md</code> sections, workspace PROMPT.md, and
+            <code>WORKSPACE_MODE=true</code> in <code>.ralphrc</code></span>
+        </li>
         <li class="change-item" data-type="feat" data-has-detail><span
             class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">workspace:</span> Parallel execution across multiple repos
@@ -2503,10 +2510,11 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
     // Detail data keyed by section data-version → item index
     const CHANGE_DETAILS = {
       'latest': {
-        // 0 = task assignment directive fix (uses inline HTML detail, no JS entry needed)
-        // 1 = compress mode (uses inline HTML detail, no JS entry needed)
-        // 2 = file-based planning mode (uses inline HTML detail, no JS entry needed)
-        3: {
+        // 0 = workspace enable (no detail panel)
+        // 1 = task assignment directive fix (uses inline HTML detail, no JS entry needed)
+        // 2 = compress mode (uses inline HTML detail, no JS entry needed)
+        // 3 = file-based planning mode (uses inline HTML detail, no JS entry needed)
+        4: {
           how: [
             'Removed the inline QG retry <code>while</code> loop from all 3 engine loop scripts (~80 lines each)',
             'Main loop now runs quality gates once and always creates a PR &mdash; success or failure (with <code>quality-gates-failed</code> label)',
@@ -2517,7 +2525,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Run quality gate fix mode after a failed PR\nralph --qg\nrpc.qg\n\n# With specific engine\nralph-codex --qg\nrpx.qg\nralph-devin --qg\nrpd.qg\n\n# Configure max retry attempts in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts'
         },
-        4: {
+        5: {
           how: [
             '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
             'The task ID is pre-generated before AI invocation and injected into the prompt',
@@ -2526,7 +2534,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
         },
-        5: {
+        6: {
           how: [
             '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
             'Prompts for a one-liner task description (interactive or inline via argument)',
@@ -2536,28 +2544,28 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
         },
-        6: {
+        7: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: subagent strategy for parallel gate fixing within the main loop'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        7: {
+        8: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: inline retry loop after worktree execution'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        8: {
+        9: {
           how: [
             'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
             'Helps correlate loop iterations with Claude conversation context'
           ],
           usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
         },
-        9: {
+        10: {
           how: [
             'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
             'Matches the latest Codex CLI API naming convention'

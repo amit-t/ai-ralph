@@ -211,6 +211,24 @@ ralph-devin-setup my-project     # Devin
 ralph-codex-setup my-project     # Codex
 ```
 
+### Option E -- Workspace mode (multi-repo)
+
+If you have a parent directory containing multiple git repos, enable workspace mode to orchestrate tasks across all of them:
+
+```bash
+cd ~/work/my-workspace           # Parent dir with child git repos
+
+ralph-enable --workspace         # Claude (interactive)
+ralph-enable-ci --workspace      # Claude (CI / non-interactive)
+```
+
+This creates a workspace-level `.ralph/` with:
+- `fix_plan.md` containing `## repo-name` sections for each child repo
+- `PROMPT.md` with workspace-specific instructions (directory constraints, cross-repo rules)
+- `.ralphrc` with `WORKSPACE_MODE=true`
+
+Then run with: `ralph --workspace` or `ralph --workspace --parallel 3`
+
 ### What gets created
 
 ```
@@ -1005,7 +1023,15 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Parallel Workspace Execution** (latest)
+**Workspace Enable** (latest)
+- `ralph-enable --workspace` / `ralph-enable-ci --workspace` bootstraps Ralph at the workspace level
+- Auto-discovers child git repos and generates per-repo `## repo-name` sections in `fix_plan.md`
+- Workspace-specific `PROMPT.md` with multi-repo orchestration instructions
+- `.ralphrc` generated with `WORKSPACE_MODE=true`
+- Validates workspace structure (must have child git repos, must NOT be a git repo itself)
+- 20 new tests (13 in `test_enable_core.bats`, 6 in `test_ralph_enable.bats`, plus edge cases)
+
+**Parallel Workspace Execution**
 - `ralph --workspace --parallel N` to execute tasks across N repos simultaneously
 - `pick_workspace_tasks_parallel()` picks one task per repo, skips repos with in-progress tasks and `cross-repo` section
 - `get_workspace_parallel_limit()` calculates safe parallelism (min of repos, pending tasks, requested N)

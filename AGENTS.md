@@ -101,6 +101,9 @@ The system uses a modular architecture with reusable components in the `lib/` di
    - Safe file operations: `safe_create_file()`, `safe_create_dir()`
    - Project detection: `detect_project_context()`, `detect_git_info()`, `detect_task_sources()`
    - Template generation: `generate_prompt_md()`, `generate_agent_md()`, `generate_fix_plan_md()`, `generate_ralphrc()`
+   - Workspace detection: `detect_workspace_context()` — detects if CWD is a workspace (child git repos, no `.git/` at root)
+   - Workspace generation: `generate_workspace_prompt_md()`, `generate_workspace_fix_plan_md()`, `generate_workspace_ralphrc()`
+   - Workspace enable: `enable_workspace_in_directory()` — creates `.ralph/` with workspace-specific config (PROMPT.md, fix_plan.md with `## repo-name` sections, .ralphrc with `WORKSPACE_MODE=true`)
 
 6. **lib/wizard_utils.sh** - Interactive prompt utilities for enable wizard
    - User prompts: `confirm()`, `prompt_text()`, `prompt_number()`
@@ -245,11 +248,16 @@ ralph-enable --from prd ./docs/requirements.md
 # Force overwrite existing .ralph/
 ralph-enable --force
 
+# Enable workspace mode (multi-repo directory)
+cd ~/work/my-workspace
+ralph-enable --workspace
+
 # Non-interactive for CI/scripts
 ralph-enable-ci                              # Sensible defaults
 ralph-enable-ci --from github               # With task source
 ralph-enable-ci --project-type typescript   # Override detection
 ralph-enable-ci --json                      # Machine-readable output
+ralph-enable-ci --workspace                 # Workspace mode for CI
 ```
 
 ### Planning Mode (AI-powered fix_plan builder)
@@ -805,7 +813,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (750 tests total)
+### Test Files (770 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -821,9 +829,9 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_installation.bats` | 15 | Global installation/uninstall workflows + dotfile template copying (#174) |
 | `test_project_setup.bats` | 50 | Project setup (setup.sh) validation + .ralphrc permissions + .gitignore (#174) |
 | `test_prd_import.bats` | 33 | PRD import (ralph_import.sh) workflows + modern CLI tests |
-| `test_enable_core.bats` | 38 | Enable core library (idempotency, project detection, template generation, .gitignore #174) |
+| `test_enable_core.bats` | 52 | Enable core library (idempotency, project detection, template generation, .gitignore #174, workspace detection and scaffolding) |
 | `test_task_sources.bats` | 23 | Task sources (beads, GitHub, PRD extraction, normalization) |
-| `test_ralph_enable.bats` | 24 | Ralph enable integration tests (wizard, CI version, JSON output, .ralphrc validation #149) |
+| `test_ralph_enable.bats` | 30 | Ralph enable integration tests (wizard, CI version, JSON output, .ralphrc validation #149, workspace enable) |
 | `test_wizard_utils.bats` | 20 | Wizard utility functions (stdout/stderr separation, prompt functions) |
 | `test_file_protection.bats` | 15 | File integrity validation (RALPH_REQUIRED_PATHS, validate_ralph_integrity, get_integrity_report) (Issue #149) |
 | `test_integrity_check.bats` | 10 | Pre-loop integrity check in ralph_loop.sh (startup + in-loop validation) (Issue #149) |

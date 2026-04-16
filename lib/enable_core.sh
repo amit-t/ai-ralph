@@ -917,6 +917,308 @@ enable_ralph_in_directory() {
     return $ENABLE_SUCCESS
 }
 
+# =============================================================================
+# WORKSPACE MODE
+# =============================================================================
+
+# Exported workspace detection results
+export DETECTED_WORKSPACE="false"
+export DETECTED_WORKSPACE_REPOS=()
+
+# detect_workspace_context - Detect if the current directory is a workspace
+# A workspace has child git repos AND is NOT itself a git repo.
+#
+# Sets globals:
+#   DETECTED_WORKSPACE - "true" if workspace detected
+#   DETECTED_WORKSPACE_REPOS - Array of child repo directory names
+#
+detect_workspace_context() {
+    DETECTED_WORKSPACE="false"
+    DETECTED_WORKSPACE_REPOS=()
+
+    # Must NOT be a git repo itself
+    if [[ -d ".git" ]]; then
+        return 0
+    fi
+
+    # Find child directories with .git/
+    local found=false
+    for entry in */; do
+        [[ -d "$entry" ]] || continue
+        local dirname
+        dirname=$(basename "$entry")
+        # Skip hidden directories
+        [[ "$dirname" == .* ]] && continue
+        if [[ -d "$entry/.git" ]]; then
+            DETECTED_WORKSPACE_REPOS+=("$dirname")
+            found=true
+        fi
+    done
+
+    if $found; then
+        DETECTED_WORKSPACE="true"
+    fi
+}
+
+# generate_workspace_prompt_md - Generate PROMPT.md for workspace mode
+#
+# Outputs workspace-specific development instructions to stdout.
+# Based on templates/PROMPT_WORKSPACE.md content.
+#
+generate_workspace_prompt_md() {
+    cat << 'WSPROMPTEOF'
+# Workspace Mode — Multi-Repository Development Instructions
+
+You are operating in **Workspace Mode**, managing tasks across **multiple repositories** in a single workspace directory.
+
+## Your Role
+
+You are an autonomous developer working on a specific task in a specific repository. Each loop iteration assigns you one task in one repo. Focus exclusively on that task.
+
+## Working Directory Constraint
+
+You will be told which repository to work in. **All file edits, git operations, and shell commands MUST stay within that repository's working directory.** Do NOT navigate to sibling repositories or the workspace root.
+
+Run `pwd` before any file operation to confirm you are in the correct directory.
+
+## Task Execution
+
+1. Read the assigned task description carefully
+2. Explore the repository to understand context
+3. Implement the required changes
+4. Run any available quality gates (lint, test, build)
+5. Commit your changes to a new branch
+
+## RALPH_STATUS Block
+
+At the end of your response, output a status block:
+
+```
+RALPH_STATUS:
+STATUS: WORKING | COMPLETE | BLOCKED
+EXIT_SIGNAL: false | true
+WORK_TYPE: WORKSPACE_TASK
+REPO: <repo-name>
+TASK: <task-description>
+FILES_MODIFIED: <count>
+```
+
+- Set `STATUS: COMPLETE` when the assigned task is fully done
+- Set `EXIT_SIGNAL: true` ONLY when ALL tasks across ALL repos are complete
+- Set `STATUS: BLOCKED` if you cannot proceed (missing dependencies, unclear requirements)
+
+## Quality Standards
+
+- Follow existing code conventions in the target repository
+- Write tests for new functionality when test infrastructure exists
+- Do NOT modify files outside the assigned repository
+- Do NOT modify the workspace-level `.ralph/fix_plan.md` — the orchestrator handles that
+
+## Cross-Repository Tasks
+
+If your task involves understanding code in another repository:
+- You may READ files in sibling repos for context
+- But all WRITES must be in your assigned repo
+- Document any cross-repo dependencies in your commit message
+WSPROMPTEOF
+}
+
+# generate_workspace_fix_plan_md - Generate fix_plan.md with per-repo sections
+#
+# Parameters:
+#   $1 (repos) - Newline-separated list of repo names
+#   $2 (tasks) - Optional pre-imported task content (unused for workspace scaffold)
+#
+# Outputs workspace fix_plan.md to stdout with ## repo-name sections.
+#
+generate_workspace_fix_plan_md() {
+    local repos="${1:-}"
+    local tasks="${2:-}"
+
+    # If pre-imported tasks provided, use as-is (already in workspace format)
+    if [[ -n "$tasks" ]]; then
+        printf '%s\n' "$tasks"
+        return 0
+    fi
+
+    # Generate scaffold with per-repo sections
+    echo "# Workspace Fix Plan"
+    echo ""
+
+    if [[ -n "$repos" ]]; then
+        while IFS= read -r repo; do
+            [[ -z "$repo" ]] && continue
+            echo "## ${repo}"
+            echo "- [ ] Review codebase and understand architecture"
+            echo "- [ ] Identify and implement priority changes"
+            echo ""
+        done <<< "$repos"
+    fi
+
+    echo "## cross-repo"
+    echo "- [ ] Ensure cross-repository API compatibility"
+}
+
+# generate_workspace_ralphrc - Generate .ralphrc for workspace mode
+#
+# Parameters:
+#   $1 (workspace_name) - Workspace name
+#   $2 (repo_count) - Number of repositories
+#
+# Outputs workspace-specific .ralphrc to stdout.
+#
+generate_workspace_ralphrc() {
+    local workspace_name="${1:-$(basename "$(pwd)")}"
+    local repo_count="${2:-0}"
+
+    # Auto-detect Claude Code CLI command
+    local claude_cmd="claude"
+    if ! command -v claude &>/dev/null; then
+        if command -v npx &>/dev/null; then
+            claude_cmd="npx @anthropic-ai/claude-code"
+        fi
+    fi
+
+    cat << WSRALPHRCEOF
+# .ralphrc - Ralph workspace configuration
+# Generated by: ralph enable --workspace
+# Documentation: https://github.com/frankbria/ralph-claude-code
+
+# Workspace identification
+PROJECT_NAME="${workspace_name}"
+PROJECT_TYPE="workspace"
+WORKSPACE_MODE=true
+WORKSPACE_REPO_COUNT=${repo_count}
+
+# Claude Code CLI command
+CLAUDE_CODE_CMD="${claude_cmd}"
+
+# Loop settings
+MAX_CALLS_PER_HOUR=100
+CLAUDE_TIMEOUT_MINUTES=15
+CLAUDE_OUTPUT_FORMAT="json"
+
+# Tool permissions (broad set — each repo may use different languages)
+ALLOWED_TOOLS="Write,Read,Edit,Bash(git *),Bash(which *),Bash(bd *),Bash(cd *),Bash(npm *),Bash(pnpm *),Bash(yarn *),Bash(bun *),Bash(npx *),Bash(node *),Bash(python *),Bash(pip *),Bash(uv *),Bash(pytest *),Bash(cargo *),Bash(go *)"
+
+# Session management
+SESSION_CONTINUITY=true
+SESSION_EXPIRY_HOURS=24
+
+# Task sources
+TASK_SOURCES="local"
+GITHUB_TASK_LABEL="ralph-task"
+
+# Circuit breaker thresholds
+CB_NO_PROGRESS_THRESHOLD=3
+CB_SAME_ERROR_THRESHOLD=5
+CB_OUTPUT_DECLINE_THRESHOLD=70
+
+# Auto-update Claude CLI at startup
+CLAUDE_AUTO_UPDATE=true
+
+# PR integration
+PR_ENABLED=true
+PR_BASE_BRANCH=main
+PR_DRAFT=false
+MAX_QG_RETRIES=3
+WSRALPHRCEOF
+}
+
+# enable_workspace_in_directory - Enable Ralph in workspace mode
+#
+# Creates workspace-level .ralph/ with PROMPT.md (workspace variant),
+# fix_plan.md (per-repo sections), and .ralphrc (workspace config).
+#
+# Environment:
+#   ENABLE_FORCE - If "true", overwrites existing files
+#   ENABLE_WORKSPACE_NAME - Override workspace name
+#   ENABLE_TASK_CONTENT - Pre-imported task content (workspace format)
+#
+# Returns:
+#   0 - Success
+#   1 - Error
+#   2 - Already enabled (no force)
+#
+enable_workspace_in_directory() {
+    local force="${ENABLE_FORCE:-false}"
+    local workspace_name="${ENABLE_WORKSPACE_NAME:-$(basename "$(pwd)")}"
+    local task_content="${ENABLE_TASK_CONTENT:-}"
+
+    # Check existing state
+    check_existing_ralph || true
+
+    if [[ "$RALPH_STATE" == "complete" && "$force" != "true" ]]; then
+        enable_log "INFO" "Ralph workspace is already enabled"
+        enable_log "INFO" "Use --force to overwrite existing configuration"
+        return $ENABLE_ALREADY_ENABLED
+    fi
+
+    # Detect workspace repos
+    detect_workspace_context
+
+    if [[ "$DETECTED_WORKSPACE" != "true" ]]; then
+        enable_log "ERROR" "Not a workspace directory (no child git repos found, or this is itself a git repo)"
+        return $ENABLE_ERROR
+    fi
+
+    local repo_count=${#DETECTED_WORKSPACE_REPOS[@]}
+    local repo_list
+    repo_list=$(printf '%s\n' "${DETECTED_WORKSPACE_REPOS[@]}")
+
+    enable_log "INFO" "Enabling Ralph workspace: $workspace_name"
+    enable_log "INFO" "Repositories found: $repo_count"
+    for repo in "${DETECTED_WORKSPACE_REPOS[@]}"; do
+        enable_log "INFO" "  - $repo"
+    done
+
+    # Create directory structure
+    if ! create_ralph_structure; then
+        enable_log "ERROR" "Failed to create .ralph/ structure"
+        return $ENABLE_ERROR
+    fi
+
+    # Generate workspace PROMPT.md
+    local prompt_content
+    prompt_content=$(generate_workspace_prompt_md)
+    safe_create_file ".ralph/PROMPT.md" "$prompt_content"
+
+    # Generate workspace AGENT.md (minimal — each repo has its own build system)
+    local agent_content
+    agent_content=$(generate_agent_md \
+        "echo 'Workspace mode: build commands are per-repository'" \
+        "echo 'Workspace mode: test commands are per-repository'" \
+        "ralph --workspace")
+    safe_create_file ".ralph/AGENT.md" "$agent_content"
+
+    # Generate workspace fix_plan.md
+    if [[ -f ".ralph/fix_plan.md" ]]; then
+        if [[ "$force" == "true" && -n "$task_content" ]]; then
+            local fix_plan_content
+            fix_plan_content=$(generate_workspace_fix_plan_md "$repo_list" "$task_content")
+            safe_create_file ".ralph/fix_plan.md" "$fix_plan_content"
+        else
+            enable_log "SKIP" ".ralph/fix_plan.md already exists (preserving work progress)"
+        fi
+    else
+        local fix_plan_content
+        fix_plan_content=$(generate_workspace_fix_plan_md "$repo_list" "$task_content")
+        safe_create_file ".ralph/fix_plan.md" "$fix_plan_content"
+    fi
+
+    # Inject gitignore
+    inject_ralph_gitignore
+
+    # Generate workspace .ralphrc
+    local ralphrc_content
+    ralphrc_content=$(generate_workspace_ralphrc "$workspace_name" "$repo_count")
+    safe_create_file ".ralphrc" "$ralphrc_content"
+
+    enable_log "SUCCESS" "Ralph workspace enabled successfully!"
+
+    return $ENABLE_SUCCESS
+}
+
 # Export functions for use in other scripts
 export -f enable_log
 export -f check_existing_ralph
@@ -934,3 +1236,8 @@ export -f generate_fix_plan_md
 export -f generate_ralphrc
 export -f inject_ralph_gitignore
 export -f enable_ralph_in_directory
+export -f detect_workspace_context
+export -f generate_workspace_prompt_md
+export -f generate_workspace_fix_plan_md
+export -f generate_workspace_ralphrc
+export -f enable_workspace_in_directory
