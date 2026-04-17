@@ -486,8 +486,10 @@ Source: `ALIASES.sh`
 | Alias | Usage | Description |
 |---|---|---|
 | `rpc.int` | `rpc.int` | Interactive mode (live + monitor) |
-| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents |
-| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N agents in background |
+| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (no live/monitor) |
+| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents (interactive: live + monitor) |
+| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes |
+| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N interactive agents in background |
 
 #### Task-Specific Execution
 
@@ -979,7 +981,13 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Task Assignment Directive** (latest)
+**Claude Parallel Aliases Symmetry** (latest)
+- Added `rpc.p N` and `rpc.p.b N` aliases for Claude engine parity with `rpd.p` / `rpx.int.p`
+- `rpc.p N` -> `ralph --parallel N` (spawn N parallel agents without `--live --monitor`)
+- `rpc.p.b N` -> `ralph --parallel-bg N` (spawn N agents as background processes)
+- All 3 engines now expose both non-interactive (`rpc.p`, `rpd.p`, `rpx.*.p`) and interactive (`.int.p`) parallel variants
+
+**Task Assignment Directive**
 - Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"
 - Prevents the AI from choosing a different task than what Ralph selected and locked in `fix_plan.md`
 - Critical fix for parallel mode (`rpd.p`, `rpc.int.p`) where multiple agents run simultaneously

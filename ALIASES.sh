@@ -50,12 +50,18 @@ alias rpc.qg='ralph --qg'
 # Interactive mode
 alias rpc.int='ralph --live --monitor'
 
-# Parallel mode (spawns N agents: iTerm2 tabs from iTerm, IDE terminal tabs from Windsurf/VS Code/Cursor)
-# Usage: rpc.int.p 3  -> spawns 3 parallel ralph agents
+# Parallel non-interactive (spawns N agents: iTerm2 tabs or IDE terminal tabs)
+# Usage: rpc.p 3  -> spawns 3 parallel ralph agents (no live/monitor)
+rpc.p() { ralph --parallel "${1:?Usage: rpc.p <number>}"; }
+
+# Parallel interactive (spawns N agents with --live --monitor in new tabs)
+# Usage: rpc.int.p 3  -> spawns 3 parallel ralph agents in interactive mode
 rpc.int.p() { ralph --live --monitor --parallel "${1:?Usage: rpc.int.p <number>}"; }
 
 # Parallel background mode (spawns N agents as background processes in any terminal)
-# Usage: rpc.int.p.b 3  -> spawns 3 parallel ralph agents in background
+# Usage: rpc.p.b 3      -> spawns 3 parallel ralph agents in background
+# Usage: rpc.int.p.b 3  -> spawns 3 parallel ralph agents with --live --monitor in background
+rpc.p.b() { ralph --parallel-bg "${1:?Usage: rpc.p.b <number>}"; }
 rpc.int.p.b() { ralph --live --monitor --parallel-bg "${1:?Usage: rpc.int.p.b <number>}"; }
 
 # Combined common workflows
