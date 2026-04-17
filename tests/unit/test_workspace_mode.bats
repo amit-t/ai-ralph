@@ -1271,3 +1271,240 @@ EOF
     [[ "$count" -eq 1 ]]
     [[ "$output" == *"repo-gamma|"* ]]
 }
+
+# =============================================================================
+# Integration tests — workspace routing in ralph_loop.sh
+# Verify that --workspace flag routes to run_workspace_mode() and that
+# the function validates workspace structure, picks workspace tasks, and
+# handles missing repos correctly.
+# =============================================================================
+
+# Helper: source ralph_loop.sh without triggering exit from CLI parsing
+# We source it with a no-op to prevent the "if BASH_SOURCE == $0" block from running
+_source_ralph_loop() {
+    # Override exit to prevent sourced script from killing our test shell
+    # The script calls exit in --help, --status, etc.
+    BASH_SOURCE_OVERRIDE="sourced"
+    (
+        # Source only the function definitions, not the CLI parsing
+        # by temporarily setting BASH_SOURCE[0] != $0
+        eval '
+            _original_exit() { builtin exit "$@"; }
+            exit() {
+                if [[ "${FUNCNAME[1]:-}" == "source" ]] || [[ "${FUNCNAME[1]:-}" == "main" ]]; then
+                    return "${1:-0}" 2>/dev/null || true
+                fi
+                builtin exit "$@"
+            }
+        '
+        source "$RALPH_SCRIPT" 2>/dev/null
+    ) 2>/dev/null || true
+}
+
+@test "run_workspace_mode function is defined in ralph_loop.sh" {
+    # Verify via grep that the function exists in the script
+    grep -q '^run_workspace_mode()' "$RALPH_SCRIPT"
+}
+
+@test "_run_workspace_parallel function is defined in ralph_loop.sh" {
+    grep -q '^_run_workspace_parallel()' "$RALPH_SCRIPT"
+}
+
+@test "_workspace_execute_task function is defined and exported" {
+    grep -q '^_workspace_execute_task()' "$RALPH_SCRIPT"
+    grep -q 'export -f _workspace_execute_task' "$RALPH_SCRIPT"
+}
+
+@test "run_workspace_mode validates workspace structure" {
+    # Set up a non-workspace directory (missing .ralph/fix_plan.md)
+    mkdir -p repo-alpha/.git
+
+    # Source the library files needed by run_workspace_mode
+    source "$WORKSPACE_LIB"
+    source "${BATS_TEST_DIRNAME}/../../lib/date_utils.sh"
+    source "${BATS_TEST_DIRNAME}/../../lib/response_analyzer.sh"
+    source "${BATS_TEST_DIRNAME}/../../lib/circuit_breaker.sh"
+
+    # Define run_workspace_mode inline with the validation logic
+    # (the real function is in ralph_loop.sh; we test the same validation call)
+    _test_workspace_validation() {
+        local ws_validation
+        ws_validation=$(validate_workspace "." 2>&1)
+        if [[ $? -ne 0 ]]; then
+            echo "Invalid workspace"
+            return 1
+        fi
+        return 0
+    }
+
+    run _test_workspace_validation
+    assert_failure
+    [[ "$output" == *"Invalid workspace"* ]] || [[ "$output" == *"fix_plan.md"* ]]
+}
+
+@test "workspace mode picks workspace tasks not regular tasks" {
+    # Create valid workspace structure
+    mkdir -p .ralph repo-alpha/.git
+    echo "# Plan" > .ralph/PROMPT.md
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Fix auth bug
+EOF
+
+    source "$WORKSPACE_LIB"
+
+    # pick_workspace_task should pick from ## repo sections
+    run pick_workspace_task ".ralph/fix_plan.md"
+    assert_success
+    [[ "$output" == *"repo-alpha|"* ]]
+    [[ "$output" == *"Fix auth bug"* ]]
+
+    # Verify task was marked in-progress
+    grep -q '\[~\]' .ralph/fix_plan.md
+}
+
+@test "workspace mode reverts task when execution fails" {
+    mkdir -p .ralph repo-alpha/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Fix auth bug
+EOF
+
+    source "$WORKSPACE_LIB"
+
+    # Pick task (marks [~])
+    pick_workspace_task ".ralph/fix_plan.md" > /dev/null
+    grep -q '\[~\]' .ralph/fix_plan.md
+
+    # Simulate failure: revert task back to [ ]
+    local line_num
+    line_num=$(grep -n '\[~\]' .ralph/fix_plan.md | head -1 | cut -d: -f1)
+    revert_workspace_task ".ralph/fix_plan.md" "$line_num"
+
+    # Verify task was reverted
+    grep -q '\[ \] Fix auth bug' .ralph/fix_plan.md
+}
+
+@test "workspace mode exits cleanly when no tasks pending" {
+    # Create workspace with all tasks completed
+    mkdir -p .ralph repo-alpha/.git
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## repo-alpha
+- [x] Already done
+EOF
+
+    source "$WORKSPACE_LIB"
+
+    # pick_workspace_task should fail when no pending tasks
+    run pick_workspace_task ".ralph/fix_plan.md"
+    assert_failure
+}
+
+@test "workspace mode entry point routes before main() call" {
+    # Verify that the entry point checks WORKSPACE_MODE before calling main()
+    local workspace_route_line main_call_line
+
+    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$RALPH_SCRIPT" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    main_call_line=$(grep -n '^\s*main$' "$RALPH_SCRIPT" | tail -1 | cut -d: -f1)
+
+    [[ -n "$workspace_route_line" ]]
+    [[ -n "$main_call_line" ]]
+    # Workspace routing must come before main() call
+    [[ "$workspace_route_line" -lt "$main_call_line" ]]
+}
+
+@test "workspace mode entry point routes before QG mode" {
+    # The actual function calls are the definitive ordering check
+    local workspace_call_line qg_call_line
+
+    # Find run_workspace_mode call in the entry point section (after line 2900+)
+    workspace_call_line=$(grep -n '^\s*run_workspace_mode' "$RALPH_SCRIPT" | tail -1 | cut -d: -f1)
+    qg_call_line=$(grep -n '^\s*run_qg_mode' "$RALPH_SCRIPT" | tail -1 | cut -d: -f1)
+
+    [[ -n "$workspace_call_line" ]]
+    [[ -n "$qg_call_line" ]]
+    [[ "$workspace_call_line" -lt "$qg_call_line" ]]
+}
+
+@test "workspace mode skips normal parallel spawning" {
+    # When --workspace is set, --parallel should NOT trigger spawn_parallel_agents
+    # Instead, workspace mode handles parallelism internally
+    # Verify that the parallel spawn check excludes workspace mode
+    grep -q 'PARALLEL_COUNT.*-gt.*0' "$RALPH_SCRIPT"
+
+    # The non-workspace parallel block should appear AFTER workspace routing
+    local workspace_route_line parallel_spawn_line
+
+    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$RALPH_SCRIPT" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    parallel_spawn_line=$(grep -n 'spawn_parallel_agents' "$RALPH_SCRIPT" | head -1 | cut -d: -f1)
+
+    [[ -n "$workspace_route_line" ]]
+    [[ -n "$parallel_spawn_line" ]]
+    [[ "$workspace_route_line" -lt "$parallel_spawn_line" ]]
+}
+
+@test "workspace mode forwards --workspace flag through tmux setup" {
+    # The tmux setup code forwards --workspace on a separate line from the WORKSPACE_MODE check
+    # Verify both the condition and the flag forwarding exist
+    grep -q 'WORKSPACE_MODE.*true' "$RALPH_SCRIPT"
+    grep -q '\-\-workspace' "$RALPH_SCRIPT"
+    # Verify the specific forwarding pattern: ralph_cmd appends --workspace
+    grep -q 'ralph_cmd.*--workspace' "$RALPH_SCRIPT"
+}
+
+@test "run_workspace_mode uses validate_workspace not validate_ralph_integrity" {
+    # Verify that run_workspace_mode calls validate_workspace
+    # Get the function body between run_workspace_mode() { and the next function
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call validate_workspace
+    echo "$func_body" | grep -q 'validate_workspace'
+
+    # Should NOT call validate_ralph_integrity
+    ! echo "$func_body" | grep -q 'validate_ralph_integrity'
+}
+
+@test "run_workspace_mode calls pick_workspace_task not pick_next_task" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call pick_workspace_task
+    echo "$func_body" | grep -q 'pick_workspace_task'
+
+    # Should NOT call pick_next_task
+    ! echo "$func_body" | grep -q 'pick_next_task'
+}
+
+@test "run_workspace_mode calls execute_claude_code with work_dir" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call execute_claude_code
+    echo "$func_body" | grep -q 'execute_claude_code'
+}
+
+@test "run_workspace_mode handles change detection and task marking" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call mark_workspace_task_complete on success
+    echo "$func_body" | grep -q 'mark_workspace_task_complete'
+
+    # Should call revert_workspace_task on failure
+    echo "$func_body" | grep -q 'revert_workspace_task'
+}
+
+@test "_run_workspace_parallel calls get_workspace_parallel_limit" {
+    local func_body
+    func_body=$(sed -n '/^_run_workspace_parallel()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    echo "$func_body" | grep -q 'get_workspace_parallel_limit'
+    echo "$func_body" | grep -q 'run_workspace_tasks_parallel'
+}

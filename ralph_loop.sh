@@ -362,6 +362,14 @@ setup_tmux_session() {
     if [[ "$WORKTREE_QUALITY_GATES" != "auto" ]]; then
         ralph_cmd="$ralph_cmd --quality-gates '$WORKTREE_QUALITY_GATES'"
     fi
+    # Forward workspace mode flag
+    if [[ "$WORKSPACE_MODE" == "true" ]]; then
+        ralph_cmd="$ralph_cmd --workspace"
+    fi
+    # Forward parallel count for workspace parallel mode
+    if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
+        ralph_cmd="$ralph_cmd --parallel $PARALLEL_COUNT"
+    fi
 
     # Chain tmux kill-session after the loop command so the entire tmux
     # session is torn down when the Ralph loop exits (graceful completion,
@@ -2388,6 +2396,286 @@ run_qg_mode() {
     fi
 }
 
+# ── Workspace Mode ─────────────────────────────────────────────────────────────
+# Multi-repo workspace orchestration. Picks tasks from workspace fix_plan.md
+# (which has ## repo-name sections) and executes them in the corresponding
+# repository directories.
+# Usage: ralph --workspace [--parallel N]
+#
+run_workspace_mode() {
+    # Load project-specific configuration from .ralphrc
+    if load_ralphrc; then
+        [[ "$RALPHRC_LOADED" == "true" ]] && log_status "INFO" "Loaded configuration from .ralphrc"
+    fi
+
+    # Validate Claude Code CLI is available
+    if ! validate_claude_command; then
+        log_status "ERROR" "Claude Code CLI not found: $CLAUDE_CODE_CMD"
+        exit 1
+    fi
+
+    # Check CLI version compatibility and auto-update
+    check_claude_version
+    check_claude_updates
+
+    log_status "SUCCESS" "🚀 Ralph workspace mode starting"
+
+    # Validate workspace structure (replaces normal PROMPT.md / integrity checks)
+    local ws_validation
+    ws_validation=$(validate_workspace "." 2>&1)
+    if [[ $? -ne 0 ]]; then
+        log_status "ERROR" "Invalid workspace structure"
+        echo "$ws_validation" >&2
+        echo ""
+        echo "To set up a workspace, run:  ralph-enable --workspace"
+        exit 1
+    fi
+    log_status "INFO" "$ws_validation"
+
+    # List discovered repos
+    local repos
+    repos=$(discover_workspace_repos ".")
+    log_status "INFO" "Repos: $(echo "$repos" | tr '\n' ' ')"
+
+    # Initialize directories and tracking
+    mkdir -p "$LOG_DIR" "$DOCS_DIR"
+    init_session_tracking
+    update_session_last_used
+    init_call_tracking
+
+    # Reset exit signals for fresh start (Issue #194)
+    echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}' > "$EXIT_SIGNALS_FILE"
+    rm -f "$RESPONSE_ANALYSIS_FILE" 2>/dev/null
+    log_status "INFO" "Reset exit signals for fresh start"
+
+    local fix_plan="$RALPH_DIR/fix_plan.md"
+
+    # ── Parallel workspace mode ──────────────────────────────────────
+    if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
+        _run_workspace_parallel "$fix_plan" "." "$PARALLEL_COUNT"
+        return $?
+    fi
+
+    # ── Sequential workspace mode: pick one task ─────────────────────
+    local task_info
+    task_info=$(pick_workspace_task "$fix_plan")
+    if [[ $? -ne 0 || -z "$task_info" ]]; then
+        log_status "INFO" "No unclaimed workspace tasks — nothing to do."
+        exit 0
+    fi
+
+    local repo_name task_id line_num task_desc
+    repo_name=$(echo "$task_info" | cut -d'|' -f1)
+    task_id=$(echo "$task_info" | cut -d'|' -f2)
+    line_num=$(echo "$task_info" | cut -d'|' -f3)
+    task_desc=$(echo "$task_info" | cut -d'|' -f4)
+
+    log_status "SUCCESS" "Picked task: [$repo_name] $task_desc (line $line_num)"
+
+    # Validate repo directory exists on disk
+    local work_dir
+    work_dir="$(pwd)/${repo_name}"
+    if [[ ! -d "$work_dir" ]]; then
+        log_status "ERROR" "Repository directory not found: $work_dir"
+        revert_workspace_task "$fix_plan" "$line_num"
+        exit 1
+    fi
+
+    local calls_made
+    calls_made=$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")
+    update_status 1 "$calls_made" "workspace:${repo_name}" "running"
+
+    # Capture pre-execution SHA for change detection
+    local pre_exec_sha=""
+    if command -v git &>/dev/null && [[ -d "$work_dir/.git" ]]; then
+        pre_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+    fi
+
+    # Execute Claude Code with repo directory as work_dir.
+    # execute_claude_code handles: prompt loading (falls back to workspace root PROMPT.md),
+    # working-directory constraint directive (work_dir != main_dir), task assignment,
+    # non-interactive mode, session management, and timeout.
+    set +e
+    execute_claude_code 1 "$work_dir" "$task_id" "$line_num" "$task_desc"
+    local exec_result=$?
+
+    # Check for API rate limit errors (same detection as main loop)
+    local latest_log=""
+    latest_log=$(ls -t "$LOG_DIR"/claude_output_*.log 2>/dev/null | head -1)
+    if [[ -n "$latest_log" && -f "$latest_log" ]]; then
+        if grep -q 'hit your limit\|rate_limit\|quota.*exceeded' "$latest_log" 2>/dev/null; then
+            local _err_msg=""
+            _err_msg=$(grep -o '"result":"[^"]*"' "$latest_log" 2>/dev/null | tail -1 | sed 's/"result":"//;s/"$//')
+            if [[ -z "$_err_msg" ]]; then
+                _err_msg=$(grep -o '"text":"[^"]*"' "$latest_log" 2>/dev/null | tail -1 | sed 's/"text":"//;s/"$//')
+            fi
+            if [[ -n "$_err_msg" ]]; then
+                log_status "ERROR" "API Rate Limit: $_err_msg"
+                exec_result=2
+            fi
+        fi
+    fi
+    set -e
+
+    if [[ $exec_result -eq 0 ]]; then
+        # ── Change detection in the repo directory ────────────────────
+        local files_changed=0 lines_added=0 lines_removed=0
+
+        if command -v git &>/dev/null && [[ -d "$work_dir/.git" ]]; then
+            local post_exec_sha=""
+            post_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+
+            # Committed changes
+            if [[ -n "$pre_exec_sha" && -n "$post_exec_sha" && "$pre_exec_sha" != "$post_exec_sha" ]]; then
+                files_changed=$(cd "$work_dir" && git diff --name-only "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | wc -l | tr -d ' ')
+                lines_added=$(cd "$work_dir" && git diff --stat "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
+                lines_removed=$(cd "$work_dir" && git diff --stat "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
+            fi
+
+            # Uncommitted changes (staged + unstaged)
+            local uncommitted_files=0
+            uncommitted_files=$(cd "$work_dir" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+            if [[ $uncommitted_files -gt 0 ]]; then
+                files_changed=$((files_changed + uncommitted_files))
+                local uc_added uc_removed
+                uc_added=$(cd "$work_dir" && git diff HEAD --stat 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
+                uc_removed=$(cd "$work_dir" && git diff HEAD --stat 2>/dev/null | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
+                lines_added=$((lines_added + uc_added))
+                lines_removed=$((lines_removed + uc_removed))
+            fi
+        fi
+
+        [[ -z "$lines_added" ]] && lines_added=0
+        [[ -z "$lines_removed" ]] && lines_removed=0
+
+        if [[ $files_changed -eq 0 ]]; then
+            # No changes — revert task back to unclaimed
+            log_status "WARN" "No changes made in [$repo_name] — reverting task"
+            revert_workspace_task "$fix_plan" "$line_num"
+            echo ""
+            echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${YELLOW}║          Workspace Summary — No Changes Made              ║${NC}"
+            echo -e "${YELLOW}╠════════════════════════════════════════════════════════════╣${NC}"
+            echo -e "${YELLOW}║${NC}  Repo:            ${repo_name}"
+            echo -e "${YELLOW}║${NC}  Task:            ${task_desc}"
+            echo -e "${YELLOW}║${NC}  Result:          No implementation changes detected"
+            echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
+            update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "workspace:${repo_name}:no_changes" "completed"
+            log_status "SUCCESS" "Ralph workspace complete (no changes)."
+            return 0
+        fi
+
+        # Changes detected — mark task complete
+        mark_workspace_task_complete "$fix_plan" "$line_num"
+
+        echo ""
+        echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║               Workspace Execution Summary                 ║${NC}"
+        echo -e "${GREEN}╠════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${GREEN}║${NC}  Repo:            ${repo_name}"
+        echo -e "${GREEN}║${NC}  Task:            ${task_desc}"
+        echo -e "${GREEN}║${NC}  Files changed:   ${files_changed}"
+        echo -e "${GREEN}║${NC}  Lines added:     +${lines_added}"
+        echo -e "${GREEN}║${NC}  Lines removed:   -${lines_removed}"
+        echo -e "${GREEN}║${NC}  Net change:      $((lines_added - lines_removed)) lines"
+        echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "workspace:${repo_name}:completed" "success"
+        log_status "SUCCESS" "Ralph workspace task complete: [$repo_name] $task_desc"
+    else
+        # Execution failed — revert task back to unclaimed
+        revert_workspace_task "$fix_plan" "$line_num"
+        update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "workspace:${repo_name}:failed" "error"
+        log_status "ERROR" "Workspace task failed for [$repo_name] (exit $exec_result)"
+        exit 1
+    fi
+}
+
+# _run_workspace_parallel — Execute multiple workspace tasks in parallel
+# Uses run_workspace_tasks_parallel() from workspace_manager.sh with
+# _workspace_execute_task as the per-repo executor.
+#
+# Args:
+#   $1 - fix_plan: Path to workspace fix_plan.md
+#   $2 - workspace_dir: Workspace root directory
+#   $3 - requested_count: Requested number of parallel workers
+_run_workspace_parallel() {
+    local fix_plan="$1"
+    local workspace_dir="$2"
+    local requested_count="$3"
+
+    local actual_count
+    actual_count=$(get_workspace_parallel_limit "$fix_plan" "$workspace_dir" "$requested_count")
+
+    if [[ "$actual_count" -eq 0 ]]; then
+        log_status "INFO" "No repos with pending tasks for parallel execution — nothing to do."
+        return 0
+    fi
+
+    log_status "INFO" "Parallel workspace: spawning $actual_count worker(s) (requested: $requested_count)..."
+
+    run_workspace_tasks_parallel "$fix_plan" "$workspace_dir" "$actual_count" "_workspace_execute_task"
+    local result=$?
+
+    if [[ $result -eq 0 ]]; then
+        log_status "SUCCESS" "All parallel workspace tasks completed successfully"
+    else
+        log_status "WARN" "Some parallel workspace tasks failed (see logs in .ralph/logs/parallel/)"
+    fi
+
+    return $result
+}
+
+# _workspace_execute_task — Execute a single workspace task in a repo directory
+# This is the executor function passed to run_workspace_tasks_parallel().
+# It runs in a forked subshell for each parallel task, inheriting all functions.
+#
+# Args:
+#   $1 - repo_name: Name of the repository
+#   $2 - task_desc: Task description
+#   $3 - workspace_dir: Workspace root directory
+# Returns:
+#   0 on success, 1 on failure
+_workspace_execute_task() {
+    local repo_name="$1"
+    local task_desc="$2"
+    local workspace_dir="$3"
+
+    local repo_path
+    if [[ "$workspace_dir" == "." ]]; then
+        repo_path="$(pwd)/${repo_name}"
+    else
+        repo_path="${workspace_dir}/${repo_name}"
+    fi
+
+    if [[ ! -d "$repo_path" ]]; then
+        echo "ERROR: Repository not found: $repo_path" >&2
+        return 1
+    fi
+
+    # Build task_id from description (for logging and branch naming)
+    local task_id
+    task_id=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+
+    echo "Executing task in [$repo_name]: $task_desc"
+
+    # Execute Claude Code with the repo as work directory.
+    # execute_claude_code is available in the subshell (fork inherits all functions).
+    execute_claude_code 1 "$repo_path" "$task_id" "" "$task_desc"
+    local result=$?
+
+    if [[ $result -eq 0 ]]; then
+        echo "Task completed in [$repo_name]"
+    else
+        echo "Task failed in [$repo_name] (exit $result)" >&2
+    fi
+
+    return $result
+}
+export -f _workspace_execute_task
+
 # Help function
 show_help() {
     cat << HELPEOF
@@ -2652,7 +2940,19 @@ done
 
 # Only execute when run directly, not when sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # If parallel mode requested, spawn agents (iTerm tabs or background jobs)
+    # If workspace mode requested, route to workspace handler
+    # (workspace handles its own parallelism via run_workspace_tasks_parallel)
+    if [[ "$WORKSPACE_MODE" == "true" ]]; then
+        # Workspace + tmux: forward --workspace flag through tmux
+        if [[ "$USE_TMUX" == "true" ]]; then
+            check_tmux_available
+            setup_tmux_session
+        fi
+        run_workspace_mode
+        exit $?
+    fi
+
+    # If parallel mode requested (non-workspace), spawn agents (iTerm tabs or background jobs)
     if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
         # Rebuild args without --parallel N / --parallel-bg N
         passthrough_args=()
