@@ -1606,10 +1606,11 @@
       </div>
       <ul class="change-list">
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
-            class="change-text"><span class="change-scope">aliases:</span> Add <code>rpc.p N</code> and
-            <code>rpc.p.b N</code> aliases for Claude engine parity with <code>rpd.p</code> / <code>rpx.int.p</code>
-            &mdash; non-interactive parallel agent spawning (no <code>--live --monitor</code>)</span><span
-            class="change-hash">d97f339</span></li>
+            class="change-text"><span class="change-scope">aliases:</span> Add <code>rpc.p</code>,
+            <code>rpc.live.p</code>, and <code>rpc.p.b</code> / <code>rpc.live.p.b</code> variants &mdash; gives Claude
+            engine parity with <code>rpd.p</code> / <code>rpx.int.p</code> plus a streaming-only parallel mode
+            (<code>--live</code>) that skips the <code>--monitor</code> tmux 3-pane split</span><span
+            class="change-hash">5f229ec</span></li>
         <li class="change-item" data-type="feat" data-has-detail><span
             class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">planning:</span> Model + thinking-depth controls &mdash;
@@ -2852,7 +2853,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
             'Agents pick unclaimed tasks from <code>fix_plan.md</code> using atomic file locking',
             'Each worktree gets a copy of <code>.ralph/</code> configuration'
           ],
-          usage: 'rpc.p 3          # 3 parallel Claude agents (no live/monitor)\nrpc.int.p 3      # 3 parallel Claude agents (interactive)\nrpd.p 4          # 4 parallel Devin agents\nrpx.int.p 2      # 2 parallel Codex agents'
+          usage: 'rpc.p 3          # 3 parallel Claude agents (quiet)\nrpc.live.p 3     # 3 parallel Claude agents with streaming output (no tmux split)\nrpc.int.p 3      # 3 parallel Claude agents with tmux 3-pane split\nrpd.p 4          # 4 parallel Devin agents\nrpx.int.p 2      # 2 parallel Codex agents'
         },
         1: {
           how: [
@@ -2866,7 +2867,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
             'Runs parallel agents as background processes in any terminal',
             'Does not require IDE terminal tabs or tmux \u2014 works in plain terminals'
           ],
-          usage: 'rpc.p.b 3        # 3 background Claude agents (no live/monitor)\nrpc.int.p.b 3    # 3 background interactive Claude agents\nrpd.p.b 4        # 4 background Devin agents'
+          usage: 'rpc.p.b 3        # 3 background Claude agents (quiet)\nrpc.live.p.b 3   # 3 background agents with streaming output\nrpc.int.p.b 3    # 3 background interactive Claude agents\nrpd.p.b 4        # 4 background Devin agents'
         },
         3: {
           how: [
@@ -3665,11 +3666,13 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       { alias: 'rpc.qg', cmd: 'ralph --qg', desc: 'Quality gate fix mode (retry loop)', engine: 'claude', cat: 'worktree' },
       { alias: 'rpc.wt.full', cmd: 'ralph --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode', engine: 'claude', cat: 'worktree' },
       // Interactive / Parallel
-      { alias: 'rpc.int', cmd: 'ralph --live --monitor', desc: 'Interactive mode (live + monitor)', engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.p N', cmd: 'ralph --parallel N', desc: 'Spawn N parallel agents (no live/monitor)', engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.int.p N', cmd: 'ralph --live --monitor --parallel N', desc: 'Spawn N parallel agents (interactive)', engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.p.b N', cmd: 'ralph --parallel-bg N', desc: 'Spawn N agents as background processes', engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.int.p.b N', cmd: 'ralph --live --monitor --parallel-bg N', desc: 'Spawn N interactive agents in background', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int', cmd: 'ralph --live --monitor', desc: 'Interactive mode (live + monitor, tmux split)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.p N', cmd: 'ralph --parallel N', desc: 'Spawn N parallel agents (quiet, no streaming)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.live.p N', cmd: 'ralph --live --parallel N', desc: 'Spawn N parallel agents streaming Claude output (no tmux split)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p N', cmd: 'ralph --live --monitor --parallel N', desc: 'Spawn N parallel agents with tmux 3-pane split (loop + log + monitor)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.p.b N', cmd: 'ralph --parallel-bg N', desc: 'Spawn N agents as background processes (quiet)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.live.p.b N', cmd: 'ralph --live --parallel-bg N', desc: 'Spawn N background agents with streaming output', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p.b N', cmd: 'ralph --live --monitor --parallel-bg N', desc: 'Spawn N interactive (tmux-split) agents in background', engine: 'claude', cat: 'interactive' },
       // Workflow
       { alias: 'rpc.dev', cmd: 'ralph --live --monitor --verbose', desc: 'Development mode', engine: 'claude', cat: 'workflow' },
       { alias: 'rpc.prod', cmd: 'ralph --calls 50 --auto-reset-circuit', desc: 'Production / unattended mode', engine: 'claude', cat: 'workflow' },
