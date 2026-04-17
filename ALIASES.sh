@@ -54,14 +54,22 @@ alias rpc.int='ralph --live --monitor'
 # Usage: rpc.p 3  -> spawns 3 parallel ralph agents (no live/monitor)
 rpc.p() { ralph --parallel "${1:?Usage: rpc.p <number>}"; }
 
+# Parallel live-only (streams Claude output in each tab, no tmux split / monitor)
+# Usage: rpc.live.p 3  -> spawns 3 parallel ralph agents with streaming output only
+rpc.live.p() { ralph --live --parallel "${1:?Usage: rpc.live.p <number>}"; }
+
 # Parallel interactive (spawns N agents with --live --monitor in new tabs)
+# Note: this creates a 3-pane tmux split (loop + log + monitor) in each tab.
+# Prefer rpc.live.p for a single-pane streaming view.
 # Usage: rpc.int.p 3  -> spawns 3 parallel ralph agents in interactive mode
 rpc.int.p() { ralph --live --monitor --parallel "${1:?Usage: rpc.int.p <number>}"; }
 
 # Parallel background mode (spawns N agents as background processes in any terminal)
-# Usage: rpc.p.b 3      -> spawns 3 parallel ralph agents in background
-# Usage: rpc.int.p.b 3  -> spawns 3 parallel ralph agents with --live --monitor in background
+# Usage: rpc.p.b 3       -> 3 parallel agents (quiet, no streaming)
+# Usage: rpc.live.p.b 3  -> 3 parallel agents with streaming output (background)
+# Usage: rpc.int.p.b 3   -> 3 parallel agents with --live --monitor (background)
 rpc.p.b() { ralph --parallel-bg "${1:?Usage: rpc.p.b <number>}"; }
+rpc.live.p.b() { ralph --live --parallel-bg "${1:?Usage: rpc.live.p.b <number>}"; }
 rpc.int.p.b() { ralph --live --monitor --parallel-bg "${1:?Usage: rpc.int.p.b <number>}"; }
 
 # Combined common workflows

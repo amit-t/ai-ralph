@@ -485,11 +485,13 @@ Source: `ALIASES.sh`
 
 | Alias | Usage | Description |
 |---|---|---|
-| `rpc.int` | `rpc.int` | Interactive mode (live + monitor) |
-| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (no live/monitor) |
-| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents (interactive: live + monitor) |
-| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes |
-| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N interactive agents in background |
+| `rpc.int` | `rpc.int` | Interactive mode (live + monitor, tmux split) |
+| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (quiet, no streaming) |
+| `rpc.live.p N` | `rpc.live.p 3` | Spawn N parallel agents streaming Claude output (single pane, no tmux split) |
+| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with full tmux 3-pane split (loop + log + monitor) |
+| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (quiet) |
+| `rpc.live.p.b N` | `rpc.live.p.b 3` | Spawn N background agents with streaming output |
+| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N interactive (tmux-split) agents in background |
 
 #### Task-Specific Execution
 
@@ -982,9 +984,11 @@ Uninstalling one engine does not affect the others.
 ### Recent Changes
 
 **Claude Parallel Aliases Symmetry** (latest)
-- Added `rpc.p N` and `rpc.p.b N` aliases for Claude engine parity with `rpd.p` / `rpx.int.p`
-- `rpc.p N` -> `ralph --parallel N` (spawn N parallel agents without `--live --monitor`)
-- `rpc.p.b N` -> `ralph --parallel-bg N` (spawn N agents as background processes)
+- Added `rpc.p N` / `rpc.p.b N` for Claude engine parity with `rpd.p` / `rpx.int.p`
+- Added `rpc.live.p N` / `rpc.live.p.b N` for streaming Claude output without the `--monitor` tmux 3-pane split
+- `rpc.p N` -> `ralph --parallel N` (quiet, no streaming)
+- `rpc.live.p N` -> `ralph --live --parallel N` (streaming output, single pane per tab)
+- `rpc.int.p N` -> `ralph --live --monitor --parallel N` (full tmux split: loop + log + monitor)
 - All 3 engines now expose both non-interactive (`rpc.p`, `rpd.p`, `rpx.*.p`) and interactive (`.int.p`) parallel variants
 
 **Task Assignment Directive**
