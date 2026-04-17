@@ -1433,9 +1433,11 @@ ${task_directive}"
         # read from stdin even in -p (print) mode, causing the process to hang
         # Redirect stderr to separate file to prevent Node.js warnings (e.g., UNDICI)
         # from corrupting the jq JSON pipeline (Issue #190)
+        # When in worktree mode, cd into the worktree so Claude writes into the
+        # isolated branch rather than main (parity with Devin/Codex engines).
         local stderr_file="${LOG_DIR}/claude_stderr_$(date '+%Y%m%d_%H%M%S').log"
-        portable_timeout ${timeout_seconds}s stdbuf -oL "${LIVE_CMD_ARGS[@]}" \
-            < /dev/null 2>"$stderr_file" | stdbuf -oL tee "$output_file" | stdbuf -oL jq --unbuffered -j "$jq_filter" 2>/dev/null | tee "$LIVE_LOG_FILE"
+        ( cd "$work_dir" && portable_timeout ${timeout_seconds}s stdbuf -oL "${LIVE_CMD_ARGS[@]}" \
+            < /dev/null ) 2>"$stderr_file" | stdbuf -oL tee "$output_file" | stdbuf -oL jq --unbuffered -j "$jq_filter" 2>/dev/null | tee "$LIVE_LOG_FILE"
 
         # Capture exit codes from pipeline
         local -a pipe_status=("${PIPESTATUS[@]}")
@@ -1518,7 +1520,9 @@ ${task_directive}"
             # stdin must be redirected from /dev/null because newer Claude CLI versions
             # read from stdin even in -p (print) mode, causing SIGTTIN suspension
             # when the process is backgrounded
-            if portable_timeout ${timeout_seconds}s "${CLAUDE_CMD_ARGS[@]}" < /dev/null > "$output_file" 2>&1 &
+            # When in worktree mode, cd into the worktree so Claude writes into the
+            # isolated branch rather than main (parity with Devin/Codex engines).
+            if ( cd "$work_dir" && portable_timeout ${timeout_seconds}s "${CLAUDE_CMD_ARGS[@]}" ) < /dev/null > "$output_file" 2>&1 &
             then
                 :  # Continue to wait loop
             else
@@ -1533,7 +1537,7 @@ ${task_directive}"
         # Note: Legacy mode doesn't use --allowedTools, so tool permissions
         # will be handled by Claude Code's default permission system
         if [[ "$use_modern_cli" == "false" ]]; then
-            if portable_timeout ${timeout_seconds}s $CLAUDE_CODE_CMD < "$PROMPT_FILE" > "$output_file" 2>&1 &
+            if ( cd "$work_dir" && portable_timeout ${timeout_seconds}s $CLAUDE_CODE_CMD ) < "$PROMPT_FILE" > "$output_file" 2>&1 &
             then
                 :  # Continue to wait loop
             else
