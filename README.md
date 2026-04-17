@@ -998,7 +998,13 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Claude Worktree CWD Parity with Devin/Codex** (latest)
+**Claude Parallel Aliases Symmetry** (latest)
+- Added `rpc.p N` and `rpc.p.b N` aliases for Claude engine parity with `rpd.p` / `rpx.int.p`
+- `rpc.p N` -> `ralph --parallel N` (spawn N parallel agents without `--live --monitor`)
+- `rpc.p.b N` -> `ralph --parallel-bg N` (spawn N agents as background processes)
+- All 3 engines now expose both non-interactive (`rpc.p`, `rpd.p`, `rpx.*.p`) and interactive (`.int.p`) parallel variants
+
+**Claude Worktree CWD Parity with Devin/Codex**
 - Fixed: Claude engine created an isolated worktree but invoked the CLI from the main
   project directory, so commits landed on `main` instead of the worktree branch
 - Wrapped all 3 Claude CLI execution paths in `(cd "$work_dir" && ...)` subshells:
