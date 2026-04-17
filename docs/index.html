@@ -1607,6 +1607,35 @@
       <ul class="change-list">
         <li class="change-item" data-type="fix" data-has-detail><span
             class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">claude worktree:</span> Wrap CLI invocations in
+            <code>(cd "$work_dir" &amp;&amp; ...)</code> subshell so Claude writes to the worktree branch
+            instead of main &mdash; parity with Devin/Codex engines</span><span
+            class="change-hash">pending</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it fixes</h4>
+              <ul>
+                <li>Claude engine was creating an isolated git worktree per loop iteration, but the
+                  <code>claude</code> CLI was being spawned from the <em>main</em> project directory, so all
+                  file edits and commits landed on the main branch instead of the feature branch</li>
+                <li>Devin and Codex engines already wrapped their CLI calls in
+                  <code>(cd "$work_dir" &amp;&amp; ...)</code>; Claude was the lone outlier</li>
+              </ul>
+              <h4>How it works</h4>
+              <ul>
+                <li>All three Claude execution paths in <code>ralph_loop.sh</code> now <code>cd</code> into the
+                  worktree before invoking the CLI: live mode (line 1439), modern background mode (line 1525),
+                  legacy background mode (line 1540)</li>
+                <li>Paths of <code>output_file</code>, <code>stderr_file</code>, and <code>PROMPT_FILE</code>
+                  are resolved in the parent shell (pre-subshell) so logs still land in the main
+                  <code>.ralph/logs/</code> tree</li>
+                <li>4 new unit tests in <code>test_cli_modern.bats</code> guard against regression</li>
+              </ul>
+            </div>
+          </div>
+        </li>
+        <li class="change-item" data-type="fix" data-has-detail><span
+            class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">parallel:</span> Inject picked task info into AI prompt
             &mdash; prevents agents from working on the wrong task in parallel mode</span><span
             class="change-hash">1086032</span>
@@ -2479,10 +2508,11 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
     // Detail data keyed by section data-version → item index
     const CHANGE_DETAILS = {
       'latest': {
-        // 0 = task assignment directive fix (uses inline HTML detail, no JS entry needed)
-        // 1 = compress mode (uses inline HTML detail, no JS entry needed)
-        // 2 = file-based planning mode (uses inline HTML detail, no JS entry needed)
-        3: {
+        // 0 = claude worktree cwd parity (uses inline HTML detail, no JS entry needed)
+        // 1 = task assignment directive fix (uses inline HTML detail, no JS entry needed)
+        // 2 = compress mode (uses inline HTML detail, no JS entry needed)
+        // 3 = file-based planning mode (uses inline HTML detail, no JS entry needed)
+        4: {
           how: [
             'Removed the inline QG retry <code>while</code> loop from all 3 engine loop scripts (~80 lines each)',
             'Main loop now runs quality gates once and always creates a PR &mdash; success or failure (with <code>quality-gates-failed</code> label)',
@@ -2493,7 +2523,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Run quality gate fix mode after a failed PR\nralph --qg\nrpc.qg\n\n# With specific engine\nralph-codex --qg\nrpx.qg\nralph-devin --qg\nrpd.qg\n\n# Configure max retry attempts in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts'
         },
-        4: {
+        5: {
           how: [
             '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
             'The task ID is pre-generated before AI invocation and injected into the prompt',
@@ -2502,7 +2532,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
         },
-        5: {
+        6: {
           how: [
             '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
             'Prompts for a one-liner task description (interactive or inline via argument)',
@@ -2512,28 +2542,28 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
         },
-        6: {
+        7: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: subagent strategy for parallel gate fixing within the main loop'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        7: {
+        8: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: inline retry loop after worktree execution'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        8: {
+        9: {
           how: [
             'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
             'Helps correlate loop iterations with Claude conversation context'
           ],
           usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
         },
-        9: {
+        10: {
           how: [
             'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
             'Matches the latest Codex CLI API naming convention'

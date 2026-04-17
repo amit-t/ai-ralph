@@ -979,7 +979,15 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Task Assignment Directive** (latest)
+**Claude Worktree CWD Parity with Devin/Codex** (latest)
+- Fixed: Claude engine created an isolated worktree but invoked the CLI from the main
+  project directory, so commits landed on `main` instead of the worktree branch
+- Wrapped all 3 Claude CLI execution paths in `(cd "$work_dir" && ...)` subshells:
+  live mode, modern background mode, legacy background mode
+- Brings Claude to full parity with Devin and Codex engines, which already used this pattern
+- Added 4 new unit tests in `test_cli_modern.bats` to prevent regression
+
+**Task Assignment Directive**
 - Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"
 - Prevents the AI from choosing a different task than what Ralph selected and locked in `fix_plan.md`
 - Critical fix for parallel mode (`rpd.p`, `rpc.int.p`) where multiple agents run simultaneously

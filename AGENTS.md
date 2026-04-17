@@ -125,6 +125,11 @@ The system uses a modular architecture with reusable components in the `lib/` di
    - `worktree_run_quality_gates()`: auto-detects and runs lint/test/build gates
    - `worktree_build_qg_fix_prompt()`: builds a focused prompt for the AI to fix quality gate failures
    - Includes full error output from failed commands (last 80 lines per command)
+   - **Cross-engine standardization**: Claude, Devin, and Codex all use the same
+     `worktree_create()` logic AND wrap CLI invocations in `(cd "$work_dir" && ...)`
+     subshells so the AI writes to the isolated branch, not the main branch.
+     This parity was added for Claude in `ralph_loop.sh` across three paths:
+     live mode, modern background mode, and legacy background mode.
 
 10. **lib/pr_manager.sh** - PR lifecycle management
     - `pr_preflight_check()`: validates git remote, gh CLI, authentication
