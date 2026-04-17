@@ -178,6 +178,11 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - `get_workspace_parallel_limit()`: calculates safe parallelism — min of repos with pending tasks (excluding in-progress and cross-repo), and requested count; 0 = auto
     - `pick_workspace_tasks_parallel()`: picks up to N tasks (one per repo), skips repos with in-progress tasks and cross-repo section, atomically marks all `[~]`
     - `run_workspace_tasks_parallel()`: orchestrates parallel execution — picks tasks, spawns background workers with per-worker logs, waits for completion, marks `[x]` or reverts `[ ]`
+    - `workspace_repo_worktree_init()`: initializes worktree system for a single workspace repo (sets `_WT_*` state from the repo context)
+    - `workspace_repo_worktree_create()`: creates an isolated worktree + branch for a workspace repo task (calls `worktree_init` + `worktree_create` in the repo dir)
+    - `workspace_repo_run_quality_gates()`: runs quality gates for a workspace repo — delegates to `worktree_run_quality_gates()` if worktree active, otherwise temporarily sets `_WT_CURRENT_PATH` to the repo dir
+    - `workspace_repo_commit_and_pr()`: commits, pushes, and creates a PR for a workspace repo task — runs `pr_preflight_check` in the repo dir, then delegates to `worktree_commit_and_pr()` or `worktree_fallback_branch_pr()`
+    - `workspace_repo_cleanup()`: cleans up worktree for a workspace repo — preserves branch for PR, syncs state back
     - Workspace fix_plan.md format uses `## repo-name` section headers with standard checkbox tasks underneath
     - Supports `cross-repo` section for tasks spanning multiple repositories
 
@@ -187,6 +192,13 @@ During the main loop, quality gates are run **once** after Claude completes a ta
 
 - **Gates pass** → PR is created with success status, task marked complete
 - **Gates fail** → PR is created with `quality-gates-failed` label for manual review
+
+**Workspace mode** follows the same pattern per-repo:
+- Each workspace repo task gets its own worktree branch (if `WORKTREE_ENABLED=true`)
+- Quality gates run inside the worktree (auto-detected from repo's `package.json`, `Makefile`, etc.)
+- A per-repo PR is created with the task changes
+- On gate failure, the PR is created with `quality-gates-failed` label
+- Both sequential and parallel workspace modes support worktree + QG + PR
 
 To fix failing quality gates, use the standalone **`ralph --qg`** mode:
 
@@ -813,7 +825,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (770 tests total)
+### Test Files (814 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -839,7 +851,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_adhoc_task.bats` | 18 | Ad-hoc task mode (CLI parsing, find_fix_plan_for_adhoc, prompt_task_description, run_adhoc_task engine validation, prompt construction) |
 | `test_compress_plan.bats` | 33 | Fix plan compression mode (CLI parsing, find_fix_plan_for_compress, count_plan_items, archive_fix_plan, run_compress_plan engine validation, template validation) |
 | `test_file_plan.bats` | 30 | File-based planning mode (CLI parsing, detect_file_type, find_fix_plan_for_file_plan, run_file_plan engine/file validation, template validation) |
-| `test_workspace_mode.bats` | 86 | Workspace mode (discover_workspace_repos, parse_workspace_fix_plan, pick_workspace_task, get_repo_default_branch, validate_workspace, is_workspace_mode, CLI --workspace flag, PROMPT_WORKSPACE.md template, edge cases) + parallel workspace (get_workspace_parallel_limit, pick_workspace_tasks_parallel, run_workspace_tasks_parallel, --workspace --parallel CLI, parallel edge cases) |
+| `test_workspace_mode.bats` | 130 | Workspace mode (discover_workspace_repos, parse_workspace_fix_plan, pick_workspace_task, get_repo_default_branch, validate_workspace, is_workspace_mode, CLI --workspace flag, PROMPT_WORKSPACE.md template, edge cases) + parallel workspace (get_workspace_parallel_limit, pick_workspace_tasks_parallel, run_workspace_tasks_parallel, --workspace --parallel CLI, parallel edge cases) + per-repo worktree/QG/PR (workspace_repo_worktree_init, workspace_repo_worktree_create, workspace_repo_run_quality_gates, workspace_repo_commit_and_pr, workspace_repo_cleanup, structural integration tests) |
 
 ### Running Tests
 ```bash

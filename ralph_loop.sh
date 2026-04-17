@@ -2481,13 +2481,26 @@ run_workspace_mode() {
         exit 1
     fi
 
+    # ── Worktree isolation (per-repo) ────────────────────────────────
+    local ws_worktree_active=false
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        local wt_task_id="${task_id:-task-$(date +%s)}"
+        if workspace_repo_worktree_create "$work_dir" "$wt_task_id"; then
+            work_dir="$(worktree_get_path)"
+            ws_worktree_active=true
+            log_status "SUCCESS" "Worktree: $work_dir (branch: $(worktree_get_branch))"
+        else
+            log_status "WARN" "Worktree creation failed for [$repo_name], using repo directory"
+        fi
+    fi
+
     local calls_made
     calls_made=$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")
     update_status 1 "$calls_made" "workspace:${repo_name}" "running"
 
     # Capture pre-execution SHA for change detection
     local pre_exec_sha=""
-    if command -v git &>/dev/null && [[ -d "$work_dir/.git" ]]; then
+    if command -v git &>/dev/null; then
         pre_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
     fi
 
@@ -2521,7 +2534,7 @@ run_workspace_mode() {
         # ── Change detection in the repo directory ────────────────────
         local files_changed=0 lines_added=0 lines_removed=0
 
-        if command -v git &>/dev/null && [[ -d "$work_dir/.git" ]]; then
+        if command -v git &>/dev/null; then
             local post_exec_sha=""
             post_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
 
@@ -2552,6 +2565,12 @@ run_workspace_mode() {
             # No changes — revert task back to unclaimed
             log_status "WARN" "No changes made in [$repo_name] — reverting task"
             revert_workspace_task "$fix_plan" "$line_num"
+            # Clean up worktree if active (delete branch — nothing to preserve)
+            if [[ "$ws_worktree_active" == "true" ]]; then
+                local _orig_repo_dir
+                _orig_repo_dir="$(pwd)/${repo_name}"
+                workspace_repo_cleanup "$_orig_repo_dir"
+            fi
             echo ""
             echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
             echo -e "${YELLOW}║          Workspace Summary — No Changes Made              ║${NC}"
@@ -2566,8 +2585,53 @@ run_workspace_mode() {
             return 0
         fi
 
-        # Changes detected — mark task complete
-        mark_workspace_task_complete "$fix_plan" "$line_num"
+        # ── Changes detected: quality gates + PR + cleanup ────────────
+        local repo_dir_abs
+        repo_dir_abs="$(pwd)/${repo_name}"
+
+        # Quality gates (run in worktree if active, else in repo dir)
+        local gate_result=0
+        if [[ "$WORKTREE_QUALITY_GATES" != "none" ]]; then
+            log_status "INFO" "Running quality gates for [$repo_name]..."
+            local gate_output
+            gate_output=$(workspace_repo_run_quality_gates "$repo_dir_abs" 2>&1)
+            gate_result=$?
+            while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+            if [[ $gate_result -eq 0 ]]; then
+                log_status "SUCCESS" "Quality gates passed for [$repo_name]."
+            else
+                log_status "WARN" "Quality gates failed for [$repo_name] — creating PR with failure details."
+            fi
+        fi
+
+        # PR creation (commit, push, open PR)
+        local pr_result=0
+        local wt_branch_for_log=""
+        if worktree_is_active; then
+            wt_branch_for_log="$(worktree_get_branch)"
+        fi
+
+        if [[ "${PR_ENABLED:-true}" != "false" ]]; then
+            local gate_flag="true"
+            [[ $gate_result -ne 0 ]] && gate_flag="false"
+            workspace_repo_commit_and_pr "$repo_dir_abs" "$task_id" "$task_desc" "$gate_flag" || pr_result=$?
+        fi
+
+        # Cleanup worktree
+        if [[ "$ws_worktree_active" == "true" ]]; then
+            workspace_repo_cleanup "$repo_dir_abs"
+        fi
+
+        # Determine task completion
+        if [[ $pr_result -ne 0 ]]; then
+            log_status "ERROR" "PR workflow failed for [$repo_name]. Branch preserved: $wt_branch_for_log"
+        elif [[ $gate_result -ne 0 ]]; then
+            log_status "WARN" "Quality gates failed for [$repo_name] but PR created. Branch: $wt_branch_for_log"
+            # Mark task complete even if gates fail — PR is created for review
+            mark_workspace_task_complete "$fix_plan" "$line_num"
+        else
+            mark_workspace_task_complete "$fix_plan" "$line_num"
+        fi
 
         echo ""
         echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
@@ -2587,6 +2651,12 @@ run_workspace_mode() {
     else
         # Execution failed — revert task back to unclaimed
         revert_workspace_task "$fix_plan" "$line_num"
+        # Clean up worktree if active
+        if [[ "$ws_worktree_active" == "true" ]]; then
+            local _orig_repo_dir
+            _orig_repo_dir="$(pwd)/${repo_name}"
+            workspace_repo_cleanup "$_orig_repo_dir"
+        fi
         update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "workspace:${repo_name}:failed" "error"
         log_status "ERROR" "Workspace task failed for [$repo_name] (exit $exec_result)"
         exit 1
@@ -2632,6 +2702,8 @@ _run_workspace_parallel() {
 # This is the executor function passed to run_workspace_tasks_parallel().
 # It runs in a forked subshell for each parallel task, inheriting all functions.
 #
+# Each task gets: worktree isolation → Claude execution → quality gates → PR → cleanup
+#
 # Args:
 #   $1 - repo_name: Name of the repository
 #   $2 - task_desc: Task description
@@ -2659,20 +2731,86 @@ _workspace_execute_task() {
     local task_id
     task_id=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
 
+    # ── Worktree isolation ────────────────────────────────────────
+    local work_dir="$repo_path"
+    local ws_worktree_active=false
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        if workspace_repo_worktree_create "$repo_path" "$task_id"; then
+            work_dir="$(worktree_get_path)"
+            ws_worktree_active=true
+            echo "Worktree created: $work_dir (branch: $(worktree_get_branch))"
+        else
+            echo "WARN: Worktree creation failed for [$repo_name], using repo directory" >&2
+        fi
+    fi
+
+    # Capture pre-execution SHA for change detection
+    local pre_exec_sha=""
+    pre_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+
     echo "Executing task in [$repo_name]: $task_desc"
 
     # Execute Claude Code with the repo as work directory.
     # execute_claude_code is available in the subshell (fork inherits all functions).
-    execute_claude_code 1 "$repo_path" "$task_id" "" "$task_desc"
+    execute_claude_code 1 "$work_dir" "$task_id" "" "$task_desc"
     local result=$?
 
-    if [[ $result -eq 0 ]]; then
-        echo "Task completed in [$repo_name]"
-    else
+    if [[ $result -ne 0 ]]; then
         echo "Task failed in [$repo_name] (exit $result)" >&2
+        if [[ "$ws_worktree_active" == "true" ]]; then
+            workspace_repo_cleanup "$repo_path"
+        fi
+        return $result
     fi
 
-    return $result
+    # ── Change detection ──────────────────────────────────────────
+    local files_changed=0
+    if command -v git &>/dev/null; then
+        local post_exec_sha=""
+        post_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+        if [[ -n "$pre_exec_sha" && -n "$post_exec_sha" && "$pre_exec_sha" != "$post_exec_sha" ]]; then
+            files_changed=$(cd "$work_dir" && git diff --name-only "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | wc -l | tr -d ' ')
+        fi
+        local uncommitted_files=0
+        uncommitted_files=$(cd "$work_dir" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+        files_changed=$((files_changed + uncommitted_files))
+    fi
+
+    if [[ $files_changed -eq 0 ]]; then
+        echo "No changes made in [$repo_name] — reverting task"
+        if [[ "$ws_worktree_active" == "true" ]]; then
+            workspace_repo_cleanup "$repo_path"
+        fi
+        return 1
+    fi
+
+    # ── Quality gates ─────────────────────────────────────────────
+    local gate_result=0
+    if [[ "$WORKTREE_QUALITY_GATES" != "none" ]]; then
+        echo "Running quality gates for [$repo_name]..."
+        workspace_repo_run_quality_gates "$repo_path" 2>&1
+        gate_result=$?
+        if [[ $gate_result -eq 0 ]]; then
+            echo "Quality gates passed for [$repo_name]."
+        else
+            echo "Quality gates failed for [$repo_name] — creating PR with failure details." >&2
+        fi
+    fi
+
+    # ── PR creation ───────────────────────────────────────────────
+    if [[ "${PR_ENABLED:-true}" != "false" ]]; then
+        local gate_flag="true"
+        [[ $gate_result -ne 0 ]] && gate_flag="false"
+        workspace_repo_commit_and_pr "$repo_path" "$task_id" "$task_desc" "$gate_flag" || true
+    fi
+
+    # ── Cleanup ───────────────────────────────────────────────────
+    if [[ "$ws_worktree_active" == "true" ]]; then
+        workspace_repo_cleanup "$repo_path"
+    fi
+
+    echo "Task completed in [$repo_name]"
+    return 0
 }
 export -f _workspace_execute_task
 

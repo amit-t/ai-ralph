@@ -677,6 +677,146 @@ run_workspace_tasks_parallel() {
     return 0
 }
 
+# =============================================================================
+# WORKSPACE WORKTREE / QUALITY GATES / PR — Per-repo orchestration
+# =============================================================================
+#
+# These functions integrate worktree isolation, quality gates, and PR creation
+# into workspace mode. Each repo task gets its own worktree branch; after the
+# AI finishes, quality gates run inside the worktree and a PR is created.
+#
+# The existing worktree_manager.sh and pr_manager.sh functions are reused —
+# they operate on module-level _WT_* state variables, which is safe because:
+#   - Sequential mode: one repo at a time, state is reset between repos
+#   - Parallel mode: each worker runs in a forked subshell with its own state
+
+# workspace_repo_worktree_init — Initialize worktree system for a single repo
+# Must be called from within the repo directory (or with repo_path).
+# Sets up _WT_* state variables for the repo.
+#
+# Args:
+#   $1 - repo_path: Absolute path to the repository
+# Returns: 0 on success, 1 on failure
+workspace_repo_worktree_init() {
+    local repo_path="$1"
+
+    if [[ ! -d "$repo_path/.git" ]]; then
+        echo "ERROR: Not a git repository: $repo_path" >&2
+        return 1
+    fi
+
+    # worktree_init() sets _WT_* state variables that must survive in the caller,
+    # so we cd into the repo in the current shell and restore afterward.
+    local _saved_pwd="$PWD"
+    cd "$repo_path" || return 1
+    worktree_init
+    local _result=$?
+    cd "$_saved_pwd" || true
+    return $_result
+}
+
+# workspace_repo_worktree_create — Create a worktree for a workspace repo task
+# Args:
+#   $1 - repo_path: Absolute path to the repository
+#   $2 - task_id: Task identifier for branch naming
+# Returns: 0 on success (worktree path available via worktree_get_path), 1 on failure
+workspace_repo_worktree_create() {
+    local repo_path="$1"
+    local task_id="$2"
+
+    if [[ ! -d "$repo_path/.git" ]]; then
+        echo "ERROR: Not a git repository: $repo_path" >&2
+        return 1
+    fi
+
+    # worktree_init and worktree_create must run in the repo context.
+    # IMPORTANT: Do NOT wrap in $() — that loses _WT_* state variables.
+    cd "$repo_path" || return 1
+    worktree_init || return 1
+    worktree_create 1 "$task_id" > /dev/null || return 1
+    cd - > /dev/null 2>&1 || true
+    return 0
+}
+
+# workspace_repo_run_quality_gates — Run quality gates for a workspace repo
+# Delegates to worktree_run_quality_gates() which uses _WT_CURRENT_PATH.
+# If no worktree is active, runs gates directly in the repo directory.
+#
+# Args:
+#   $1 - repo_path: Absolute path to the repository (used as fallback)
+# Returns: 0 if all gates pass, 1 if any fail
+workspace_repo_run_quality_gates() {
+    local repo_path="$1"
+
+    if worktree_is_active; then
+        worktree_run_quality_gates
+    else
+        # No worktree — run gates directly in repo dir.
+        # Temporarily set _WT_CURRENT_PATH so worktree_run_quality_gates can find the dir.
+        local _saved_wt_path="$_WT_CURRENT_PATH"
+        _WT_CURRENT_PATH="$repo_path"
+        worktree_run_quality_gates
+        local result=$?
+        _WT_CURRENT_PATH="$_saved_wt_path"
+        return $result
+    fi
+}
+
+# workspace_repo_commit_and_pr — Commit, push, and create PR for a workspace repo task
+# Uses either worktree_commit_and_pr (if worktree active) or worktree_fallback_branch_pr.
+#
+# Args:
+#   $1 - repo_path: Absolute path to the repository
+#   $2 - task_id: Task identifier
+#   $3 - task_name: Human-readable task description
+#   $4 - gate_passed: "true" or "false"
+# Returns: 0 on success, 1 on failure
+workspace_repo_commit_and_pr() {
+    local repo_path="$1"
+    local task_id="$2"
+    local task_name="$3"
+    local gate_passed="$4"
+
+    # Run PR preflight from inside the repo.
+    # pr_preflight_check sets RALPH_PR_PUSH_CAPABLE and RALPH_PR_GH_CAPABLE
+    # which must survive in the current shell.
+    local _saved_pwd="$PWD"
+    cd "$repo_path" || return 1
+    pr_preflight_check
+    cd "$_saved_pwd" || true
+
+    if worktree_is_active; then
+        worktree_commit_and_pr "$task_id" "$task_name" "$gate_passed" "1"
+    else
+        # No worktree — use fallback branch PR from inside the repo
+        cd "$repo_path" || return 1
+        worktree_fallback_branch_pr "$task_id" "$task_name" "1" "$gate_passed"
+        local _result=$?
+        cd "$_saved_pwd" || true
+        return $_result
+    fi
+}
+
+# workspace_repo_cleanup — Clean up worktree for a workspace repo
+# Syncs state back and removes the worktree, preserving the branch for PR.
+#
+# Args:
+#   $1 - repo_path: Absolute path to the repository
+# Returns: 0
+workspace_repo_cleanup() {
+    local repo_path="$1"
+
+    if worktree_is_active; then
+        # Preserve branch (false = don't delete) — PR needs the branch.
+        # worktree_cleanup uses git commands that need the repo context.
+        local _saved_pwd="$PWD"
+        cd "$repo_path" || return 0
+        worktree_cleanup "false"
+        cd "$_saved_pwd" || true
+    fi
+    return 0
+}
+
 # Export all functions for use in subshells
 export -f discover_workspace_repos
 export -f parse_workspace_fix_plan
@@ -690,3 +830,8 @@ export -f is_workspace_mode
 export -f get_workspace_parallel_limit
 export -f pick_workspace_tasks_parallel
 export -f run_workspace_tasks_parallel
+export -f workspace_repo_worktree_init
+export -f workspace_repo_worktree_create
+export -f workspace_repo_run_quality_gates
+export -f workspace_repo_commit_and_pr
+export -f workspace_repo_cleanup

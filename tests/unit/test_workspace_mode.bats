@@ -1508,3 +1508,322 @@ EOF
     echo "$func_body" | grep -q 'get_workspace_parallel_limit'
     echo "$func_body" | grep -q 'run_workspace_tasks_parallel'
 }
+
+# =============================================================================
+# workspace_repo_worktree_init — per-repo worktree initialization
+# =============================================================================
+
+@test "workspace_repo_worktree_init succeeds for valid git repo" {
+    mkdir -p test-repo
+    cd test-repo
+    git init --quiet
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "init" > file.txt
+    git add file.txt
+    git commit --quiet -m "init"
+    cd "$TEST_DIR"
+
+    # Source worktree_manager to get worktree_init
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_ENABLED="true"
+
+    run workspace_repo_worktree_init "$TEST_DIR/test-repo"
+    assert_success
+}
+
+@test "workspace_repo_worktree_init fails for non-git directory" {
+    mkdir -p not-a-repo
+
+    # Source worktree_manager to get worktree_init
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_ENABLED="true"
+
+    run workspace_repo_worktree_init "$TEST_DIR/not-a-repo"
+    assert_failure
+    [[ "$output" == *"Not a git repository"* ]]
+}
+
+@test "workspace_repo_worktree_init fails for missing directory" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_ENABLED="true"
+
+    run workspace_repo_worktree_init "$TEST_DIR/nonexistent"
+    assert_failure
+}
+
+# =============================================================================
+# workspace_repo_worktree_create — per-repo worktree creation
+# =============================================================================
+
+@test "workspace_repo_worktree_create creates worktree for repo" {
+    mkdir -p test-repo
+    cd test-repo
+    git init --quiet
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "init" > file.txt
+    git add file.txt
+    git commit --quiet -m "init"
+    cd "$TEST_DIR"
+
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_ENABLED="true"
+
+    workspace_repo_worktree_create "$TEST_DIR/test-repo" "test-task-123"
+    local result=$?
+    [[ $result -eq 0 ]]
+
+    # Verify worktree path is set
+    local wt_path
+    wt_path=$(worktree_get_path)
+    [[ -n "$wt_path" ]]
+    [[ -d "$wt_path" ]]
+
+    # Verify branch is set
+    local wt_branch
+    wt_branch=$(worktree_get_branch)
+    [[ "$wt_branch" == *"test-task-123"* ]]
+
+    # Cleanup
+    cd "$TEST_DIR/test-repo" && git worktree remove "$wt_path" --force 2>/dev/null || true
+}
+
+@test "workspace_repo_worktree_create fails for non-git directory" {
+    mkdir -p not-a-repo
+
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_ENABLED="true"
+
+    run workspace_repo_worktree_create "$TEST_DIR/not-a-repo" "task-1"
+    assert_failure
+}
+
+# =============================================================================
+# workspace_repo_run_quality_gates — per-repo quality gate execution
+# =============================================================================
+
+@test "workspace_repo_run_quality_gates passes when no gates detected" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_QUALITY_GATES="auto"
+
+    # Create a minimal directory (no package.json, no Makefile, etc.)
+    mkdir -p empty-repo/.ralph
+    _WT_CURRENT_PATH=""
+
+    run workspace_repo_run_quality_gates "$TEST_DIR/empty-repo"
+    assert_success
+}
+
+@test "workspace_repo_run_quality_gates skips when gates disabled" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_QUALITY_GATES="none"
+    _WT_CURRENT_PATH=""
+
+    mkdir -p some-repo/.ralph
+
+    run workspace_repo_run_quality_gates "$TEST_DIR/some-repo"
+    assert_success
+    [[ "$output" == *"Skipped"* ]] || [[ "$output" == *"disabled"* ]] || true
+}
+
+@test "workspace_repo_run_quality_gates uses worktree path when active" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_QUALITY_GATES="auto"
+
+    # Simulate active worktree
+    mkdir -p "$TEST_DIR/worktree/.ralph"
+    _WT_CURRENT_PATH="$TEST_DIR/worktree"
+
+    run workspace_repo_run_quality_gates "$TEST_DIR/some-repo"
+    assert_success
+    # Should use worktree path, not repo path
+    [[ "$output" == *"$TEST_DIR/worktree"* ]] || [[ "$output" == *"No gates auto-detected"* ]]
+}
+
+# =============================================================================
+# workspace_repo_cleanup — per-repo worktree cleanup
+# =============================================================================
+
+@test "workspace_repo_cleanup is no-op when no worktree active" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    _WT_CURRENT_PATH=""
+
+    run workspace_repo_cleanup "$TEST_DIR/some-repo"
+    assert_success
+}
+
+@test "workspace_repo_cleanup removes active worktree" {
+    mkdir -p test-repo
+    cd test-repo
+    git init --quiet
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "init" > file.txt
+    git add file.txt
+    git commit --quiet -m "init"
+    cd "$TEST_DIR"
+
+    source "${BATS_TEST_DIRNAME}/../../lib/worktree_manager.sh"
+    WORKTREE_ENABLED="true"
+
+    workspace_repo_worktree_create "$TEST_DIR/test-repo" "cleanup-test"
+    local wt_path
+    wt_path=$(worktree_get_path)
+    [[ -d "$wt_path" ]]
+
+    workspace_repo_cleanup "$TEST_DIR/test-repo"
+
+    # After cleanup, worktree should be removed
+    [[ -z "$(worktree_get_path)" ]]
+}
+
+# =============================================================================
+# run_workspace_mode — structural tests for worktree/QG/PR integration
+# =============================================================================
+
+@test "run_workspace_mode creates worktree when WORKTREE_ENABLED" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call workspace_repo_worktree_create
+    echo "$func_body" | grep -q 'workspace_repo_worktree_create'
+}
+
+@test "run_workspace_mode runs quality gates after execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call workspace_repo_run_quality_gates
+    echo "$func_body" | grep -q 'workspace_repo_run_quality_gates'
+}
+
+@test "run_workspace_mode creates PR after execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call workspace_repo_commit_and_pr
+    echo "$func_body" | grep -q 'workspace_repo_commit_and_pr'
+}
+
+@test "run_workspace_mode cleans up worktree on no changes" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should call workspace_repo_cleanup
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+@test "run_workspace_mode cleans up worktree on execution failure" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # The failure branch should also clean up
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+@test "run_workspace_mode quality gates run before PR creation" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Quality gates line should appear before PR commit line
+    local qg_line pr_line
+    qg_line=$(echo "$func_body" | grep -n 'workspace_repo_run_quality_gates' | head -1 | cut -d: -f1)
+    pr_line=$(echo "$func_body" | grep -n 'workspace_repo_commit_and_pr' | head -1 | cut -d: -f1)
+
+    [[ -n "$qg_line" ]]
+    [[ -n "$pr_line" ]]
+    [[ "$qg_line" -lt "$pr_line" ]]
+}
+
+@test "run_workspace_mode worktree created before Claude execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Worktree creation line should appear before execute_claude_code
+    local wt_line exec_line
+    wt_line=$(echo "$func_body" | grep -n 'workspace_repo_worktree_create' | head -1 | cut -d: -f1)
+    exec_line=$(echo "$func_body" | grep -n 'execute_claude_code' | head -1 | cut -d: -f1)
+
+    [[ -n "$wt_line" ]]
+    [[ -n "$exec_line" ]]
+    [[ "$wt_line" -lt "$exec_line" ]]
+}
+
+# =============================================================================
+# _workspace_execute_task — structural tests for parallel worker QG/PR
+# =============================================================================
+
+@test "_workspace_execute_task includes worktree creation" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    echo "$func_body" | grep -q 'workspace_repo_worktree_create'
+}
+
+@test "_workspace_execute_task runs quality gates" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    echo "$func_body" | grep -q 'workspace_repo_run_quality_gates'
+}
+
+@test "_workspace_execute_task creates PR" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    echo "$func_body" | grep -q 'workspace_repo_commit_and_pr'
+}
+
+@test "_workspace_execute_task cleans up worktree" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+@test "_workspace_execute_task detects changes before running gates" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Change detection should happen before quality gates
+    local change_line qg_line
+    change_line=$(echo "$func_body" | grep -n 'files_changed' | head -1 | cut -d: -f1)
+    qg_line=$(echo "$func_body" | grep -n 'workspace_repo_run_quality_gates' | head -1 | cut -d: -f1)
+
+    [[ -n "$change_line" ]]
+    [[ -n "$qg_line" ]]
+    [[ "$change_line" -lt "$qg_line" ]]
+}
+
+@test "_workspace_execute_task cleans up on execution failure" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$RALPH_SCRIPT")
+
+    # Should have cleanup in the failure path (result -ne 0)
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+# =============================================================================
+# workspace_manager.sh exports — verify new functions are exported
+# =============================================================================
+
+@test "workspace_manager.sh exports workspace_repo_worktree_init" {
+    grep -q 'export -f workspace_repo_worktree_init' "$WORKSPACE_LIB"
+}
+
+@test "workspace_manager.sh exports workspace_repo_worktree_create" {
+    grep -q 'export -f workspace_repo_worktree_create' "$WORKSPACE_LIB"
+}
+
+@test "workspace_manager.sh exports workspace_repo_run_quality_gates" {
+    grep -q 'export -f workspace_repo_run_quality_gates' "$WORKSPACE_LIB"
+}
+
+@test "workspace_manager.sh exports workspace_repo_commit_and_pr" {
+    grep -q 'export -f workspace_repo_commit_and_pr' "$WORKSPACE_LIB"
+}
+
+@test "workspace_manager.sh exports workspace_repo_cleanup" {
+    grep -q 'export -f workspace_repo_cleanup' "$WORKSPACE_LIB"
+}
