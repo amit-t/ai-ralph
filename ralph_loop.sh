@@ -1674,10 +1674,10 @@ EOF
                 # Reset session to prevent infinite retry with bad session ID
                 if echo "$api_error" | grep -qi "tool.use.concurrency\|concurrency"; then
                     reset_session "tool_use_concurrency_error"
-                    log_status "WARN" "Session reset due to tool use concurrency error. Retrying with fresh session."
+                    log_status "WARN" "Session reset due to tool use concurrency error. Re-run ralph to start a fresh session."
                 else
                     reset_session "api_error_is_error_true"
-                    log_status "WARN" "Session reset due to API error (is_error:true). Retrying with fresh session."
+                    log_status "WARN" "Session reset due to API error (is_error:true). Re-run ralph to start a fresh session."
                 fi
 
                 set -e
@@ -2262,9 +2262,42 @@ main() {
         update_status 1 "$(cat "$CALL_COUNT_FILE")" "completed" "success"
         log_status "SUCCESS" "Ralph complete."
     else
+        # ── Failure summary: print before cleanup so user sees worktree branch
+        # and session ID even when execute_claude_code returned non-zero
+        # (API error, timeout, rate limit). Mirrors the success summary so
+        # operators get parity output regardless of outcome.
+        local _fail_branch=""
+        local _fail_session_id=""
+        _fail_session_id=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null || echo "")
         if worktree_is_active; then
-            log_status "WARN" "Cleaning up worktree after failure..."
-            worktree_cleanup "true"
+            _fail_branch=$(worktree_get_branch)
+        fi
+        echo ""
+        echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║                  Execution Failed                         ║${NC}"
+        echo -e "${RED}╠════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${RED}║${NC}  Task:            ${picked_task_name:-$picked_task_id}"
+        echo -e "${RED}║${NC}  Exit code:       ${exec_result}"
+        if [[ -n "$_fail_branch" ]]; then
+            echo -e "${RED}║${NC}  Branch:          ${_fail_branch} (preserved for inspection)"
+        fi
+        if [[ -n "$_fail_session_id" ]]; then
+            echo -e "${RED}║${NC}  Session ID:      ${_fail_session_id}"
+            echo -e "${RED}║${NC}  Resume with:     claude --resume ${_fail_session_id}"
+        fi
+        echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        # Revert in-progress marker so the task is not stuck on [~]
+        if [[ -n "$picked_line_num" ]]; then
+            local tmp_file="${RALPH_DIR}/fix_plan.md.tmp.$$"
+            awk -v ln="$picked_line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "$RALPH_DIR/fix_plan.md" > "$tmp_file" \
+                && mv "$tmp_file" "$RALPH_DIR/fix_plan.md"
+        fi
+
+        if worktree_is_active; then
+            log_status "WARN" "Removing worktree (branch preserved: ${_fail_branch})..."
+            worktree_cleanup "false"
         fi
         update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "failed" "error"
         log_status "ERROR" "Claude execution failed (exit $exec_result)"

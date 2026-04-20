@@ -50,12 +50,23 @@ alias rpc.qg='ralph --qg'
 # Interactive mode
 alias rpc.int='ralph --live --monitor'
 
-# Parallel mode (spawns N agents: iTerm2 tabs from iTerm, IDE terminal tabs from Windsurf/VS Code/Cursor)
-# Usage: rpc.int.p 3  -> spawns 3 parallel ralph agents
+# Parallel non-interactive (spawns N agents: iTerm2 tabs or IDE terminal tabs)
+# Mirrors rpd.p — plain ralph runs per agent, no --live/--monitor overhead.
+# --live + --monitor wraps execution in a tmux pane and a stream-json
+# tee/FIFO whose file descriptors leak into the post-loop quality-gate
+# capture and can hang `worktree_run_quality_gates` indefinitely.
+# Use rpc.int.p when you actually want the live tmux dashboard.
+# Usage: rpc.p 3  -> spawns 3 parallel ralph agents (auto-exit)
+rpc.p() { ralph --parallel "${1:?Usage: rpc.p <number>}"; }
+
+# Parallel interactive (spawns N agents in live + tmux monitor mode)
+# Usage: rpc.int.p 3  -> spawns 3 parallel ralph agents with live monitor
 rpc.int.p() { ralph --live --monitor --parallel "${1:?Usage: rpc.int.p <number>}"; }
 
 # Parallel background mode (spawns N agents as background processes in any terminal)
-# Usage: rpc.int.p.b 3  -> spawns 3 parallel ralph agents in background
+# Usage: rpc.p.b 3      -> 3 parallel ralph agents in background (auto-exit)
+# Usage: rpc.int.p.b 3  -> 3 parallel ralph agents in background with live monitor
+rpc.p.b() { ralph --parallel-bg "${1:?Usage: rpc.p.b <number>}"; }
 rpc.int.p.b() { ralph --live --monitor --parallel-bg "${1:?Usage: rpc.int.p.b <number>}"; }
 
 # Combined common workflows
