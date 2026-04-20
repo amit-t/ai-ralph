@@ -878,6 +878,19 @@ get_session_file_age_hours() {
 #   - 0: Always returns success (caller should check stdout for session ID)
 #
 init_claude_session() {
+    # Worktree mode creates a fresh worktree per loop iteration, and Claude
+    # CLI scopes session storage by cwd (~/.claude/projects/<cwd-encoded>/).
+    # A session ID saved from worktree-N's pool cannot be resumed from
+    # worktree-N+1's pool — Claude reports "No conversation found with
+    # session ID …". Skip resume/persistence in worktree mode entirely.
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        # Clear any stale ID from a previous non-worktree run so it cannot
+        # leak into a future invocation.
+        rm -f "$CLAUDE_SESSION_FILE" 2>/dev/null
+        echo ""
+        return 0
+    fi
+
     if [[ -f "$CLAUDE_SESSION_FILE" ]]; then
         # Check session age
         local age_hours
@@ -916,6 +929,11 @@ init_claude_session() {
 # Save session ID after successful execution
 save_claude_session() {
     local output_file=$1
+
+    # Worktree mode: do not persist session IDs. See init_claude_session().
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        return 0
+    fi
 
     # Guard: never persist a session from a response where is_error is true (Issue #134, #199)
     if [[ -f "$output_file" ]]; then
@@ -1443,9 +1461,11 @@ ${task_directive}"
         # read from stdin even in -p (print) mode, causing the process to hang
         # Redirect stderr to separate file to prevent Node.js warnings (e.g., UNDICI)
         # from corrupting the jq JSON pipeline (Issue #190)
+        # When in worktree mode, cd into the worktree so Claude writes into the
+        # isolated branch rather than main (parity with Devin/Codex engines).
         local stderr_file="${LOG_DIR}/claude_stderr_$(date '+%Y%m%d_%H%M%S').log"
-        portable_timeout ${timeout_seconds}s stdbuf -oL "${LIVE_CMD_ARGS[@]}" \
-            < /dev/null 2>"$stderr_file" | stdbuf -oL tee "$output_file" | stdbuf -oL jq --unbuffered -j "$jq_filter" 2>/dev/null | tee "$LIVE_LOG_FILE"
+        ( cd "$work_dir" && portable_timeout ${timeout_seconds}s stdbuf -oL "${LIVE_CMD_ARGS[@]}" \
+            < /dev/null ) 2>"$stderr_file" | stdbuf -oL tee "$output_file" | stdbuf -oL jq --unbuffered -j "$jq_filter" 2>/dev/null | tee "$LIVE_LOG_FILE"
 
         # Capture exit codes from pipeline
         local -a pipe_status=("${PIPESTATUS[@]}")
@@ -1512,7 +1532,7 @@ ${task_directive}"
                 if [[ -n "$system_line" ]] && echo "$system_line" | jq -e . >/dev/null 2>&1; then
                     local fallback_session_id
                     fallback_session_id=$(echo "$system_line" | jq -r '.session_id // empty' 2>/dev/null)
-                    if [[ -n "$fallback_session_id" ]]; then
+                    if [[ -n "$fallback_session_id" && "$WORKTREE_ENABLED" != "true" ]]; then
                         echo "$fallback_session_id" > "$CLAUDE_SESSION_FILE"
                         log_status "INFO" "Extracted session ID from system message (timeout fallback)"
                     fi
@@ -1528,7 +1548,9 @@ ${task_directive}"
             # stdin must be redirected from /dev/null because newer Claude CLI versions
             # read from stdin even in -p (print) mode, causing SIGTTIN suspension
             # when the process is backgrounded
-            if portable_timeout ${timeout_seconds}s "${CLAUDE_CMD_ARGS[@]}" < /dev/null > "$output_file" 2>&1 &
+            # When in worktree mode, cd into the worktree so Claude writes into the
+            # isolated branch rather than main (parity with Devin/Codex engines).
+            if ( cd "$work_dir" && portable_timeout ${timeout_seconds}s "${CLAUDE_CMD_ARGS[@]}" ) < /dev/null > "$output_file" 2>&1 &
             then
                 :  # Continue to wait loop
             else
@@ -1543,7 +1565,7 @@ ${task_directive}"
         # Note: Legacy mode doesn't use --allowedTools, so tool permissions
         # will be handled by Claude Code's default permission system
         if [[ "$use_modern_cli" == "false" ]]; then
-            if portable_timeout ${timeout_seconds}s $CLAUDE_CODE_CMD < "$PROMPT_FILE" > "$output_file" 2>&1 &
+            if ( cd "$work_dir" && portable_timeout ${timeout_seconds}s $CLAUDE_CODE_CMD ) < "$PROMPT_FILE" > "$output_file" 2>&1 &
             then
                 :  # Continue to wait loop
             else
@@ -1662,10 +1684,10 @@ EOF
                 # Reset session to prevent infinite retry with bad session ID
                 if echo "$api_error" | grep -qi "tool.use.concurrency\|concurrency"; then
                     reset_session "tool_use_concurrency_error"
-                    log_status "WARN" "Session reset due to tool use concurrency error. Retrying with fresh session."
+                    log_status "WARN" "Session reset due to tool use concurrency error. Re-run ralph to start a fresh session."
                 else
                     reset_session "api_error_is_error_true"
-                    log_status "WARN" "Session reset due to API error (is_error:true). Retrying with fresh session."
+                    log_status "WARN" "Session reset due to API error (is_error:true). Re-run ralph to start a fresh session."
                 fi
 
                 set -e
@@ -2250,9 +2272,42 @@ main() {
         update_status 1 "$(cat "$CALL_COUNT_FILE")" "completed" "success"
         log_status "SUCCESS" "Ralph complete."
     else
+        # ── Failure summary: print before cleanup so user sees worktree branch
+        # and session ID even when execute_claude_code returned non-zero
+        # (API error, timeout, rate limit). Mirrors the success summary so
+        # operators get parity output regardless of outcome.
+        local _fail_branch=""
+        local _fail_session_id=""
+        _fail_session_id=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null || echo "")
         if worktree_is_active; then
-            log_status "WARN" "Cleaning up worktree after failure..."
-            worktree_cleanup "true"
+            _fail_branch=$(worktree_get_branch)
+        fi
+        echo ""
+        echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║                  Execution Failed                         ║${NC}"
+        echo -e "${RED}╠════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${RED}║${NC}  Task:            ${picked_task_name:-$picked_task_id}"
+        echo -e "${RED}║${NC}  Exit code:       ${exec_result}"
+        if [[ -n "$_fail_branch" ]]; then
+            echo -e "${RED}║${NC}  Branch:          ${_fail_branch} (preserved for inspection)"
+        fi
+        if [[ -n "$_fail_session_id" ]]; then
+            echo -e "${RED}║${NC}  Session ID:      ${_fail_session_id}"
+            echo -e "${RED}║${NC}  Resume with:     claude --resume ${_fail_session_id}"
+        fi
+        echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        # Revert in-progress marker so the task is not stuck on [~]
+        if [[ -n "$picked_line_num" ]]; then
+            local tmp_file="${RALPH_DIR}/fix_plan.md.tmp.$$"
+            awk -v ln="$picked_line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "$RALPH_DIR/fix_plan.md" > "$tmp_file" \
+                && mv "$tmp_file" "$RALPH_DIR/fix_plan.md"
+        fi
+
+        if worktree_is_active; then
+            log_status "WARN" "Removing worktree (branch preserved: ${_fail_branch})..."
+            worktree_cleanup "false"
         fi
         update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "failed" "error"
         log_status "ERROR" "Claude execution failed (exit $exec_result)"
