@@ -868,6 +868,19 @@ get_session_file_age_hours() {
 #   - 0: Always returns success (caller should check stdout for session ID)
 #
 init_claude_session() {
+    # Worktree mode creates a fresh worktree per loop iteration, and Claude
+    # CLI scopes session storage by cwd (~/.claude/projects/<cwd-encoded>/).
+    # A session ID saved from worktree-N's pool cannot be resumed from
+    # worktree-N+1's pool — Claude reports "No conversation found with
+    # session ID …". Skip resume/persistence in worktree mode entirely.
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        # Clear any stale ID from a previous non-worktree run so it cannot
+        # leak into a future invocation.
+        rm -f "$CLAUDE_SESSION_FILE" 2>/dev/null
+        echo ""
+        return 0
+    fi
+
     if [[ -f "$CLAUDE_SESSION_FILE" ]]; then
         # Check session age
         local age_hours
@@ -906,6 +919,11 @@ init_claude_session() {
 # Save session ID after successful execution
 save_claude_session() {
     local output_file=$1
+
+    # Worktree mode: do not persist session IDs. See init_claude_session().
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        return 0
+    fi
 
     # Guard: never persist a session from a response where is_error is true (Issue #134, #199)
     if [[ -f "$output_file" ]]; then
@@ -1504,7 +1522,7 @@ ${task_directive}"
                 if [[ -n "$system_line" ]] && echo "$system_line" | jq -e . >/dev/null 2>&1; then
                     local fallback_session_id
                     fallback_session_id=$(echo "$system_line" | jq -r '.session_id // empty' 2>/dev/null)
-                    if [[ -n "$fallback_session_id" ]]; then
+                    if [[ -n "$fallback_session_id" && "$WORKTREE_ENABLED" != "true" ]]; then
                         echo "$fallback_session_id" > "$CLAUDE_SESSION_FILE"
                         log_status "INFO" "Extracted session ID from system message (timeout fallback)"
                     fi
