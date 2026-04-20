@@ -486,8 +486,10 @@ Source: `ALIASES.sh`
 | Alias | Usage | Description |
 |---|---|---|
 | `rpc.int` | `rpc.int` | Interactive mode (live + monitor) |
-| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents |
-| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N agents in background |
+| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (auto-exit, no live/monitor — mirrors `rpd.p`) |
+| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents in background (auto-exit) |
+| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with live tmux monitor |
+| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N agents in background with live tmux monitor |
 
 #### Task-Specific Execution
 
@@ -842,7 +844,7 @@ After picking a task from `fix_plan.md`, Ralph injects a **"ASSIGNED TASK"** dir
 - **Line number** -- the 1-based line in `fix_plan.md` where the task lives
 - **Description** -- the full task description text
 
-This ensures the AI works on the correct task rather than independently reading `fix_plan.md` and choosing its own. It is critical for **parallel mode** (`rpd.p`, `rpc.int.p`, etc.) where multiple agents run simultaneously -- without this directive, agents could all pick the same task or work on tasks that don't match what Ralph selected and locked.
+This ensures the AI works on the correct task rather than independently reading `fix_plan.md` and choosing its own. It is critical for **parallel mode** (`rpd.p`, `rpc.p`, etc.) where multiple agents run simultaneously -- without this directive, agents could all pick the same task or work on tasks that don't match what Ralph selected and locked.
 
 ### Change Detection and Execution Summary
 
@@ -990,7 +992,7 @@ Uninstalling one engine does not affect the others.
 **Task Assignment Directive**
 - Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"
 - Prevents the AI from choosing a different task than what Ralph selected and locked in `fix_plan.md`
-- Critical fix for parallel mode (`rpd.p`, `rpc.int.p`) where multiple agents run simultaneously
+- Critical fix for parallel mode (`rpd.p`, `rpc.p`, `rpc.int.p`) where multiple agents run simultaneously
 - Applied across all 3 engine loops: Claude (`ralph_loop.sh`), Devin (`ralph_loop_devin.sh`), Codex (`ralph_loop_codex.sh`)
 
 **Fix Plan Compression Mode** (latest)
