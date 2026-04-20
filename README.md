@@ -44,6 +44,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - [Documentation](#documentation)
 - [Enabling Ralph in a Project](#enabling-ralph-in-a-project)
 - [Quick Start](#quick-start)
+  - [Workspace Mode (multi-repo quick start)](#workspace-mode-multi-repo-quick-start)
 - [Aliases Reference](#aliases-reference)
   - [Devin Aliases (rpd)](#devin-aliases-rpd)
   - [Claude Code Aliases (rpc)](#claude-code-aliases-rpc)
@@ -315,6 +316,109 @@ rpx.gpt4                     # Use GPT-4 model
 rpx.task 3                   # Execute specific task #3 from fix_plan.md
 rpx.task R05                 # Execute task **R05** by its ID
 ```
+
+### Workspace Mode (multi-repo quick start)
+
+Workspace mode lets you orchestrate tasks across multiple git repos from a single parent directory. Ralph picks one task per repo, runs each in isolation, and creates per-repo PRs automatically.
+
+**Prerequisites:** A parent directory containing two or more git repos (each with its own `.git/`). The parent directory itself must _not_ be a git repo.
+
+```
+~/work/my-workspace/
+├── api-service/         # git repo
+├── web-frontend/        # git repo
+└── shared-lib/          # git repo
+```
+
+**Step 1 -- Enable workspace mode**
+
+```bash
+cd ~/work/my-workspace
+
+# Interactive wizard (pick your engine):
+ralph-enable --workspace            # Claude
+ralph-devin-enable --workspace      # Devin
+ralph-codex-enable --workspace      # Codex
+
+# Non-interactive (CI / scripts):
+ralph-enable-ci --workspace
+```
+
+This creates `.ralph/` in the workspace root with:
+- `fix_plan.md` -- task list organized by `## repo-name` sections (one section per child repo)
+- `PROMPT.md` -- workspace-specific instructions (directory constraints, cross-repo rules)
+- `.ralphrc` -- config with `WORKSPACE_MODE=true`
+
+**Step 2 -- Edit your task plan**
+
+Open `.ralph/fix_plan.md` and add tasks under each repo section:
+
+```markdown
+# Workspace Fix Plan
+
+## api-service
+- [ ] Add rate limiting to /users endpoint
+- [ ] Fix pagination bug in /orders
+
+## web-frontend
+- [ ] Implement dark mode toggle
+- [ ] Fix mobile nav menu
+
+## shared-lib
+- [ ] Bump dependency versions
+
+## cross-repo
+- [ ] Ensure API contract compatibility between api-service and web-frontend
+```
+
+> Tasks under `## cross-repo` are reserved for sequential execution and are skipped by parallel mode.
+
+**Step 3 -- Run**
+
+```bash
+# Sequential -- one repo at a time:
+ralph --workspace                          # Claude
+ralph-devin --workspace                    # Devin
+ralph-codex --workspace                    # Codex
+
+# Parallel -- N repos simultaneously:
+ralph --workspace --parallel 3             # Claude, 3 repos at once
+ralph-devin --workspace --parallel 3       # Devin
+ralph-codex --workspace --parallel 3       # Codex
+
+# With monitoring dashboard (tmux):
+ralph --workspace --monitor
+ralph --workspace --parallel 3 --monitor
+
+# Using aliases:
+rpc.ws                 # Claude sequential
+rpd.ws                 # Devin sequential
+rpx.ws                 # Codex sequential
+rpc.ws.p 3             # Claude parallel (3 repos)
+rpd.ws.p 3             # Devin parallel (3 repos)
+rpx.ws.p 3             # Codex parallel (3 repos)
+rpc.ws.int             # Claude interactive (live + monitor)
+rpd.ws.int             # Devin interactive (live + monitor)
+rpx.ws.int             # Codex interactive (live + monitor)
+```
+
+**How it works at runtime:**
+
+1. Ralph reads `fix_plan.md`, picks the first unclaimed `- [ ]` task (marks it `- [~]`)
+2. Creates an isolated git worktree + branch in the target repo (if `WORKTREE_ENABLED=true`)
+3. Runs the AI engine scoped to that repo's working directory
+4. Runs quality gates (auto-detected from `package.json`, `Makefile`, `Cargo.toml`, etc.)
+5. Creates a PR (or pushes a branch if `gh` is not available)
+6. Marks the task `- [x]` on success, or reverts to `- [ ]` on failure
+7. Moves to the next task
+
+In parallel mode, steps 1-6 run concurrently across up to N repos (one task per repo). Per-worker logs are written to `.ralph/logs/parallel/`.
+
+**Tips:**
+
+- Run `ralph --workspace --parallel 0` is not supported at the CLI level -- omit the count or use a positive integer
+- Quality gate failures still produce a PR, tagged with `quality-gates-failed` for manual review
+- Use `ralph-plan --engine devin` (or `codex`, `claude`) from the workspace root to have AI generate the initial `fix_plan.md` from PRDs or specs
 
 ---
 
