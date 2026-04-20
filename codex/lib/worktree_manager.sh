@@ -22,6 +22,7 @@ WORKTREE_QUALITY_GATES="${WORKTREE_QUALITY_GATES:-auto}"       # auto|none|"cmd1
 WORKTREE_AUTO_CLEANUP="${WORKTREE_AUTO_CLEANUP:-true}"
 WORKTREE_BRANCH_PREFIX="${WORKTREE_BRANCH_PREFIX:-ralph-codex}"
 WORKTREE_AUTO_COMMIT="${WORKTREE_AUTO_COMMIT:-true}"
+WORKTREE_GATE_TIMEOUT="${WORKTREE_GATE_TIMEOUT:-600}"          # per-gate seconds
 
 # Internal state
 _WT_BASE_DIR=""
@@ -354,21 +355,44 @@ worktree_run_quality_gates() {
 
     IFS=";" read -ra gate_cmds <<< "$gates_str"
 
+    # Resolve a timeout binary once (GNU coreutils on Linux, gtimeout on macOS
+    # via `brew install coreutils`). Falls back to no-op when neither exists.
+    local timeout_bin=""
+    if command -v timeout >/dev/null 2>&1; then
+        timeout_bin="timeout"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        timeout_bin="gtimeout"
+    fi
+
     for cmd in "${gate_cmds[@]}"; do
         cmd=$(echo "$cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         [[ -z "$cmd" ]] && continue
 
         total=$((total + 1))
-        echo "QUALITY_GATE[$total]: $cmd" >&2
+        echo "QUALITY_GATE[$total]: $cmd (timeout ${WORKTREE_GATE_TIMEOUT}s)" >&2
 
         local gate_output
         local gate_exit=0
-        gate_output=$(cd "$workdir" && eval "$cmd" 2>&1) || gate_exit=$?
+        # Redirect stdin from /dev/null so commands that probe TTY (npm test
+        # watch mode, prompts) cannot block waiting for input. Wrap in
+        # `timeout` when available so a runaway gate cannot hang the loop's
+        # post-execution PR phase indefinitely.
+        if [[ -n "$timeout_bin" ]]; then
+            gate_output=$(cd "$workdir" && "$timeout_bin" --foreground "$WORKTREE_GATE_TIMEOUT" \
+                bash -c "$cmd" </dev/null 2>&1) || gate_exit=$?
+        else
+            gate_output=$(cd "$workdir" && bash -c "$cmd" </dev/null 2>&1) || gate_exit=$?
+        fi
 
         if [[ $gate_exit -eq 0 ]]; then
             passed=$((passed + 1))
             echo "QUALITY_GATE[$total]: PASSED" >&2
             gate_results+="PASS: $cmd\n"
+        elif [[ $gate_exit -eq 124 || $gate_exit -eq 137 ]]; then
+            failed=$((failed + 1))
+            echo "QUALITY_GATE[$total]: TIMEOUT after ${WORKTREE_GATE_TIMEOUT}s" >&2
+            echo "QUALITY_GATE[$total]: Output: $(echo "$gate_output" | tail -5)" >&2
+            gate_results+="FAIL: $cmd (timeout ${WORKTREE_GATE_TIMEOUT}s)\n"
         else
             failed=$((failed + 1))
             echo "QUALITY_GATE[$total]: FAILED (exit $gate_exit)" >&2
