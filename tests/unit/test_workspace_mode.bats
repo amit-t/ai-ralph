@@ -1827,3 +1827,473 @@ EOF
 @test "workspace_manager.sh exports workspace_repo_cleanup" {
     grep -q 'export -f workspace_repo_cleanup' "$WORKSPACE_LIB"
 }
+
+# =============================================================================
+# Devin loop — workspace mode wiring
+# =============================================================================
+
+DEVIN_LOOP="${BATS_TEST_DIRNAME}/../../devin/ralph_loop_devin.sh"
+
+@test "devin loop sources workspace_manager.sh" {
+    grep -q 'source.*workspace_manager.sh' "$DEVIN_LOOP"
+}
+
+@test "devin loop initializes WORKSPACE_MODE=false" {
+    grep -q 'WORKSPACE_MODE=false' "$DEVIN_LOOP"
+}
+
+@test "--workspace flag is recognized by devin loop" {
+    run bash "$DEVIN_LOOP" --workspace --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "devin --help mentions --workspace flag" {
+    run bash "$DEVIN_LOOP" --help
+    assert_success
+    [[ "$output" == *"--workspace"* ]]
+}
+
+@test "devin --workspace combined with other flags" {
+    run bash "$DEVIN_LOOP" --workspace --calls 50 --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "devin --workspace combined with --monitor flag" {
+    run bash "$DEVIN_LOOP" --workspace --monitor --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "devin --workspace combined with --live flag" {
+    run bash "$DEVIN_LOOP" --workspace --live --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "devin --workspace --parallel N flags are recognized together" {
+    run bash "$DEVIN_LOOP" --workspace --parallel 3 --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "devin run_workspace_mode function is defined" {
+    grep -q '^run_workspace_mode()' "$DEVIN_LOOP"
+}
+
+@test "devin _run_workspace_parallel function is defined" {
+    grep -q '^_run_workspace_parallel()' "$DEVIN_LOOP"
+}
+
+@test "devin _workspace_execute_task function is defined and exported" {
+    grep -q '^_workspace_execute_task()' "$DEVIN_LOOP"
+    grep -q 'export -f _workspace_execute_task' "$DEVIN_LOOP"
+}
+
+@test "devin run_workspace_mode validates workspace structure" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'validate_workspace'
+    ! echo "$func_body" | grep -q 'validate_ralph_integrity'
+}
+
+@test "devin run_workspace_mode calls pick_workspace_task" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'pick_workspace_task'
+    ! echo "$func_body" | grep -q 'pick_next_task'
+}
+
+@test "devin run_workspace_mode calls execute_devin_session" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'execute_devin_session'
+}
+
+@test "devin run_workspace_mode handles change detection and task marking" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'mark_workspace_task_complete'
+    echo "$func_body" | grep -q 'revert_workspace_task'
+}
+
+@test "devin run_workspace_mode creates worktree when WORKTREE_ENABLED" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_worktree_create'
+}
+
+@test "devin run_workspace_mode runs quality gates after execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_run_quality_gates'
+}
+
+@test "devin run_workspace_mode creates PR after execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_commit_and_pr'
+}
+
+@test "devin run_workspace_mode cleans up worktree" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+@test "devin run_workspace_mode quality gates run before PR creation" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    local qg_line pr_line
+    qg_line=$(echo "$func_body" | grep -n 'workspace_repo_run_quality_gates' | head -1 | cut -d: -f1)
+    pr_line=$(echo "$func_body" | grep -n 'workspace_repo_commit_and_pr' | head -1 | cut -d: -f1)
+
+    [[ -n "$qg_line" ]]
+    [[ -n "$pr_line" ]]
+    [[ "$qg_line" -lt "$pr_line" ]]
+}
+
+@test "devin run_workspace_mode worktree created before execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    local wt_line exec_line
+    wt_line=$(echo "$func_body" | grep -n 'workspace_repo_worktree_create' | head -1 | cut -d: -f1)
+    exec_line=$(echo "$func_body" | grep -n 'execute_devin_session' | head -1 | cut -d: -f1)
+
+    [[ -n "$wt_line" ]]
+    [[ -n "$exec_line" ]]
+    [[ "$wt_line" -lt "$exec_line" ]]
+}
+
+@test "devin workspace mode entry point routes before main() call" {
+    local workspace_route_line main_call_line
+
+    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$DEVIN_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    main_call_line=$(grep -n '^\s*main$' "$DEVIN_LOOP" | tail -1 | cut -d: -f1)
+
+    [[ -n "$workspace_route_line" ]]
+    [[ -n "$main_call_line" ]]
+    [[ "$workspace_route_line" -lt "$main_call_line" ]]
+}
+
+@test "devin workspace mode skips normal parallel spawning" {
+    local workspace_route_line parallel_spawn_line
+
+    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$DEVIN_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    parallel_spawn_line=$(grep -n 'spawn_parallel_agents' "$DEVIN_LOOP" | head -1 | cut -d: -f1)
+
+    [[ -n "$workspace_route_line" ]]
+    [[ -n "$parallel_spawn_line" ]]
+    [[ "$workspace_route_line" -lt "$parallel_spawn_line" ]]
+}
+
+@test "devin workspace mode forwards --workspace flag through tmux" {
+    grep -q 'WORKSPACE_MODE.*true' "$DEVIN_LOOP"
+    grep -q 'ralph_cmd.*--workspace' "$DEVIN_LOOP"
+}
+
+@test "devin _run_workspace_parallel calls get_workspace_parallel_limit" {
+    local func_body
+    func_body=$(sed -n '/^_run_workspace_parallel()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'get_workspace_parallel_limit'
+    echo "$func_body" | grep -q 'run_workspace_tasks_parallel'
+}
+
+@test "devin _workspace_execute_task includes worktree creation" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_worktree_create'
+}
+
+@test "devin _workspace_execute_task runs quality gates" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_run_quality_gates'
+}
+
+@test "devin _workspace_execute_task creates PR" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_commit_and_pr'
+}
+
+@test "devin _workspace_execute_task cleans up worktree" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$DEVIN_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+# =============================================================================
+# Codex loop — workspace mode wiring
+# =============================================================================
+
+CODEX_LOOP="${BATS_TEST_DIRNAME}/../../codex/ralph_loop_codex.sh"
+
+@test "codex loop sources workspace_manager.sh" {
+    grep -q 'source.*workspace_manager.sh' "$CODEX_LOOP"
+}
+
+@test "codex loop initializes WORKSPACE_MODE=false" {
+    grep -q 'WORKSPACE_MODE=false' "$CODEX_LOOP"
+}
+
+@test "--workspace flag is recognized by codex loop" {
+    run bash "$CODEX_LOOP" --workspace --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "codex --help mentions --workspace flag" {
+    run bash "$CODEX_LOOP" --help
+    assert_success
+    [[ "$output" == *"--workspace"* ]]
+}
+
+@test "codex --workspace combined with other flags" {
+    run bash "$CODEX_LOOP" --workspace --calls 50 --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "codex --workspace combined with --monitor flag" {
+    run bash "$CODEX_LOOP" --workspace --monitor --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "codex --workspace combined with --live flag" {
+    run bash "$CODEX_LOOP" --workspace --live --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "codex --workspace --parallel N flags are recognized together" {
+    run bash "$CODEX_LOOP" --workspace --parallel 3 --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "codex run_workspace_mode function is defined" {
+    grep -q '^run_workspace_mode()' "$CODEX_LOOP"
+}
+
+@test "codex _run_workspace_parallel function is defined" {
+    grep -q '^_run_workspace_parallel()' "$CODEX_LOOP"
+}
+
+@test "codex _workspace_execute_task function is defined and exported" {
+    grep -q '^_workspace_execute_task()' "$CODEX_LOOP"
+    grep -q 'export -f _workspace_execute_task' "$CODEX_LOOP"
+}
+
+@test "codex run_workspace_mode validates workspace structure" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'validate_workspace'
+    ! echo "$func_body" | grep -q 'validate_ralph_integrity'
+}
+
+@test "codex run_workspace_mode calls pick_workspace_task" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'pick_workspace_task'
+    ! echo "$func_body" | grep -q 'pick_next_task'
+}
+
+@test "codex run_workspace_mode calls execute_codex_session" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'execute_codex_session'
+}
+
+@test "codex run_workspace_mode handles change detection and task marking" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'mark_workspace_task_complete'
+    echo "$func_body" | grep -q 'revert_workspace_task'
+}
+
+@test "codex run_workspace_mode creates worktree when WORKTREE_ENABLED" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_worktree_create'
+}
+
+@test "codex run_workspace_mode runs quality gates after execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_run_quality_gates'
+}
+
+@test "codex run_workspace_mode creates PR after execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_commit_and_pr'
+}
+
+@test "codex run_workspace_mode cleans up worktree" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+@test "codex run_workspace_mode quality gates run before PR creation" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    local qg_line pr_line
+    qg_line=$(echo "$func_body" | grep -n 'workspace_repo_run_quality_gates' | head -1 | cut -d: -f1)
+    pr_line=$(echo "$func_body" | grep -n 'workspace_repo_commit_and_pr' | head -1 | cut -d: -f1)
+
+    [[ -n "$qg_line" ]]
+    [[ -n "$pr_line" ]]
+    [[ "$qg_line" -lt "$pr_line" ]]
+}
+
+@test "codex run_workspace_mode worktree created before execution" {
+    local func_body
+    func_body=$(sed -n '/^run_workspace_mode()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    local wt_line exec_line
+    wt_line=$(echo "$func_body" | grep -n 'workspace_repo_worktree_create' | head -1 | cut -d: -f1)
+    exec_line=$(echo "$func_body" | grep -n 'execute_codex_session' | head -1 | cut -d: -f1)
+
+    [[ -n "$wt_line" ]]
+    [[ -n "$exec_line" ]]
+    [[ "$wt_line" -lt "$exec_line" ]]
+}
+
+@test "codex workspace mode entry point routes before main() call" {
+    local workspace_route_line main_call_line
+
+    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$CODEX_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    main_call_line=$(grep -n '^\s*main$' "$CODEX_LOOP" | tail -1 | cut -d: -f1)
+
+    [[ -n "$workspace_route_line" ]]
+    [[ -n "$main_call_line" ]]
+    [[ "$workspace_route_line" -lt "$main_call_line" ]]
+}
+
+@test "codex workspace mode skips normal parallel spawning" {
+    local workspace_route_line parallel_spawn_line
+
+    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$CODEX_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    parallel_spawn_line=$(grep -n 'spawn_parallel_agents' "$CODEX_LOOP" | head -1 | cut -d: -f1)
+
+    [[ -n "$workspace_route_line" ]]
+    [[ -n "$parallel_spawn_line" ]]
+    [[ "$workspace_route_line" -lt "$parallel_spawn_line" ]]
+}
+
+@test "codex workspace mode forwards --workspace flag through tmux" {
+    grep -q 'WORKSPACE_MODE.*true' "$CODEX_LOOP"
+    grep -q 'ralph_cmd.*--workspace' "$CODEX_LOOP"
+}
+
+@test "codex _run_workspace_parallel calls get_workspace_parallel_limit" {
+    local func_body
+    func_body=$(sed -n '/^_run_workspace_parallel()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'get_workspace_parallel_limit'
+    echo "$func_body" | grep -q 'run_workspace_tasks_parallel'
+}
+
+@test "codex _workspace_execute_task includes worktree creation" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_worktree_create'
+}
+
+@test "codex _workspace_execute_task runs quality gates" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_run_quality_gates'
+}
+
+@test "codex _workspace_execute_task creates PR" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_commit_and_pr'
+}
+
+@test "codex _workspace_execute_task cleans up worktree" {
+    local func_body
+    func_body=$(sed -n '/^_workspace_execute_task()/,/^[a-z_]*() {/p' "$CODEX_LOOP")
+
+    echo "$func_body" | grep -q 'workspace_repo_cleanup'
+}
+
+# =============================================================================
+# Cross-engine workspace parity — all three engines have identical structure
+# =============================================================================
+
+@test "all three engines define run_workspace_mode" {
+    grep -q '^run_workspace_mode()' "$RALPH_SCRIPT"
+    grep -q '^run_workspace_mode()' "$DEVIN_LOOP"
+    grep -q '^run_workspace_mode()' "$CODEX_LOOP"
+}
+
+@test "all three engines define _run_workspace_parallel" {
+    grep -q '^_run_workspace_parallel()' "$RALPH_SCRIPT"
+    grep -q '^_run_workspace_parallel()' "$DEVIN_LOOP"
+    grep -q '^_run_workspace_parallel()' "$CODEX_LOOP"
+}
+
+@test "all three engines define and export _workspace_execute_task" {
+    grep -q '^_workspace_execute_task()' "$RALPH_SCRIPT"
+    grep -q 'export -f _workspace_execute_task' "$RALPH_SCRIPT"
+    grep -q '^_workspace_execute_task()' "$DEVIN_LOOP"
+    grep -q 'export -f _workspace_execute_task' "$DEVIN_LOOP"
+    grep -q '^_workspace_execute_task()' "$CODEX_LOOP"
+    grep -q 'export -f _workspace_execute_task' "$CODEX_LOOP"
+}
+
+@test "all three engines source workspace_manager.sh" {
+    grep -q 'source.*workspace_manager.sh' "$RALPH_SCRIPT"
+    grep -q 'source.*workspace_manager.sh' "$DEVIN_LOOP"
+    grep -q 'source.*workspace_manager.sh' "$CODEX_LOOP"
+}
+
+@test "all three engines parse --workspace flag" {
+    grep -q '\-\-workspace)' "$RALPH_SCRIPT"
+    grep -q '\-\-workspace)' "$DEVIN_LOOP"
+    grep -q '\-\-workspace)' "$CODEX_LOOP"
+}
+
+@test "all three engines route workspace before parallel spawn" {
+    for script in "$RALPH_SCRIPT" "$DEVIN_LOOP" "$CODEX_LOOP"; do
+        local ws_line par_line
+        ws_line=$(grep -n 'WORKSPACE_MODE.*true' "$script" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+        par_line=$(grep -n 'spawn_parallel_agents' "$script" | head -1 | cut -d: -f1)
+        [[ -n "$ws_line" ]]
+        [[ -n "$par_line" ]]
+        [[ "$ws_line" -lt "$par_line" ]]
+    done
+}
