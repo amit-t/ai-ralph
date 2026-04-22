@@ -516,6 +516,12 @@ Source: `ALIASES.sh`
 | `rpc.plan` | `ralph-plan` | Planning mode (Claude engine) |
 | `rpc.plan.sup` | `ralph-plan --yolo --superpowers` | Planning with yolo + superpowers plugin |
 | `rpc.plan.file <path>` | `ralph-plan --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpc.plan.opus` | `ralph-plan --model opus` | Plan using Claude Opus |
+| `rpc.plan.sonnet` | `ralph-plan --model sonnet` | Plan using Claude Sonnet |
+| `rpc.plan.hard` | `ralph-plan --thinking hard` | "Think hard" preamble + `--effort high` |
+| `rpc.plan.ultra` | `ralph-plan --thinking ultra` | `ultrathink` preamble + `--effort max` |
+| `rpc.plan.opus.ultra` | `ralph-plan --model opus --thinking ultra` | Opus + ultrathink for deepest planning |
+| `rpc.plan.max` | `ralph-plan --model opus --thinking ultra --yolo --superpowers` | Max-depth: Opus + ultrathink + yolo + superpowers |
 | `rpc.compress` | `ralph-plan --compress` | Compress fix plan to reduce token usage |
 
 ---
