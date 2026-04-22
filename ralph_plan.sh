@@ -56,8 +56,9 @@ SUPERPOWERS=false
 SUPERPOWERS_PLUGIN_DIR="${HOME}/.claude/plugins/repos/superpowers"
 SUPERPOWERS_REPO="https://github.com/obra/superpowers"
 
-# Model override (Claude engine only; e.g. "opus", "sonnet", "claude-opus-4-7[1m]")
-# Passes --model <value> through to the claude CLI. Empty = engine default.
+# Model override (Claude + Devin engines; e.g. "opus", "sonnet",
+# "claude-opus-4-7[1m]", "claude-sonnet-4"). Passes --model <value> through
+# to the engine CLI. Codex is ignored with a WARN. Empty = engine default.
 MODEL=""
 
 # Thinking depth for planning prompt. One of:
@@ -107,9 +108,10 @@ Options:
     --pm-os <dir>      PM OS directory (contains PRDs, analyses, specs in outputs/)
     --doe-os <dir>     DoE OS directory (contains TDDs, tech specs in outputs/)
     --engine <name>    AI engine: claude (default), codex, devin
-    --model <name>     Model override for the planning session (Claude only).
-                       Passes --model <name> through to the claude CLI.
-                       Examples: opus, sonnet, claude-opus-4-7, claude-sonnet-4-6
+    --model <name>     Model override for the planning session (Claude + Devin).
+                       Passes --model <name> through to the engine CLI.
+                       Examples: opus, sonnet, claude-opus-4-7, claude-sonnet-4
+                       Codex engine ignores this flag with a WARN.
     --thinking <level> Planning thinking depth. One of:
                          normal (default)
                          hard   - "Think hard" preamble + --effort high (Claude)
@@ -674,7 +676,7 @@ run_ai_planning() {
             ;;
         codex)
             if [[ -n "$MODEL" ]]; then
-                log "WARN" "--model is Claude-only for ralph-plan; ignored for codex engine"
+                log "WARN" "--model is Claude+Devin only for ralph-plan; ignored for codex engine"
             fi
             local -a codex_flags=(
                 "--dangerously-bypass-approvals-and-sandbox"
@@ -688,11 +690,14 @@ run_ai_planning() {
             fi
             ;;
         devin)
+            local -a devin_flags=("--permission-mode" "dangerous")
             if [[ -n "$MODEL" ]]; then
-                log "WARN" "--model is Claude-only for ralph-plan; ignored for devin engine"
+                devin_flags+=("--model" "$MODEL")
+                log "PLAN" "Model override: $MODEL"
             fi
-            log "PLAN" "Launching: $cli_cmd (interactive) --permission-mode dangerous --prompt-file $prompt_file"
-            if "$cli_cmd" --permission-mode dangerous --prompt-file "$prompt_file"; then
+            devin_flags+=("--prompt-file" "$prompt_file")
+            log "PLAN" "Launching: $cli_cmd (interactive) ${devin_flags[*]}"
+            if "$cli_cmd" "${devin_flags[@]}"; then
                 cli_exit_code=0
             else
                 cli_exit_code=$?

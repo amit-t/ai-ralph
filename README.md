@@ -412,6 +412,11 @@ Source: `devin/ALIASES.sh`
 | `rpd.enable` | `ralph-devin-enable` | Enable Ralph+Devin in current project |
 | `rpd.plan` | `ralph-plan --engine devin` | Planning mode with Devin |
 | `rpd.plan.file <path>` | `ralph-plan --engine devin --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpd.plan.opus` | `ralph-plan --engine devin --model opus` | Plan via Devin using Opus |
+| `rpd.plan.sonnet` | `ralph-plan --engine devin --model sonnet` | Plan via Devin using Sonnet |
+| `rpd.plan.hard` | `ralph-plan --engine devin --thinking hard` | "Think hard" preamble for Devin planning |
+| `rpd.plan.ultra` | `ralph-plan --engine devin --thinking ultra` | `ultrathink` preamble for Devin planning |
+| `rpd.plan.opus.ultra` | `ralph-plan --engine devin --model opus --thinking ultra` | Opus + ultrathink via Devin |
 | `rpd.compress` | `ralph-plan --engine devin --compress` | Compress fix plan to reduce token usage |
 
 ---
