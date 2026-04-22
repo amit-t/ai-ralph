@@ -712,9 +712,11 @@ EOF
 
     local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
 
-    # The live mode has LIVE_CMD_ARGS on one line and < /dev/null on the next
-    # stderr is redirected to a separate file (Issue #190)
-    run grep '< /dev/null 2>"$stderr_file" |' "$script"
+    # The live mode has LIVE_CMD_ARGS on one line and < /dev/null on the next.
+    # stderr is redirected to a separate file (Issue #190) and the whole
+    # CLI invocation is wrapped in `(cd "$work_dir" && ...)` (worktree cwd fix),
+    # so the pattern allows `)` between `/dev/null` and the stderr redirect.
+    run grep -E '< /dev/null( \))?.*2>"\$stderr_file" \|' "$script"
 
     assert_success
     [[ "$output" == *'< /dev/null'* ]]
@@ -735,7 +737,8 @@ EOF
     assert_success
 
     # Live mode: has < /dev/null with stderr redirect on continuation line
-    run grep '< /dev/null 2>"$stderr_file" |' "$script"
+    # (pattern tolerant of `)` from worktree cwd subshell wrapping)
+    run grep -E '< /dev/null( \))?.*2>"\$stderr_file" \|' "$script"
     assert_success
 
     # Legacy mode: has < "$PROMPT_FILE" on same line
@@ -751,6 +754,49 @@ EOF
     assert_success
     # Should appear in both background and live mode sections
     [[ "$output" == "2" ]]
+}
+
+# =============================================================================
+# WORKTREE CWD WRAPPING TESTS
+# Ensures Claude CLI is invoked from inside the worktree so its writes land on
+# the isolated branch, matching the Devin/Codex engine pattern.
+# Without this, Claude would run from the main project directory and commit to
+# the main branch even though a worktree was created.
+# =============================================================================
+
+@test "modern background mode wraps claude invocation in cd \$work_dir subshell" {
+    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+
+    # Expect: ( cd "$work_dir" && portable_timeout ... "${CLAUDE_CMD_ARGS[@]}" ) < /dev/null ... &
+    run grep -E '\( cd "\$work_dir" && portable_timeout .* "\$\{CLAUDE_CMD_ARGS\[@\]\}" \) < /dev/null' "$script"
+    assert_success
+}
+
+@test "legacy background mode wraps claude invocation in cd \$work_dir subshell" {
+    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+
+    # Expect: ( cd "$work_dir" && portable_timeout ... $CLAUDE_CODE_CMD ) < "$PROMPT_FILE" ... &
+    run grep -E '\( cd "\$work_dir" && portable_timeout .* \$CLAUDE_CODE_CMD \) < "\$PROMPT_FILE"' "$script"
+    assert_success
+}
+
+@test "live mode wraps claude invocation in cd \$work_dir subshell" {
+    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+
+    # Expect: ( cd "$work_dir" && portable_timeout ... "${LIVE_CMD_ARGS[@]}" ...
+    run grep -E '\( cd "\$work_dir" && portable_timeout .* "\$\{LIVE_CMD_ARGS\[@\]\}"' "$script"
+    assert_success
+}
+
+@test "worktree cwd wrapping is documented" {
+    # Verify the fix is documented with context about why cd is needed
+    # This helps future maintainers understand parity with Devin/Codex engines.
+    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+
+    run grep -c 'parity with Devin/Codex engines' "$script"
+    assert_success
+    # Should appear in background (modern) and live mode sections, at least twice
+    [[ "$output" -ge "2" ]]
 }
 
 # =============================================================================

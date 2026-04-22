@@ -1160,11 +1160,12 @@ main() {
 
         # ── Worktree: quality gates + commit + push + PR + cleanup ───────
         if [[ "$WORKTREE_ENABLED" == "true" ]] && worktree_is_active; then
-            log_status "INFO" "Running quality gates..."
-            local gate_output gate_result
-            gate_output=$(worktree_run_quality_gates 2>&1)
-            gate_result=$?
-            while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+            log_status "INFO" "Running quality gates (install timeout ${WORKTREE_INSTALL_TIMEOUT}s, per-gate timeout ${WORKTREE_GATE_TIMEOUT}s)..."
+            local gate_result
+            worktree_run_quality_gates 2>&1 | while IFS= read -r line; do
+                [[ -n "$line" ]] && log_status "INFO" "$line"
+            done
+            gate_result=${PIPESTATUS[0]}
 
             local wt_branch_for_log pr_result=0
             wt_branch_for_log="$(worktree_get_branch)"
@@ -1229,9 +1230,40 @@ main() {
         update_status 1 "$(cat "$CALL_COUNT_FILE")" "completed" "success"
         log_status "SUCCESS" "Ralph Devin complete."
     else
+        local _fail_branch=""
+        local _fail_session_id=""
+        _fail_session_id=$(cat "$DEVIN_SESSION_FILE" 2>/dev/null || echo "")
+        if [[ -z "$_fail_session_id" ]]; then
+            _fail_session_id=$(devin_get_latest_session_id 2>/dev/null || echo "")
+        fi
         if worktree_is_active; then
-            log_status "WARN" "Cleaning up worktree after failure..."
-            worktree_cleanup "true"
+            _fail_branch=$(worktree_get_branch)
+        fi
+        echo ""
+        echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║                  Execution Failed                         ║${NC}"
+        echo -e "${RED}╠════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${RED}║${NC}  Task:            ${picked_task_name:-$picked_task_id}"
+        echo -e "${RED}║${NC}  Exit code:       ${exec_result}"
+        if [[ -n "$_fail_branch" ]]; then
+            echo -e "${RED}║${NC}  Branch:          ${_fail_branch} (preserved for inspection)"
+        fi
+        if [[ -n "$_fail_session_id" ]]; then
+            echo -e "${RED}║${NC}  Session ID:      ${_fail_session_id}"
+            echo -e "${RED}║${NC}  Resume with:     devin -r ${_fail_session_id}"
+        fi
+        echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        if [[ -n "$picked_line_num" ]]; then
+            local tmp_file="${RALPH_DIR}/fix_plan.md.tmp.$$"
+            awk -v ln="$picked_line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "$RALPH_DIR/fix_plan.md" > "$tmp_file" \
+                && mv "$tmp_file" "$RALPH_DIR/fix_plan.md"
+        fi
+
+        if worktree_is_active; then
+            log_status "WARN" "Removing worktree (branch preserved: ${_fail_branch})..."
+            worktree_cleanup "false"
         fi
         update_status 1 "$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")" "failed" "error"
         log_status "ERROR" "Devin execution failed (exit $exec_result)"

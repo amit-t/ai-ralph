@@ -486,10 +486,10 @@ Source: `ALIASES.sh`
 | Alias | Usage | Description |
 |---|---|---|
 | `rpc.int` | `rpc.int` | Interactive mode (live + monitor, tmux split) |
-| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (quiet, no streaming) |
+| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (auto-exit, no live/monitor — mirrors `rpd.p`) |
 | `rpc.live.p N` | `rpc.live.p 3` | Spawn N parallel agents streaming Claude output (single pane, no tmux split) |
 | `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with full tmux 3-pane split (loop + log + monitor) |
-| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (quiet) |
+| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (auto-exit) |
 | `rpc.live.p.b N` | `rpc.live.p.b 3` | Spawn N background agents with streaming output |
 | `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N interactive (tmux-split) agents in background |
 
@@ -846,7 +846,7 @@ After picking a task from `fix_plan.md`, Ralph injects a **"ASSIGNED TASK"** dir
 - **Line number** -- the 1-based line in `fix_plan.md` where the task lives
 - **Description** -- the full task description text
 
-This ensures the AI works on the correct task rather than independently reading `fix_plan.md` and choosing its own. It is critical for **parallel mode** (`rpd.p`, `rpc.int.p`, etc.) where multiple agents run simultaneously -- without this directive, agents could all pick the same task or work on tasks that don't match what Ralph selected and locked.
+This ensures the AI works on the correct task rather than independently reading `fix_plan.md` and choosing its own. It is critical for **parallel mode** (`rpd.p`, `rpc.p`, etc.) where multiple agents run simultaneously -- without this directive, agents could all pick the same task or work on tasks that don't match what Ralph selected and locked.
 
 ### Change Detection and Execution Summary
 
@@ -983,9 +983,17 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Claude Parallel Aliases Symmetry** (latest)
-- Added `rpc.p N` / `rpc.p.b N` for Claude engine parity with `rpd.p` / `rpx.int.p`
+**Claude Worktree CWD Parity with Devin/Codex** (latest)
+- Fixed: Claude engine created an isolated worktree but invoked the CLI from the main
+  project directory, so commits landed on `main` instead of the worktree branch
+- Wrapped all 3 Claude CLI execution paths in `(cd "$work_dir" && ...)` subshells:
+  live mode, modern background mode, legacy background mode
+- Brings Claude to full parity with Devin and Codex engines, which already used this pattern
+- Added 4 new unit tests in `test_cli_modern.bats` to prevent regression
+
+**Claude Parallel Aliases Symmetry**
 - Added `rpc.live.p N` / `rpc.live.p.b N` for streaming Claude output without the `--monitor` tmux 3-pane split
+- Complements the existing `rpc.p` / `rpc.p.b` (quiet) and `rpc.int.p` / `rpc.int.p.b` (full tmux) variants
 - `rpc.p N` -> `ralph --parallel N` (quiet, no streaming)
 - `rpc.live.p N` -> `ralph --live --parallel N` (streaming output, single pane per tab)
 - `rpc.int.p N` -> `ralph --live --monitor --parallel N` (full tmux split: loop + log + monitor)
@@ -994,7 +1002,7 @@ Uninstalling one engine does not affect the others.
 **Task Assignment Directive**
 - Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"
 - Prevents the AI from choosing a different task than what Ralph selected and locked in `fix_plan.md`
-- Critical fix for parallel mode (`rpd.p`, `rpc.int.p`) where multiple agents run simultaneously
+- Critical fix for parallel mode (`rpd.p`, `rpc.p`, `rpc.int.p`) where multiple agents run simultaneously
 - Applied across all 3 engine loops: Claude (`ralph_loop.sh`), Devin (`ralph_loop_devin.sh`), Codex (`ralph_loop_codex.sh`)
 
 **Fix Plan Compression Mode** (latest)
