@@ -33,6 +33,8 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
+- **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
+- **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 
 ---
 
@@ -412,6 +414,11 @@ Source: `devin/ALIASES.sh`
 | `rpd.enable` | `ralph-devin-enable` | Enable Ralph+Devin in current project |
 | `rpd.plan` | `ralph-plan --engine devin` | Planning mode with Devin |
 | `rpd.plan.file <path>` | `ralph-plan --engine devin --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpd.plan.opus` | `ralph-plan --engine devin --model opus` | Plan via Devin using Opus |
+| `rpd.plan.sonnet` | `ralph-plan --engine devin --model sonnet` | Plan via Devin using Sonnet |
+| `rpd.plan.hard` | `ralph-plan --engine devin --thinking hard` | "Think hard" preamble for Devin planning |
+| `rpd.plan.ultra` | `ralph-plan --engine devin --thinking ultra` | `ultrathink` preamble for Devin planning |
+| `rpd.plan.opus.ultra` | `ralph-plan --engine devin --model opus --thinking ultra` | Opus + ultrathink via Devin |
 | `rpd.compress` | `ralph-plan --engine devin --compress` | Compress fix plan to reduce token usage |
 
 ---
@@ -516,6 +523,12 @@ Source: `ALIASES.sh`
 | `rpc.plan` | `ralph-plan` | Planning mode (Claude engine) |
 | `rpc.plan.sup` | `ralph-plan --yolo --superpowers` | Planning with yolo + superpowers plugin |
 | `rpc.plan.file <path>` | `ralph-plan --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpc.plan.opus` | `ralph-plan --model opus` | Plan using Claude Opus |
+| `rpc.plan.sonnet` | `ralph-plan --model sonnet` | Plan using Claude Sonnet |
+| `rpc.plan.hard` | `ralph-plan --thinking hard` | "Think hard" preamble + `--effort high` |
+| `rpc.plan.ultra` | `ralph-plan --thinking ultra` | `ultrathink` preamble + `--effort max` |
+| `rpc.plan.opus.ultra` | `ralph-plan --model opus --thinking ultra` | Opus + ultrathink for deepest planning |
+| `rpc.plan.max` | `ralph-plan --model opus --thinking ultra --yolo --superpowers` | Max-depth: Opus + ultrathink + yolo + superpowers |
 | `rpc.compress` | `ralph-plan --compress` | Compress fix plan to reduce token usage |
 
 ---
@@ -968,6 +981,8 @@ Uninstalling one engine does not affect the others.
 - **Ad-hoc task mode** (`ralph-plan --adhoc`) for quick bug/task entry into `fix_plan.md` via AI
 - **Fix plan compression** (`ralph-plan --compress`) to reduce token consumption while preserving progress
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
+- **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
+- **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Intelligent exit detection** -- dual-condition gate requiring BOTH completion indicators AND explicit EXIT_SIGNAL
 - **Circuit breaker** with cooldown timer, auto-recovery, and configurable thresholds
