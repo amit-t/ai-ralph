@@ -33,6 +33,8 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
+- **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
+- **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 
 ---
 
@@ -979,6 +981,8 @@ Uninstalling one engine does not affect the others.
 - **Ad-hoc task mode** (`ralph-plan --adhoc`) for quick bug/task entry into `fix_plan.md` via AI
 - **Fix plan compression** (`ralph-plan --compress`) to reduce token consumption while preserving progress
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
+- **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
+- **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Intelligent exit detection** -- dual-condition gate requiring BOTH completion indicators AND explicit EXIT_SIGNAL
 - **Circuit breaker** with cooldown timer, auto-recovery, and configurable thresholds
