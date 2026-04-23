@@ -78,6 +78,17 @@ alias rpd.plan='ralph-plan --engine devin'
 # Fix plan status (note: rpd.status is agent session status; rpd.plan.s is fix plan status)
 alias rpd.plan.s='ralph-plan --engine devin --status'
 
+# Model overrides for Devin planning (Devin CLI accepts --model opus|sonnet|...)
+alias rpd.plan.opus='ralph-plan --engine devin --model opus'
+alias rpd.plan.sonnet='ralph-plan --engine devin --model sonnet'
+
+# Thinking depth for Devin planning (prompt preamble; Devin has no --effort flag)
+alias rpd.plan.hard='ralph-plan --engine devin --thinking hard'
+alias rpd.plan.ultra='ralph-plan --engine devin --thinking ultra'
+
+# Combined: Opus + ultrathink for deepest Devin planning
+alias rpd.plan.opus.ultra='ralph-plan --engine devin --model opus --thinking ultra'
+
 # Ad-hoc task mode (interactive one-liner to fix_plan entry, uses devin engine)
 # Usage: rpd.adhoc                        -> prompts for task description
 # Usage: rpd.adhoc "Login broken on iOS"  -> inline description
