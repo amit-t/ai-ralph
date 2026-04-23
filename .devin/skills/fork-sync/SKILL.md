@@ -44,8 +44,8 @@ Run the helper script to detect upstream and attempt the merge:
 
 ```bash
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")" 2>/dev/null || dirname "$0")"
-# Or find it relative to .cognition/skills/fork-sync/
-source .cognition/skills/fork-sync/fork_sync.sh
+# Or find it relative to .devin/skills/fork-sync/
+source .devin/skills/fork-sync/fork_sync.sh
 
 fork_sync_detect_upstream
 fork_sync_prepare  # Creates branch, attempts merge

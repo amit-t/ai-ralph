@@ -14,7 +14,7 @@ incorporating upstream enhancements.
 - `git`, `gh` (GitHub CLI), `jq` installed
 - Authenticated with GitHub (`gh auth status`)
 - Working directory is inside the forked git repo
-- Helper script available at `.cognition/skills/fork-sync/fork_sync.sh`
+- Helper script available at `.devin/skills/fork-sync/fork_sync.sh`
 
 ## Quick Start (for agents)
 
@@ -191,17 +191,17 @@ The `fork_sync.sh` script automates the mechanical git operations:
 
 ```bash
 # Source it for function access
-source .cognition/skills/fork-sync/fork_sync.sh
+source .devin/skills/fork-sync/fork_sync.sh
 
 # Or run commands directly
-bash .cognition/skills/fork-sync/fork_sync.sh detect     # Find upstream repo
-bash .cognition/skills/fork-sync/fork_sync.sh prepare     # Setup + merge attempt
-bash .cognition/skills/fork-sync/fork_sync.sh conflicts   # JSON conflict list
-bash .cognition/skills/fork-sync/fork_sync.sh report      # Human-readable conflict report
-bash .cognition/skills/fork-sync/fork_sync.sh verify      # Check markers resolved
-bash .cognition/skills/fork-sync/fork_sync.sh commit "msg" # Commit the merge
-bash .cognition/skills/fork-sync/fork_sync.sh abort       # Cancel everything
-bash .cognition/skills/fork-sync/fork_sync.sh summary     # Upstream changes overview
+bash .devin/skills/fork-sync/fork_sync.sh detect     # Find upstream repo
+bash .devin/skills/fork-sync/fork_sync.sh prepare     # Setup + merge attempt
+bash .devin/skills/fork-sync/fork_sync.sh conflicts   # JSON conflict list
+bash .devin/skills/fork-sync/fork_sync.sh report      # Human-readable conflict report
+bash .devin/skills/fork-sync/fork_sync.sh verify      # Check markers resolved
+bash .devin/skills/fork-sync/fork_sync.sh commit "msg" # Commit the merge
+bash .devin/skills/fork-sync/fork_sync.sh abort       # Cancel everything
+bash .devin/skills/fork-sync/fork_sync.sh summary     # Upstream changes overview
 ```
 
 ## For Claude Code Specifically
@@ -212,9 +212,9 @@ Add this to your project's `CLAUDE.md`:
 ## Fork Sync Workflow
 
 To sync this fork with upstream, follow the workflow in:
-  .cognition/skills/fork-sync/AGENT_WORKFLOW.md
+  .devin/skills/fork-sync/AGENT_WORKFLOW.md
 
-Helper script: .cognition/skills/fork-sync/fork_sync.sh
+Helper script: .devin/skills/fork-sync/fork_sync.sh
 
 Default merge strategy: combine (preserve local, accept upstream enhancements)
 ```
@@ -227,8 +227,8 @@ Feed this file as context to any agent that can run shell commands and edit file
 
 ```bash
 # Codex example
-codex --prompt "$(cat .cognition/skills/fork-sync/AGENT_WORKFLOW.md)"
+codex --prompt "$(cat .devin/skills/fork-sync/AGENT_WORKFLOW.md)"
 
 # Or include as a system prompt
-cat .cognition/skills/fork-sync/AGENT_WORKFLOW.md | your-agent --system-prompt -
+cat .devin/skills/fork-sync/AGENT_WORKFLOW.md | your-agent --system-prompt -
 ```
