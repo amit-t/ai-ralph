@@ -492,11 +492,13 @@ Source: `ALIASES.sh`
 
 | Alias | Usage | Description |
 |---|---|---|
-| `rpc.int` | `rpc.int` | Interactive mode (live + monitor) |
+| `rpc.int` | `rpc.int` | Interactive mode (live + monitor, tmux split) |
 | `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (auto-exit, no live/monitor — mirrors `rpd.p`) |
-| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents in background (auto-exit) |
-| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with live tmux monitor |
-| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N agents in background with live tmux monitor |
+| `rpc.live.p N` | `rpc.live.p 3` | Spawn N parallel agents streaming Claude output (single pane, no tmux split) |
+| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with full tmux 3-pane split (loop + log + monitor) |
+| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (auto-exit) |
+| `rpc.live.p.b N` | `rpc.live.p.b 3` | Spawn N background agents with streaming output |
+| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N interactive (tmux-split) agents in background |
 
 #### Task-Specific Execution
 
@@ -1003,6 +1005,14 @@ Uninstalling one engine does not affect the others.
   live mode, modern background mode, legacy background mode
 - Brings Claude to full parity with Devin and Codex engines, which already used this pattern
 - Added 4 new unit tests in `test_cli_modern.bats` to prevent regression
+
+**Claude Parallel Aliases Symmetry**
+- Added `rpc.live.p N` / `rpc.live.p.b N` for streaming Claude output without the `--monitor` tmux 3-pane split
+- Complements the existing `rpc.p` / `rpc.p.b` (quiet) and `rpc.int.p` / `rpc.int.p.b` (full tmux) variants
+- `rpc.p N` -> `ralph --parallel N` (quiet, no streaming)
+- `rpc.live.p N` -> `ralph --live --parallel N` (streaming output, single pane per tab)
+- `rpc.int.p N` -> `ralph --live --monitor --parallel N` (full tmux split: loop + log + monitor)
+- All 3 engines now expose both non-interactive (`rpc.p`, `rpd.p`, `rpx.*.p`) and interactive (`.int.p`) parallel variants
 
 **Task Assignment Directive**
 - Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"
