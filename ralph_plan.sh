@@ -18,6 +18,10 @@ set -e
 # Source library components
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 source "$SCRIPT_DIR/lib/date_utils.sh"
+# shellcheck source=lib/workspace_manager.sh
+source "$SCRIPT_DIR/lib/workspace_manager.sh"
+# shellcheck source=lib/workspace_plan.sh
+source "$SCRIPT_DIR/lib/workspace_plan.sh"
 
 # Configuration
 RALPH_DIR=".ralph"
@@ -36,6 +40,9 @@ ADHOC_DESCRIPTION=""
 COMPRESS_MODE=false
 FILE_MODE=false
 FILE_PATH=""
+WORKSPACE_MODE=false
+WORKSPACE_REPOS_FILTER=""
+WORKSPACE_DRY_RUN=false
 
 # Engine selection: claude (default), codex, devin
 ENGINE="claude"
@@ -130,6 +137,16 @@ Options:
     --file <path>      File-based planning: pass a specific MD, JSON, or text file
                        AI reads the document, analyzes the codebase, and generates
                        a prioritized fix_plan.md from the file's content
+    --workspace        Multi-repo workspace planning mode.
+                       Run from a workspace root (no .git at cwd, one or more
+                       child git repos, .ralph/fix_plan.md present).
+                       Drives the selected engine per repo, captures task output,
+                       and merges into .ralph/fix_plan.md with state preservation
+                       for - [~] (in-progress) and - [x] (completed) lines.
+    --repos <list>     Comma-separated repo allowlist for --workspace mode.
+                       Unlisted repos are untouched. Example: --repos svc-a,svc-b
+    --dry-run          --workspace only: run the engine per repo but do NOT write
+                       .ralph/fix_plan.md. Summary still emitted.
     -h, --help         Show this help
 
 Examples:
@@ -155,6 +172,10 @@ Examples:
     ralph-plan --file ./tasks.json              # Plan from a JSON task list
     ralph-plan --file ./notes.txt               # Plan from plain text notes
     ralph-plan --engine devin --file spec.md    # File-based planning via Devin
+    ralph-plan --workspace                      # Multi-repo plan (default engine)
+    ralph-plan --workspace --engine devin       # Workspace plan via Devin
+    ralph-plan --workspace --repos svc-a,svc-b  # Plan only two repos
+    ralph-plan --workspace --dry-run            # Plan but do not write fix_plan.md
 
 PM-OS / DoE-OS Auto-Detection:
     When Ralph is not enabled in the current directory (no .ralph/ folder),
@@ -721,6 +742,205 @@ run_ai_planning() {
 }
 
 # =============================================================================
+# WORKSPACE PLANNING (--workspace)
+# =============================================================================
+
+run_workspace_plan() {
+    local ws="."
+
+    # Preflight
+    if ! workspace_plan_preflight "$ws"; then
+        exit 1
+    fi
+
+    # Engine availability check (skipped when using mock hook for tests)
+    if [[ -z "${RALPH_PLAN_WS_MOCK_DIR:-}" ]]; then
+        local cli_cmd=""
+        case "$ENGINE" in
+            claude) cli_cmd="$CLAUDE_CMD" ;;
+            codex)  cli_cmd="$CODEX_CMD" ;;
+            devin)  cli_cmd="$DEVIN_CMD" ;;
+            *)
+                log "ERROR" "Unknown engine: $ENGINE (expected: claude, codex, devin)"
+                return 1
+                ;;
+        esac
+        if ! command -v "$cli_cmd" &>/dev/null; then
+            log "ERROR" "$ENGINE CLI ('$cli_cmd') not found. Install it first."
+            return 1
+        fi
+    fi
+
+    local fix_plan="$ws/.ralph/fix_plan.md"
+    local work_dir="$ws/.ralph/.workspace_plan"
+    mkdir -p "$work_dir"
+
+    # Discover + filter repos
+    local all_repos
+    if ! all_repos=$(discover_workspace_repos "$ws"); then
+        log "ERROR" "No git repos found in workspace"
+        return 1
+    fi
+
+    local repos
+    repos=$(workspace_plan_filter_repos "$all_repos" "$WORKSPACE_REPOS_FILTER")
+    if [[ -z "$repos" ]]; then
+        log "ERROR" "No repos to plan (check --repos filter)"
+        return 1
+    fi
+
+    local repo_count
+    repo_count=$(echo "$repos" | grep -c .)
+    log "PLAN" "Workspace plan: $repo_count repo(s)"
+
+    local start_ts
+    start_ts=$(date +%s)
+
+    # Per-repo accumulators
+    local total_new=0
+    local total_preserved=0
+    local total_inprog=0
+    local total_completed=0
+    local total_cross=0
+    local total_ambig=0
+    local -a planned_repos=()
+    local -a ambig_lines=()
+    local -a skipped_no_context=()
+
+    local cross_all_file="$work_dir/_cross_all.txt"
+    : > "$cross_all_file"
+
+    # Iterate repos sequentially
+    while IFS= read -r repo_name; do
+        [[ -z "$repo_name" ]] && continue
+
+        local repo_path="$ws/$repo_name"
+        if [[ ! -d "$repo_path/.git" ]]; then
+            log "WARN" "Skipping $repo_name: not a git repo"
+            continue
+        fi
+
+        # Collect planning context from ai/ + .ralph/specs/
+        local context_file="$work_dir/${repo_name}.context.md"
+        if ! workspace_plan_collect_repo_context "$repo_path" > "$context_file"; then
+            log "WARN" "[$repo_name] no ai/ or .ralph/specs/ context — skipping"
+            skipped_no_context+=("$repo_name")
+            rm -f "$context_file"
+            continue
+        fi
+        local context
+        context=$(cat "$context_file")
+
+        # Build prompt + output file paths (absolute)
+        local prompt_file="$work_dir/${repo_name}.prompt.md"
+        local output_file
+        output_file="$(cd "$work_dir" && pwd)/${repo_name}.out.md"
+        local repo_path_abs
+        repo_path_abs="$(cd "$repo_path" && pwd)"
+
+        workspace_plan_build_prompt "$prompt_file" "$repo_name" "$repo_path_abs" "$output_file" "$THINKING_LEVEL" "$context"
+
+        # Drive engine
+        log "PLAN" "[$repo_name] invoking $ENGINE..."
+        if ! workspace_plan_run_engine "$ENGINE" "$MODEL" "$THINKING_LEVEL" \
+            "$repo_name" "$repo_path_abs" "$output_file" "$prompt_file" "$YOLO_MODE"; then
+            log "ERROR" "[$repo_name] engine failed — skipping merge"
+            continue
+        fi
+
+        # Parse engine output
+        local parsed_file="$work_dir/${repo_name}.parsed.txt"
+        workspace_plan_parse_output "$output_file" > "$parsed_file"
+
+        local tasks_file="$work_dir/${repo_name}.tasks.txt"
+        local ambig_file="$work_dir/${repo_name}.ambig.txt"
+        local cross_file="$work_dir/${repo_name}.cross.txt"
+        grep '^TASK|'  "$parsed_file" 2>/dev/null | sed 's/^TASK|//'  > "$tasks_file" || true
+        grep '^AMBIG|' "$parsed_file" 2>/dev/null | sed 's/^AMBIG|//' > "$ambig_file" || true
+        grep '^CROSS|' "$parsed_file" 2>/dev/null | sed 's/^CROSS|//' > "$cross_file" || true
+
+        # Merge into fix_plan (unless dry-run)
+        local merge_stats=""
+        if [[ "$WORKSPACE_DRY_RUN" == true ]]; then
+            local dry_new
+            dry_new=$(wc -l < "$tasks_file" | tr -d ' ')
+            merge_stats="$dry_new 0 0 0"
+        else
+            if ! merge_stats=$(workspace_plan_merge_repo_section "$fix_plan" "$repo_name" "$tasks_file"); then
+                log "ERROR" "[$repo_name] merge failed"
+                continue
+            fi
+        fi
+
+        local r_new r_preserved r_inprog r_completed
+        read -r r_new r_preserved r_inprog r_completed <<< "$merge_stats"
+        total_new=$((total_new + r_new))
+        total_preserved=$((total_preserved + r_preserved))
+        total_inprog=$((total_inprog + r_inprog))
+        total_completed=$((total_completed + r_completed))
+
+        # Collect ambiguities for summary
+        while IFS= read -r a; do
+            [[ -z "$a" ]] && continue
+            ambig_lines+=("$repo_name: $a")
+            total_ambig=$((total_ambig + 1))
+        done < "$ambig_file"
+
+        # Collect cross-repo tasks for workspace-level merge
+        if [[ -s "$cross_file" ]]; then
+            cat "$cross_file" >> "$cross_all_file"
+        fi
+
+        planned_repos+=("$repo_name")
+        log "SUCCESS" "[$repo_name] merged: ${r_new} new, ${r_preserved} preserved"
+    done <<< "$repos"
+
+    # Merge cross-repo tasks (unless dry-run)
+    if [[ -s "$cross_all_file" ]]; then
+        if [[ "$WORKSPACE_DRY_RUN" == true ]]; then
+            total_cross=$(wc -l < "$cross_all_file" | tr -d ' ')
+        else
+            total_cross=$(workspace_plan_append_cross_repo "$fix_plan" "$cross_all_file")
+        fi
+    fi
+
+    local end_ts
+    end_ts=$(date +%s)
+    local elapsed=$((end_ts - start_ts))
+    local elapsed_min=$((elapsed / 60))
+    local elapsed_sec=$((elapsed % 60))
+
+    # Summary
+    echo ""
+    echo "Workspace Plan Summary"
+    echo ""
+    local repos_joined
+    repos_joined=$(printf '%s, ' "${planned_repos[@]}" | sed 's/, $//')
+    echo "Repos planned:       ${#planned_repos[@]} (${repos_joined})"
+    echo "New tasks:           ${total_new}"
+    echo "Preserved tasks:     ${total_preserved} (${total_inprog} in-progress, ${total_completed} completed)"
+    echo "Cross-repo tasks:    ${total_cross}"
+    echo "Ambiguities flagged: ${total_ambig}"
+    if [[ ${total_ambig} -gt 0 ]]; then
+        local a
+        for a in "${ambig_lines[@]}"; do
+            echo "  - $a"
+        done
+    fi
+    if [[ ${#skipped_no_context[@]} -gt 0 ]]; then
+        echo "Skipped (no context): ${#skipped_no_context[@]} (${skipped_no_context[*]})"
+    fi
+    echo "Engine:              ${ENGINE}"
+    echo "Elapsed:             ${elapsed_min}m ${elapsed_sec}s"
+    if [[ "$WORKSPACE_DRY_RUN" == true ]]; then
+        echo "Mode:                DRY-RUN (no fix_plan.md writes)"
+    fi
+    echo ""
+
+    return 0
+}
+
+# =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 
@@ -787,6 +1007,18 @@ parse_args() {
                     exit 1
                 fi
                 ;;
+            --workspace)
+                WORKSPACE_MODE=true
+                shift
+                ;;
+            --repos)
+                WORKSPACE_REPOS_FILTER="$2"
+                shift 2
+                ;;
+            --dry-run)
+                WORKSPACE_DRY_RUN=true
+                shift
+                ;;
             --yolo)
                 YOLO_MODE=true
                 shift
@@ -839,6 +1071,12 @@ main() {
     if [[ "$FILE_MODE" == true ]]; then
         source "$SCRIPT_DIR/lib/file_plan.sh"
         run_file_plan "$ENGINE" "$FILE_PATH" "$YOLO_MODE" "$SUPERPOWERS" "$SUPERPOWERS_PLUGIN_DIR" || exit $?
+        exit 0
+    fi
+
+    # Workspace mode: multi-repo planning -- exits before any single-repo planning
+    if [[ "$WORKSPACE_MODE" == true ]]; then
+        run_workspace_plan || exit $?
         exit 0
     fi
 
