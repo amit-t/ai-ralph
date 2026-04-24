@@ -101,6 +101,9 @@ The system uses a modular architecture with reusable components in the `lib/` di
    - Safe file operations: `safe_create_file()`, `safe_create_dir()`
    - Project detection: `detect_project_context()`, `detect_git_info()`, `detect_task_sources()`
    - Template generation: `generate_prompt_md()`, `generate_agent_md()`, `generate_fix_plan_md()`, `generate_ralphrc()`
+   - Workspace detection: `detect_workspace_context()` — detects if CWD is a workspace (child git repos, no `.git/` at root)
+   - Workspace generation: `generate_workspace_prompt_md()`, `generate_workspace_fix_plan_md()`, `generate_workspace_ralphrc()`
+   - Workspace enable: `enable_workspace_in_directory()` — creates `.ralph/` with workspace-specific config (PROMPT.md, fix_plan.md with `## repo-name` sections, .ralphrc with `WORKSPACE_MODE=true`)
 
 6. **lib/wizard_utils.sh** - Interactive prompt utilities for enable wizard
    - User prompts: `confirm()`, `prompt_text()`, `prompt_number()`
@@ -167,12 +170,40 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - Includes AGENT.md build instructions in prompt for context
     - Works with all three engines (claude, codex, devin)
 
+14. **lib/workspace_manager.sh** - Multi-repo workspace orchestration
+    - `discover_workspace_repos()`: finds git repos (directories with `.git/`) in a workspace, sorted alphabetically, skips hidden dirs
+    - `parse_workspace_fix_plan()`: extracts pending tasks grouped by repo from `## repo-name` sections in workspace fix_plan.md
+    - `pick_workspace_task()`: picks first unclaimed task, atomically marks `[~]`, returns `repo_name|task_id|line_num|description`
+    - `get_repo_default_branch()`: detects default branch of a git repository via `git symbolic-ref`
+    - `validate_workspace()`: validates workspace structure (`.ralph/fix_plan.md` exists, repos found, warns about missing repos)
+    - `build_workspace_repo_context()`: builds AI prompt context with repo name, task, and working directory constraint
+    - `mark_workspace_task_complete()`: changes `[~]` to `[x]` on specified line
+    - `revert_workspace_task()`: reverts `[~]` back to `[ ]` on failure
+    - `is_workspace_mode()`: detects if directory is a workspace (has `.ralph/fix_plan.md`, child git repos, is NOT itself a git repo)
+    - `get_workspace_parallel_limit()`: calculates safe parallelism — min of repos with pending tasks (excluding in-progress and cross-repo), and requested count; 0 = auto
+    - `pick_workspace_tasks_parallel()`: picks up to N tasks (one per repo), skips repos with in-progress tasks and cross-repo section, atomically marks all `[~]`
+    - `run_workspace_tasks_parallel()`: orchestrates parallel execution — picks tasks, spawns background workers with per-worker logs, waits for completion, marks `[x]` or reverts `[ ]`
+    - `workspace_repo_worktree_init()`: initializes worktree system for a single workspace repo (sets `_WT_*` state from the repo context)
+    - `workspace_repo_worktree_create()`: creates an isolated worktree + branch for a workspace repo task (calls `worktree_init` + `worktree_create` in the repo dir)
+    - `workspace_repo_run_quality_gates()`: runs quality gates for a workspace repo — delegates to `worktree_run_quality_gates()` if worktree active, otherwise temporarily sets `_WT_CURRENT_PATH` to the repo dir
+    - `workspace_repo_commit_and_pr()`: commits, pushes, and creates a PR for a workspace repo task — runs `pr_preflight_check` in the repo dir, then delegates to `worktree_commit_and_pr()` or `worktree_fallback_branch_pr()`
+    - `workspace_repo_cleanup()`: cleans up worktree for a workspace repo — preserves branch for PR, syncs state back
+    - Workspace fix_plan.md format uses `## repo-name` section headers with standard checkbox tasks underneath
+    - Supports `cross-repo` section for tasks spanning multiple repositories
+
 ### Quality Gate Behaviour
 
 During the main loop, quality gates are run **once** after Claude completes a task. A PR is always created regardless of gate status:
 
 - **Gates pass** → PR is created with success status, task marked complete
 - **Gates fail** → PR is created with `quality-gates-failed` label for manual review
+
+**Workspace mode** follows the same pattern per-repo:
+- Each workspace repo task gets its own worktree branch (if `WORKTREE_ENABLED=true`)
+- Quality gates run inside the worktree (auto-detected from repo's `package.json`, `Makefile`, etc.)
+- A per-repo PR is created with the task changes
+- On gate failure, the PR is created with `quality-gates-failed` label
+- Both sequential and parallel workspace modes support worktree + QG + PR
 
 To fix failing quality gates, use the standalone **`ralph --qg`** mode:
 
@@ -234,11 +265,16 @@ ralph-enable --from prd ./docs/requirements.md
 # Force overwrite existing .ralph/
 ralph-enable --force
 
+# Enable workspace mode (multi-repo directory)
+cd ~/work/my-workspace
+ralph-enable --workspace
+
 # Non-interactive for CI/scripts
 ralph-enable-ci                              # Sensible defaults
 ralph-enable-ci --from github               # With task source
 ralph-enable-ci --project-type typescript   # Override detection
 ralph-enable-ci --json                      # Machine-readable output
+ralph-enable-ci --workspace                 # Workspace mode for CI
 ```
 
 ### Planning Mode (AI-powered fix_plan builder)
@@ -333,6 +369,46 @@ ralph --qg
 
 # With custom quality gates
 ralph --qg --quality-gates "npm run lint;npm test;npm run build"
+```
+
+### Workspace Mode (multi-repo orchestration)
+```bash
+# Run from a parent directory containing multiple git repos
+cd ~/work/my-workspace
+ralph --workspace
+
+# With monitoring
+ralph --workspace --monitor
+
+# With live output
+ralph --workspace --live --monitor
+
+# Parallel execution across N repos simultaneously
+ralph --workspace --parallel 3
+
+# Using aliases (all three engines)
+rpc.ws                    # Claude
+rpd.ws                    # Devin
+rpx.ws                    # Codex
+rpc.ws.int                # Claude interactive (live + monitor)
+rpc.ws.p 3                # Claude parallel (3 repos)
+rpd.ws.p 3                # Devin parallel (3 repos)
+rpx.ws.p 3                # Codex parallel (3 repos)
+```
+
+Workspace fix_plan.md format:
+```markdown
+# Workspace Fix Plan
+
+## repo-alpha
+- [ ] Fix authentication bug
+- [ ] Add rate limiting
+
+## repo-beta
+- [ ] Update database schema
+
+## cross-repo
+- [ ] Ensure API compatibility across repos
 ```
 
 ### Running the Ralph Loop
@@ -544,7 +620,7 @@ Ralph installs to:
 - **Commands**: `~/.local/bin/` (ralph, ralph-monitor, ralph-setup, ralph-import, ralph-migrate, ralph-enable, ralph-enable-ci)
 - **Templates**: `~/.ralph/templates/`
 - **Scripts**: `~/.ralph/` (ralph_loop.sh, ralph_monitor.sh, setup.sh, ralph_import.sh, migrate_to_ralph_folder.sh, ralph_enable.sh, ralph_enable_ci.sh)
-- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh)
+- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh, workspace_manager.sh)
 
 After installation, the following global commands are available:
 - `ralph` - Start the autonomous development loop
@@ -754,7 +830,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 
 ## Test Suite
 
-### Test Files (664 tests total)
+### Test Files (878 tests total)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -770,9 +846,9 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_installation.bats` | 15 | Global installation/uninstall workflows + dotfile template copying (#174) |
 | `test_project_setup.bats` | 50 | Project setup (setup.sh) validation + .ralphrc permissions + .gitignore (#174) |
 | `test_prd_import.bats` | 33 | PRD import (ralph_import.sh) workflows + modern CLI tests |
-| `test_enable_core.bats` | 38 | Enable core library (idempotency, project detection, template generation, .gitignore #174) |
+| `test_enable_core.bats` | 52 | Enable core library (idempotency, project detection, template generation, .gitignore #174, workspace detection and scaffolding) |
 | `test_task_sources.bats` | 23 | Task sources (beads, GitHub, PRD extraction, normalization) |
-| `test_ralph_enable.bats` | 24 | Ralph enable integration tests (wizard, CI version, JSON output, .ralphrc validation #149) |
+| `test_ralph_enable.bats` | 30 | Ralph enable integration tests (wizard, CI version, JSON output, .ralphrc validation #149, workspace enable) |
 | `test_wizard_utils.bats` | 20 | Wizard utility functions (stdout/stderr separation, prompt functions) |
 | `test_file_protection.bats` | 15 | File integrity validation (RALPH_REQUIRED_PATHS, validate_ralph_integrity, get_integrity_report) (Issue #149) |
 | `test_integrity_check.bats` | 10 | Pre-loop integrity check in ralph_loop.sh (startup + in-loop validation) (Issue #149) |
@@ -780,6 +856,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_adhoc_task.bats` | 18 | Ad-hoc task mode (CLI parsing, find_fix_plan_for_adhoc, prompt_task_description, run_adhoc_task engine validation, prompt construction) |
 | `test_compress_plan.bats` | 33 | Fix plan compression mode (CLI parsing, find_fix_plan_for_compress, count_plan_items, archive_fix_plan, run_compress_plan engine validation, template validation) |
 | `test_file_plan.bats` | 30 | File-based planning mode (CLI parsing, detect_file_type, find_fix_plan_for_file_plan, run_file_plan engine/file validation, template validation) |
+| `test_workspace_mode.bats` | 194 | Workspace mode (discover_workspace_repos, parse_workspace_fix_plan, pick_workspace_task, get_repo_default_branch, validate_workspace, is_workspace_mode, CLI --workspace flag, PROMPT_WORKSPACE.md template, edge cases) + parallel workspace (get_workspace_parallel_limit, pick_workspace_tasks_parallel, run_workspace_tasks_parallel, --workspace --parallel CLI, parallel edge cases) + per-repo worktree/QG/PR (workspace_repo_worktree_init, workspace_repo_worktree_create, workspace_repo_run_quality_gates, workspace_repo_commit_and_pr, workspace_repo_cleanup, structural integration tests) + Devin/Codex workspace wiring (CLI flag parsing, function definitions, structural ordering, tmux forwarding, cross-engine parity) |
 
 ### Running Tests
 ```bash
