@@ -596,3 +596,156 @@ EOF
     head -1 .gitignore | grep -qF "node_modules/"
     grep -qF ".ralph/*" .gitignore
 }
+
+# =============================================================================
+# WORKSPACE MODE (14 tests)
+# =============================================================================
+
+@test "detect_workspace_context returns false for git repo" {
+    git init > /dev/null 2>&1
+
+    detect_workspace_context
+
+    assert_equal "$DETECTED_WORKSPACE" "false"
+}
+
+@test "detect_workspace_context returns false for empty directory" {
+    detect_workspace_context
+
+    assert_equal "$DETECTED_WORKSPACE" "false"
+}
+
+@test "detect_workspace_context detects workspace with child git repos" {
+    mkdir -p repo-alpha/.git repo-beta/.git
+
+    detect_workspace_context
+
+    assert_equal "$DETECTED_WORKSPACE" "true"
+    assert_equal "${#DETECTED_WORKSPACE_REPOS[@]}" "2"
+}
+
+@test "detect_workspace_context skips hidden directories" {
+    mkdir -p .hidden-repo/.git repo-alpha/.git
+
+    detect_workspace_context
+
+    assert_equal "$DETECTED_WORKSPACE" "true"
+    assert_equal "${#DETECTED_WORKSPACE_REPOS[@]}" "1"
+    assert_equal "${DETECTED_WORKSPACE_REPOS[0]}" "repo-alpha"
+}
+
+@test "detect_workspace_context skips non-git child directories" {
+    mkdir -p not-a-repo repo-alpha/.git
+
+    detect_workspace_context
+
+    assert_equal "$DETECTED_WORKSPACE" "true"
+    assert_equal "${#DETECTED_WORKSPACE_REPOS[@]}" "1"
+    assert_equal "${DETECTED_WORKSPACE_REPOS[0]}" "repo-alpha"
+}
+
+@test "generate_workspace_prompt_md contains workspace instructions" {
+    local output
+    output=$(generate_workspace_prompt_md)
+
+    echo "$output" | grep -qF "Workspace Mode"
+    echo "$output" | grep -qF "Working Directory Constraint"
+    echo "$output" | grep -qF "RALPH_STATUS"
+    echo "$output" | grep -qF "Cross-Repository Tasks"
+}
+
+@test "generate_workspace_fix_plan_md creates per-repo sections" {
+    local repos
+    repos=$(printf 'alpha\nbeta\ngamma\n')
+
+    local output
+    output=$(generate_workspace_fix_plan_md "$repos")
+
+    echo "$output" | grep -qF "# Workspace Fix Plan"
+    echo "$output" | grep -qF "## alpha"
+    echo "$output" | grep -qF "## beta"
+    echo "$output" | grep -qF "## gamma"
+    echo "$output" | grep -qF "## cross-repo"
+}
+
+@test "generate_workspace_fix_plan_md uses pre-imported tasks when provided" {
+    local tasks="# Custom Plan
+
+## my-repo
+- [ ] Custom task"
+
+    local output
+    output=$(generate_workspace_fix_plan_md "" "$tasks")
+
+    echo "$output" | grep -qF "Custom task"
+    echo "$output" | grep -qF "## my-repo"
+}
+
+@test "generate_workspace_ralphrc sets WORKSPACE_MODE=true" {
+    local output
+    output=$(generate_workspace_ralphrc "my-workspace" "3")
+
+    echo "$output" | grep -qF 'WORKSPACE_MODE=true'
+    echo "$output" | grep -qF 'PROJECT_TYPE="workspace"'
+    echo "$output" | grep -qF 'WORKSPACE_REPO_COUNT=3'
+    echo "$output" | grep -qF 'PROJECT_NAME="my-workspace"'
+}
+
+@test "enable_workspace_in_directory creates all workspace files" {
+    mkdir -p repo-alpha/.git repo-beta/.git
+
+    export ENABLE_FORCE="false"
+    export ENABLE_WORKSPACE_NAME="test-ws"
+    export ENABLE_TASK_CONTENT=""
+
+    run enable_workspace_in_directory
+
+    assert_success
+    [[ -d ".ralph" ]]
+    [[ -f ".ralph/PROMPT.md" ]]
+    [[ -f ".ralph/fix_plan.md" ]]
+    [[ -f ".ralph/AGENT.md" ]]
+    [[ -f ".ralphrc" ]]
+}
+
+@test "enable_workspace_in_directory fix_plan has repo sections" {
+    mkdir -p repo-alpha/.git repo-beta/.git
+
+    export ENABLE_FORCE="false"
+    export ENABLE_WORKSPACE_NAME="test-ws"
+    export ENABLE_TASK_CONTENT=""
+
+    enable_workspace_in_directory
+
+    grep -qF "## repo-alpha" .ralph/fix_plan.md
+    grep -qF "## repo-beta" .ralph/fix_plan.md
+    grep -qF "## cross-repo" .ralph/fix_plan.md
+}
+
+@test "enable_workspace_in_directory fails when not a workspace" {
+    git init > /dev/null 2>&1
+
+    export ENABLE_FORCE="false"
+    export ENABLE_WORKSPACE_NAME="test"
+    export ENABLE_TASK_CONTENT=""
+
+    run enable_workspace_in_directory
+
+    assert_failure
+}
+
+@test "enable_workspace_in_directory returns already enabled without force" {
+    mkdir -p repo-alpha/.git
+    mkdir -p .ralph
+    echo "# PROMPT" > .ralph/PROMPT.md
+    echo "# Plan" > .ralph/fix_plan.md
+    echo "# Agent" > .ralph/AGENT.md
+
+    export ENABLE_FORCE="false"
+    export ENABLE_WORKSPACE_NAME="test-ws"
+    export ENABLE_TASK_CONTENT=""
+
+    run enable_workspace_in_directory
+
+    assert_equal "$status" "$ENABLE_ALREADY_ENABLED"
+}

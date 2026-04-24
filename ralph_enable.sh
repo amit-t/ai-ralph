@@ -44,6 +44,7 @@ TASK_SOURCE=""
 PRD_FILE=""
 GITHUB_LABEL=""
 NON_INTERACTIVE=false
+WORKSPACE_MODE=false
 SHOW_HELP=false
 
 # Version
@@ -63,6 +64,7 @@ Options:
     --from <source>     Import tasks from: beads, github, prd
     --prd <file>        PRD file to convert (when --from prd)
     --label <label>     GitHub label filter (when --from github)
+    --workspace         Enable workspace mode (multi-repo orchestration)
     --force             Overwrite existing .ralph/ configuration
     --skip-tasks        Skip task import, use default templates
     --non-interactive   Run with defaults (no prompts)
@@ -89,6 +91,10 @@ Examples:
     # Force overwrite existing configuration
     ralph enable --force
 
+    # Enable workspace mode for multi-repo directory
+    cd ~/work/my-workspace    # Parent dir with multiple git repos
+    ralph enable --workspace
+
 What this command does:
     1. Detects your project type (TypeScript, Python, etc.)
     2. Identifies available task sources (beads, GitHub, PRDs)
@@ -96,6 +102,12 @@ What this command does:
     4. Creates .ralph/ configuration directory
     5. Generates PROMPT.md, fix_plan.md, AGENT.md
     6. Creates .ralphrc for project-specific settings
+
+    With --workspace:
+    1. Detects child git repositories in the current directory
+    2. Creates workspace-level .ralph/ with per-repo task sections
+    3. Generates workspace PROMPT.md, fix_plan.md, AGENT.md, .ralphrc
+    4. Run with: ralph --workspace
 
 This command is:
     - Idempotent: Safe to run multiple times
@@ -152,6 +164,10 @@ parse_arguments() {
                 ;;
             --non-interactive)
                 NON_INTERACTIVE=true
+                shift
+                ;;
+            --workspace)
+                WORKSPACE_MODE=true
                 shift
                 ;;
             -h|--help)
@@ -539,6 +555,134 @@ phase_verification() {
 }
 
 # =============================================================================
+# WORKSPACE ENABLE (combined phase for workspace mode)
+# =============================================================================
+
+phase_workspace_enable() {
+    print_header "Workspace Mode" "Multi-Repository Setup"
+
+    # Detect workspace context
+    echo "Analyzing workspace directory..."
+    echo ""
+    detect_workspace_context
+
+    if [[ "$DETECTED_WORKSPACE" != "true" ]]; then
+        print_error "This is not a workspace directory."
+        echo ""
+        echo "A workspace requires:"
+        echo "  - A parent directory that is NOT itself a git repo"
+        echo "  - Child directories that contain .git/ (git repos)"
+        echo ""
+        echo "Example structure:"
+        echo "  my-workspace/"
+        echo "    repo-alpha/"
+        echo "    repo-beta/"
+        exit $ENABLE_ERROR
+    fi
+
+    local repo_count=${#DETECTED_WORKSPACE_REPOS[@]}
+    print_success "Workspace detected: $repo_count repositories found"
+    echo ""
+
+    for repo in "${DETECTED_WORKSPACE_REPOS[@]}"; do
+        print_bullet "$repo"
+    done
+    echo ""
+
+    # Check existing state
+    check_existing_ralph || true
+    if [[ "$RALPH_STATE" == "complete" && "$FORCE_OVERWRITE" != "true" ]]; then
+        print_warning "Ralph is already enabled in this workspace."
+        echo ""
+        if [[ "$NON_INTERACTIVE" != "true" ]]; then
+            if ! confirm "Do you want to continue anyway?" "n"; then
+                echo "Exiting. Use --force to overwrite."
+                exit $ENABLE_ALREADY_ENABLED
+            fi
+            FORCE_OVERWRITE=true
+        else
+            echo "Use --force to overwrite existing configuration."
+            exit $ENABLE_ALREADY_ENABLED
+        fi
+    fi
+
+    # Workspace name
+    local workspace_name
+    workspace_name=$(basename "$(pwd)")
+    if [[ "$NON_INTERACTIVE" != "true" ]]; then
+        workspace_name=$(prompt_text "Workspace name" "$workspace_name")
+    fi
+
+    # Set up enable environment and run workspace enable
+    export ENABLE_FORCE="$FORCE_OVERWRITE"
+    export ENABLE_WORKSPACE_NAME="$workspace_name"
+    export ENABLE_TASK_CONTENT=""
+
+    echo ""
+    echo "Creating workspace configuration..."
+    echo ""
+
+    if ! enable_workspace_in_directory; then
+        print_error "Failed to enable workspace"
+        exit $ENABLE_ERROR
+    fi
+
+    # Verification
+    echo ""
+    print_header "Verification" ""
+
+    echo "Checking created files..."
+    echo ""
+
+    local all_good=true
+
+    if [[ -f ".ralph/PROMPT.md" ]]; then
+        print_success ".ralph/PROMPT.md (workspace)"
+    else
+        print_error ".ralph/PROMPT.md - MISSING"
+        all_good=false
+    fi
+
+    if [[ -f ".ralph/fix_plan.md" ]]; then
+        print_success ".ralph/fix_plan.md (workspace)"
+        # Show repo sections
+        local sections
+        sections=$(grep -c '^## ' .ralph/fix_plan.md 2>/dev/null || echo "0")
+        echo "    ($sections repo sections)"
+    else
+        print_error ".ralph/fix_plan.md - MISSING"
+        all_good=false
+    fi
+
+    if [[ -f ".ralph/AGENT.md" ]]; then
+        print_success ".ralph/AGENT.md"
+    fi
+
+    if [[ -f ".ralphrc" ]]; then
+        print_success ".ralphrc (workspace)"
+    else
+        print_error ".ralphrc - MISSING"
+        all_good=false
+    fi
+
+    echo ""
+
+    if [[ "$all_good" == "true" ]]; then
+        print_success "Ralph workspace enabled successfully!"
+        echo ""
+        echo "Next steps:"
+        echo ""
+        print_bullet "Edit tasks in .ralph/fix_plan.md (per-repo sections)" "1."
+        print_bullet "Start workspace mode: ralph --workspace" "2."
+        print_bullet "Or parallel: ralph --workspace --parallel 3" "3."
+        echo ""
+    else
+        print_error "Some files were not created. Please check the errors above."
+        exit $ENABLE_ERROR
+    fi
+}
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
@@ -559,7 +703,13 @@ main() {
     echo -e "\033[1m╚════════════════════════════════════════════════════════════╝\033[0m"
     echo ""
 
-    # Run phases
+    # Route to workspace mode if requested
+    if [[ "$WORKSPACE_MODE" == "true" ]]; then
+        phase_workspace_enable
+        exit $ENABLE_SUCCESS
+    fi
+
+    # Run single-repo phases
     phase_environment_detection
     phase_task_source_selection
     phase_configuration

@@ -54,6 +54,7 @@ PROJECT_NAME=""
 PROJECT_TYPE=""
 OUTPUT_JSON=false
 QUIET=false
+WORKSPACE_MODE=false
 SHOW_HELP=false
 
 # Version
@@ -75,6 +76,7 @@ Options:
     --label <label>       GitHub label filter (default: ralph-task)
     --project-name <name> Override detected project name
     --project-type <type> Override detected type (typescript, python, etc.)
+    --workspace           Enable workspace mode (multi-repo orchestration)
     --force               Overwrite existing .ralph/ configuration
     --json                Output result as JSON
     --quiet               Suppress non-error output
@@ -107,6 +109,9 @@ Examples:
 
     # Override project detection
     ralph enable-ci --project-name my-app --project-type typescript
+
+    # Enable workspace mode for multi-repo directory
+    ralph enable-ci --workspace
 
 JSON Output Format:
     {
@@ -175,6 +180,10 @@ parse_arguments() {
                 ;;
             --force)
                 FORCE_OVERWRITE=true
+                shift
+                ;;
+            --workspace)
+                WORKSPACE_MODE=true
                 shift
                 ;;
             --json)
@@ -280,6 +289,55 @@ main() {
 
     output_message "Ralph Enable CI - Non-Interactive Mode"
     output_message ""
+
+    # Workspace mode: use dedicated workspace enable flow
+    if [[ "$WORKSPACE_MODE" == "true" ]]; then
+        # Check existing state
+        check_existing_ralph || true
+        if [[ "$RALPH_STATE" == "complete" && "$FORCE_OVERWRITE" != "true" ]]; then
+            output_already_enabled
+            exit $ENABLE_ALREADY_ENABLED
+        fi
+
+        # Set up workspace enable environment
+        export ENABLE_FORCE="$FORCE_OVERWRITE"
+        if [[ -n "$PROJECT_NAME" ]]; then
+            export ENABLE_WORKSPACE_NAME="$PROJECT_NAME"
+        fi
+        export ENABLE_TASK_CONTENT=""
+
+        output_message "Creating workspace configuration..."
+
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            if ! enable_workspace_in_directory >/dev/null 2>&1; then
+                output_error "Failed to enable workspace (not a workspace directory or no child git repos)"
+                exit $ENABLE_ERROR
+            fi
+        else
+            if ! enable_workspace_in_directory; then
+                output_error "Failed to enable workspace"
+                exit $ENABLE_ERROR
+            fi
+        fi
+
+        # Track created files
+        [[ -f ".ralph/PROMPT.md" ]] && CREATED_FILES+=(".ralph/PROMPT.md")
+        [[ -f ".ralph/fix_plan.md" ]] && CREATED_FILES+=(".ralph/fix_plan.md")
+        [[ -f ".ralph/AGENT.md" ]] && CREATED_FILES+=(".ralph/AGENT.md")
+        [[ -f ".ralphrc" ]] && CREATED_FILES+=(".ralphrc")
+
+        if [[ ! -f ".ralph/PROMPT.md" ]] || [[ ! -f ".ralph/fix_plan.md" ]]; then
+            output_error "Required files were not created"
+            exit $ENABLE_ERROR
+        fi
+
+        local ws_name
+        ws_name="${PROJECT_NAME:-$(basename "$(pwd)")}"
+        output_message ""
+        output_success "$ws_name" "workspace"
+
+        exit $ENABLE_SUCCESS
+    fi
 
     # Check existing state (use || true to prevent set -e from exiting)
     check_existing_ralph || true

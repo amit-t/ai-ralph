@@ -71,9 +71,9 @@ rpc.live.p() { ralph --live --parallel "${1:?Usage: rpc.live.p <number>}"; }
 rpc.int.p() { ralph --live --monitor --parallel "${1:?Usage: rpc.int.p <number>}"; }
 
 # Parallel background mode (spawns N agents as background processes in any terminal)
-# Usage: rpc.p.b 3       -> 3 parallel ralph agents in background (auto-exit)
+# Usage: rpc.p.b 3       -> 3 parallel agents (quiet, no streaming, auto-exit)
 # Usage: rpc.live.p.b 3  -> 3 parallel agents with streaming output (background)
-# Usage: rpc.int.p.b 3   -> 3 parallel ralph agents in background with live monitor
+# Usage: rpc.int.p.b 3   -> 3 parallel agents with --live --monitor (background)
 rpc.p.b() { ralph --parallel-bg "${1:?Usage: rpc.p.b <number>}"; }
 rpc.live.p.b() { ralph --live --parallel-bg "${1:?Usage: rpc.live.p.b <number>}"; }
 rpc.int.p.b() { ralph --live --monitor --parallel-bg "${1:?Usage: rpc.int.p.b <number>}"; }
@@ -124,6 +124,11 @@ rpc.plan.file() { ralph-plan --file "${1:?Usage: rpc.plan.file <file_path>}"; }
 # Usage: rpc.task.int 3    -> interactive (live + monitor) for task #3
 rpc.task() { ralph --task "${1:?Usage: rpc.task <task_number>}"; }
 rpc.task.int() { ralph --live --monitor --task "${1:?Usage: rpc.task.int <task_number>}"; }
+
+# Workspace mode (multi-repo orchestration)
+alias rpc.ws='ralph --workspace'
+alias rpc.ws.int='ralph --workspace --live --monitor'
+rpc.ws.p() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p <N>}"; }
 
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'

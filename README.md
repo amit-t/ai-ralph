@@ -33,6 +33,8 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Planning mode** (`ralph-plan`) with PM-OS / DoE-OS auto-detection
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
+- **Workspace mode** (`ralph --workspace`) for multi-repo orchestration -- run tasks across multiple git repos from a parent directory with a single workspace-level fix_plan.md
+- **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
 - **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
 - **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 
@@ -44,6 +46,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - [Documentation](#documentation)
 - [Enabling Ralph in a Project](#enabling-ralph-in-a-project)
 - [Quick Start](#quick-start)
+  - [Workspace Mode (multi-repo quick start)](#workspace-mode-multi-repo-quick-start)
 - [Aliases Reference](#aliases-reference)
   - [Devin Aliases (rpd)](#devin-aliases-rpd)
   - [Claude Code Aliases (rpc)](#claude-code-aliases-rpc)
@@ -211,6 +214,24 @@ ralph-devin-setup my-project     # Devin
 ralph-codex-setup my-project     # Codex
 ```
 
+### Option E -- Workspace mode (multi-repo)
+
+If you have a parent directory containing multiple git repos, enable workspace mode to orchestrate tasks across all of them:
+
+```bash
+cd ~/work/my-workspace           # Parent dir with child git repos
+
+ralph-enable --workspace         # Claude (interactive)
+ralph-enable-ci --workspace      # Claude (CI / non-interactive)
+```
+
+This creates a workspace-level `.ralph/` with:
+- `fix_plan.md` containing `## repo-name` sections for each child repo
+- `PROMPT.md` with workspace-specific instructions (directory constraints, cross-repo rules)
+- `.ralphrc` with `WORKSPACE_MODE=true`
+
+Then run with: `ralph --workspace` or `ralph --workspace --parallel 3`
+
 ### What gets created
 
 ```
@@ -297,6 +318,109 @@ rpx.gpt4                     # Use GPT-4 model
 rpx.task 3                   # Execute specific task #3 from fix_plan.md
 rpx.task R05                 # Execute task **R05** by its ID
 ```
+
+### Workspace Mode (multi-repo quick start)
+
+Workspace mode lets you orchestrate tasks across multiple git repos from a single parent directory. Ralph picks one task per repo, runs each in isolation, and creates per-repo PRs automatically.
+
+**Prerequisites:** A parent directory containing two or more git repos (each with its own `.git/`). The parent directory itself must _not_ be a git repo.
+
+```
+~/work/my-workspace/
+├── api-service/         # git repo
+├── web-frontend/        # git repo
+└── shared-lib/          # git repo
+```
+
+**Step 1 -- Enable workspace mode**
+
+```bash
+cd ~/work/my-workspace
+
+# Interactive wizard (pick your engine):
+ralph-enable --workspace            # Claude
+ralph-devin-enable --workspace      # Devin
+ralph-codex-enable --workspace      # Codex
+
+# Non-interactive (CI / scripts):
+ralph-enable-ci --workspace
+```
+
+This creates `.ralph/` in the workspace root with:
+- `fix_plan.md` -- task list organized by `## repo-name` sections (one section per child repo)
+- `PROMPT.md` -- workspace-specific instructions (directory constraints, cross-repo rules)
+- `.ralphrc` -- config with `WORKSPACE_MODE=true`
+
+**Step 2 -- Edit your task plan**
+
+Open `.ralph/fix_plan.md` and add tasks under each repo section:
+
+```markdown
+# Workspace Fix Plan
+
+## api-service
+- [ ] Add rate limiting to /users endpoint
+- [ ] Fix pagination bug in /orders
+
+## web-frontend
+- [ ] Implement dark mode toggle
+- [ ] Fix mobile nav menu
+
+## shared-lib
+- [ ] Bump dependency versions
+
+## cross-repo
+- [ ] Ensure API contract compatibility between api-service and web-frontend
+```
+
+> Tasks under `## cross-repo` are reserved for sequential execution and are skipped by parallel mode.
+
+**Step 3 -- Run**
+
+```bash
+# Sequential -- one repo at a time:
+ralph --workspace                          # Claude
+ralph-devin --workspace                    # Devin
+ralph-codex --workspace                    # Codex
+
+# Parallel -- N repos simultaneously:
+ralph --workspace --parallel 3             # Claude, 3 repos at once
+ralph-devin --workspace --parallel 3       # Devin
+ralph-codex --workspace --parallel 3       # Codex
+
+# With monitoring dashboard (tmux):
+ralph --workspace --monitor
+ralph --workspace --parallel 3 --monitor
+
+# Using aliases:
+rpc.ws                 # Claude sequential
+rpd.ws                 # Devin sequential
+rpx.ws                 # Codex sequential
+rpc.ws.p 3             # Claude parallel (3 repos)
+rpd.ws.p 3             # Devin parallel (3 repos)
+rpx.ws.p 3             # Codex parallel (3 repos)
+rpc.ws.int             # Claude interactive (live + monitor)
+rpd.ws.int             # Devin interactive (live + monitor)
+rpx.ws.int             # Codex interactive (live + monitor)
+```
+
+**How it works at runtime:**
+
+1. Ralph reads `fix_plan.md`, picks the first unclaimed `- [ ]` task (marks it `- [~]`)
+2. Creates an isolated git worktree + branch in the target repo (if `WORKTREE_ENABLED=true`)
+3. Runs the AI engine scoped to that repo's working directory
+4. Runs quality gates (auto-detected from `package.json`, `Makefile`, `Cargo.toml`, etc.)
+5. Creates a PR (or pushes a branch if `gh` is not available)
+6. Marks the task `- [x]` on success, or reverts to `- [ ]` on failure
+7. Moves to the next task
+
+In parallel mode, steps 1-6 run concurrently across up to N repos (one task per repo). Per-worker logs are written to `.ralph/logs/parallel/`.
+
+**Tips:**
+
+- Run `ralph --workspace --parallel 0` is not supported at the CLI level -- omit the count or use a positive integer
+- Quality gate failures still produce a PR, tagged with `quality-gates-failed` for manual review
+- Use `ralph-plan --engine devin` (or `codex`, `claude`) from the workspace root to have AI generate the initial `fix_plan.md` from PRDs or specs
 
 ---
 
@@ -395,6 +519,14 @@ Source: `devin/ALIASES.sh`
 |---|---|---|
 | `rpd.task N\|ID` | `rpd.task 3` or `rpd.task R05` | Execute task #N or task ID from fix_plan.md (non-interactive) |
 | `rpd.task.int N\|ID` | `rpd.task.int 3` or `rpd.task.int R05` | Execute task #N or task ID in interactive TUI mode |
+
+#### Workspace Mode (Multi-Repo)
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpd.ws` | `ralph-devin --workspace` | Multi-repo workspace mode |
+| `rpd.ws.int` | `ralph-devin --workspace --live --monitor` | Workspace mode interactive |
+| `rpd.ws.p N` | `ralph-devin --workspace --parallel N` | Parallel workspace (N repos) |
 
 #### Workflow Presets
 
@@ -496,7 +628,7 @@ Source: `ALIASES.sh`
 | `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (auto-exit, no live/monitor — mirrors `rpd.p`) |
 | `rpc.live.p N` | `rpc.live.p 3` | Spawn N parallel agents streaming Claude output (single pane, no tmux split) |
 | `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with full tmux 3-pane split (loop + log + monitor) |
-| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (auto-exit) |
+| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (quiet, auto-exit) |
 | `rpc.live.p.b N` | `rpc.live.p.b 3` | Spawn N background agents with streaming output |
 | `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N interactive (tmux-split) agents in background |
 
@@ -506,6 +638,14 @@ Source: `ALIASES.sh`
 |---|---|---|
 | `rpc.task N\|ID` | `rpc.task 3` or `rpc.task R05` | Execute task #N or task ID from fix_plan.md |
 | `rpc.task.int N\|ID` | `rpc.task.int 3` or `rpc.task.int R05` | Execute task #N or task ID in interactive mode (live + monitor) |
+
+#### Workspace Mode (Multi-Repo)
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpc.ws` | `ralph --workspace` | Multi-repo workspace mode |
+| `rpc.ws.int` | `ralph --workspace --live --monitor` | Workspace mode interactive |
+| `rpc.ws.p N` | `ralph --workspace --parallel N` | Parallel workspace (N repos) |
 
 #### Workflow Presets
 
@@ -616,6 +756,14 @@ Source: `codex/ALIASES.sh`
 |---|---|---|
 | `rpx.task N\|ID` | `rpx.task 3` or `rpx.task R05` | Execute task #N or task ID from fix_plan.md (non-interactive) |
 | `rpx.task.int N\|ID` | `rpx.task.int 3` or `rpx.task.int R05` | Execute task #N or task ID in interactive TUI mode |
+
+#### Workspace Mode (Multi-Repo)
+
+| Alias | Expands To | Description |
+|---|---|---|
+| `rpx.ws` | `ralph-codex --workspace` | Multi-repo workspace mode |
+| `rpx.ws.int` | `ralph-codex --workspace --live --monitor` | Workspace mode interactive |
+| `rpx.ws.p N` | `ralph-codex --workspace --parallel N` | Parallel workspace (N repos) |
 
 #### Workflow Presets
 
@@ -998,7 +1146,41 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Claude Worktree CWD Parity with Devin/Codex** (latest)
+**Workspace Enable** (latest)
+- `ralph-enable --workspace` / `ralph-enable-ci --workspace` bootstraps Ralph at the workspace level
+- Auto-discovers child git repos and generates per-repo `## repo-name` sections in `fix_plan.md`
+- Workspace-specific `PROMPT.md` with multi-repo orchestration instructions
+- `.ralphrc` generated with `WORKSPACE_MODE=true`
+- Validates workspace structure (must have child git repos, must NOT be a git repo itself)
+- 20 new tests (13 in `test_enable_core.bats`, 6 in `test_ralph_enable.bats`, plus edge cases)
+
+**Parallel Workspace Execution**
+- `ralph --workspace --parallel N` to execute tasks across N repos simultaneously
+- `pick_workspace_tasks_parallel()` picks one task per repo, skips repos with in-progress tasks and `cross-repo` section
+- `get_workspace_parallel_limit()` calculates safe parallelism (min of repos, pending tasks, requested N)
+- `run_workspace_tasks_parallel()` spawns background workers, waits for completion, marks complete or reverts
+- Per-worker log files in `.ralph/logs/parallel/ws_worker_<repo>_<pid>.log`
+- Aliases: `rpc.ws.p N`, `rpd.ws.p N`, `rpx.ws.p N`
+- 23 new tests covering parallel picking, execution, lifecycle, CLI flags, and edge cases
+
+**Workspace Mode — Multi-Repo Orchestration**
+- `ralph --workspace` to orchestrate tasks across multiple git repositories from a parent directory
+- Workspace-level `.ralph/fix_plan.md` with `## repo-name` section headers for per-repo tasks
+- `lib/workspace_manager.sh` with repo discovery, workspace fix_plan parsing, task lifecycle management
+- Detects default branch per repo, creates branches and PRs in each target repository
+- Supports `cross-repo` section for tasks spanning multiple repositories
+- Aliases: `rpc.ws`, `rpd.ws`, `rpx.ws` (+ `.int` variants for interactive mode)
+- 63 new tests covering all workspace functions and edge cases
+
+**Claude Parallel Aliases Symmetry**
+- Added `rpc.p N` / `rpc.p.b N` for Claude engine parity with `rpd.p` / `rpx.int.p`
+- Added `rpc.live.p N` / `rpc.live.p.b N` for streaming Claude output without the `--monitor` tmux 3-pane split
+- `rpc.p N` -> `ralph --parallel N` (quiet, no streaming)
+- `rpc.live.p N` -> `ralph --live --parallel N` (streaming output, single pane per tab)
+- `rpc.int.p N` -> `ralph --live --monitor --parallel N` (full tmux split: loop + log + monitor)
+- All 3 engines now expose both non-interactive (`rpc.p`, `rpd.p`, `rpx.*.p`) and interactive (`.int.p`) parallel variants
+
+**Claude Worktree CWD Parity with Devin/Codex**
 - Fixed: Claude engine created an isolated worktree but invoked the CLI from the main
   project directory, so commits landed on `main` instead of the worktree branch
 - Wrapped all 3 Claude CLI execution paths in `(cd "$work_dir" && ...)` subshells:
