@@ -6,7 +6,9 @@
 load '../helpers/test_helper'
 
 WORKSPACE_LIB="${BATS_TEST_DIRNAME}/../../lib/workspace_manager.sh"
+WORKSPACE_PLAN_LIB="${BATS_TEST_DIRNAME}/../../lib/workspace_plan.sh"
 RALPH_SCRIPT="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+RALPH_PLAN_SCRIPT="${BATS_TEST_DIRNAME}/../../ralph_plan.sh"
 TEMPLATES_DIR="${BATS_TEST_DIRNAME}/../../templates"
 
 setup() {
@@ -16,6 +18,9 @@ setup() {
     # Source the library (sets up functions)
     if [[ -f "$WORKSPACE_LIB" ]]; then
         source "$WORKSPACE_LIB"
+    fi
+    if [[ -f "$WORKSPACE_PLAN_LIB" ]]; then
+        source "$WORKSPACE_PLAN_LIB"
     fi
 }
 
@@ -3630,4 +3635,394 @@ EOF
 
     run is_workspace_mode "workspace-no-ralph"
     assert_failure
+}
+
+# =============================================================================
+# ralph-plan --workspace: lib-level unit tests
+# =============================================================================
+
+@test "workspace_plan_preflight succeeds in valid workspace root" {
+    mkdir -p ws/.ralph ws/repo-a/.git
+    echo "# Workspace Fix Plan" > ws/.ralph/fix_plan.md
+
+    run workspace_plan_preflight "ws"
+    assert_success
+}
+
+@test "workspace_plan_preflight fails when cwd is a git repo" {
+    mkdir -p bad/.git bad/.ralph
+    echo "# Plan" > bad/.ralph/fix_plan.md
+
+    run workspace_plan_preflight "bad"
+    assert_failure
+    [[ "$output" == *"git repository"* ]]
+}
+
+@test "workspace_plan_preflight fails without fix_plan.md" {
+    mkdir -p ws/repo-a/.git
+
+    run workspace_plan_preflight "ws"
+    assert_failure
+    [[ "$output" == *"fix_plan.md not found"* ]]
+}
+
+@test "workspace_plan_preflight fails without child repos" {
+    mkdir -p ws/.ralph ws/docs-only
+    echo "# Plan" > ws/.ralph/fix_plan.md
+
+    run workspace_plan_preflight "ws"
+    assert_failure
+    [[ "$output" == *"No child git repositories"* ]]
+}
+
+@test "workspace_plan_parse_output extracts tasks, ambiguities, cross-repo" {
+    cat > out.md << 'EOF'
+## tasks
+- Add health check endpoint
+- Harden auth middleware
+
+## ambiguities
+- SLA for eventual consistency
+
+## cross-repo
+- Publish event schema to notifications
+EOF
+
+    run workspace_plan_parse_output "out.md"
+    assert_success
+    [[ "$output" == *"TASK|Add health check endpoint"* ]]
+    [[ "$output" == *"TASK|Harden auth middleware"* ]]
+    [[ "$output" == *"AMBIG|SLA for eventual consistency"* ]]
+    [[ "$output" == *"CROSS|Publish event schema to notifications"* ]]
+}
+
+@test "workspace_plan_parse_output strips any accidental checkbox prefixes" {
+    cat > out.md << 'EOF'
+## tasks
+- [ ] Plain task
+- [x] Another task
+EOF
+
+    run workspace_plan_parse_output "out.md"
+    assert_success
+    [[ "$output" == *"TASK|Plain task"* ]]
+    [[ "$output" == *"TASK|Another task"* ]]
+}
+
+@test "workspace_plan_merge_repo_section appends new tasks as unchecked" {
+    mkdir -p ws/.ralph
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+
+## svc-b
+- [ ] Untouched
+EOF
+
+    cat > tasks.txt << 'EOF'
+First new task
+Second new task
+EOF
+
+    run workspace_plan_merge_repo_section ws/.ralph/fix_plan.md "svc-a" "tasks.txt"
+    assert_success
+    [[ "$output" == "2 0 0 0" ]]
+
+    run cat ws/.ralph/fix_plan.md
+    [[ "$output" == *"- [ ] First new task"* ]]
+    [[ "$output" == *"- [ ] Second new task"* ]]
+    [[ "$output" == *"- [ ] Untouched"* ]]
+}
+
+@test "workspace_plan_merge_repo_section preserves [~] and [x] state" {
+    mkdir -p ws/.ralph
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+- [~] Keep in progress
+- [x] Keep completed
+- [ ] Old pending that will be replaced
+EOF
+
+    cat > tasks.txt << 'EOF'
+Keep in progress
+Keep completed
+Brand new task
+EOF
+
+    run workspace_plan_merge_repo_section ws/.ralph/fix_plan.md "svc-a" "tasks.txt"
+    assert_success
+    # 1 new (brand new), 2 preserved (1 in progress, 1 completed)
+    [[ "$output" == "1 2 1 1" ]]
+
+    run cat ws/.ralph/fix_plan.md
+    [[ "$output" == *"- [~] Keep in progress"* ]]
+    [[ "$output" == *"- [x] Keep completed"* ]]
+    [[ "$output" == *"- [ ] Brand new task"* ]]
+    # Old pending replaced, should NOT appear
+    [[ "$output" != *"Old pending that will be replaced"* ]]
+}
+
+@test "workspace_plan_merge_repo_section appends section if missing" {
+    mkdir -p ws/.ralph
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+- [ ] Existing
+EOF
+
+    cat > tasks.txt << 'EOF'
+Fresh task
+EOF
+
+    run workspace_plan_merge_repo_section ws/.ralph/fix_plan.md "svc-new" "tasks.txt"
+    assert_success
+
+    run cat ws/.ralph/fix_plan.md
+    [[ "$output" == *"## svc-new"* ]]
+    [[ "$output" == *"- [ ] Fresh task"* ]]
+}
+
+@test "workspace_plan_filter_repos returns all when filter empty" {
+    local all=$'svc-a\nsvc-b\nsvc-c'
+    run workspace_plan_filter_repos "$all" ""
+    assert_success
+    [[ "$output" == *"svc-a"* ]]
+    [[ "$output" == *"svc-b"* ]]
+    [[ "$output" == *"svc-c"* ]]
+}
+
+@test "workspace_plan_filter_repos restricts to allowlist" {
+    local all=$'svc-a\nsvc-b\nsvc-c'
+    run workspace_plan_filter_repos "$all" "svc-a,svc-c"
+    assert_success
+    [[ "$output" == *"svc-a"* ]]
+    [[ "$output" != *"svc-b"* ]]
+    [[ "$output" == *"svc-c"* ]]
+}
+
+@test "workspace_plan_append_cross_repo appends new tasks to existing section" {
+    mkdir -p ws/.ralph
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+- [ ] Local
+
+## cross-repo
+- [ ] Existing cross task
+EOF
+
+    cat > cross.txt << 'EOF'
+New cross task
+Existing cross task
+EOF
+
+    run workspace_plan_append_cross_repo ws/.ralph/fix_plan.md cross.txt
+    assert_success
+    # 1 appended (existing deduped)
+    [[ "$output" == "1" ]]
+
+    run cat ws/.ralph/fix_plan.md
+    [[ "$output" == *"- [ ] New cross task"* ]]
+    # Only one copy of the existing line
+    local count
+    count=$(grep -c "Existing cross task" ws/.ralph/fix_plan.md)
+    [[ "$count" == "1" ]]
+}
+
+@test "workspace_plan_append_cross_repo creates section when missing" {
+    mkdir -p ws/.ralph
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+- [ ] Local
+EOF
+
+    echo "Bridge event schema" > cross.txt
+
+    run workspace_plan_append_cross_repo ws/.ralph/fix_plan.md cross.txt
+    assert_success
+
+    run cat ws/.ralph/fix_plan.md
+    [[ "$output" == *"## cross-repo"* ]]
+    [[ "$output" == *"- [ ] Bridge event schema"* ]]
+}
+
+# =============================================================================
+# ralph-plan --workspace: end-to-end with mock engine
+# =============================================================================
+
+_ws_plan_setup_mock_workspace() {
+    # Create a workspace with two repos, each with ai/ context
+    mkdir -p ws/.ralph ws/svc-a/.git ws/svc-b/.git
+    mkdir -p ws/svc-a/ai ws/svc-b/.ralph/specs
+
+    echo "PRD: add health endpoint" > ws/svc-a/ai/prd.md
+    echo "Spec: event schema" > ws/svc-b/.ralph/specs/schema.md
+
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+
+## svc-b
+
+## cross-repo
+EOF
+
+    # Mock engine outputs
+    mkdir -p mocks
+    cat > mocks/svc-a.out.md << 'EOF'
+## tasks
+- Add health endpoint to svc-a
+- Add readiness probe
+
+## ambiguities
+- Timeout threshold not defined
+EOF
+
+    cat > mocks/svc-b.out.md << 'EOF'
+## tasks
+- Publish event schema
+
+## cross-repo
+- Bridge svc-b events to notifications
+EOF
+}
+
+@test "ralph-plan --workspace happy path: both repo sections populated" {
+    _ws_plan_setup_mock_workspace
+
+    cd ws
+    RALPH_PLAN_WS_MOCK_DIR="$TEST_DIR/mocks" run bash "$RALPH_PLAN_SCRIPT" --workspace --engine claude
+    assert_success
+
+    [[ "$output" == *"Workspace Plan Summary"* ]]
+    [[ "$output" == *"Repos planned:       2"* ]]
+    [[ "$output" == *"New tasks:           3"* ]]
+    [[ "$output" == *"Cross-repo tasks:    1"* ]]
+    [[ "$output" == *"Ambiguities flagged: 1"* ]]
+
+    run cat .ralph/fix_plan.md
+    [[ "$output" == *"- [ ] Add health endpoint to svc-a"* ]]
+    [[ "$output" == *"- [ ] Add readiness probe"* ]]
+    [[ "$output" == *"- [ ] Publish event schema"* ]]
+    [[ "$output" == *"- [ ] Bridge svc-b events to notifications"* ]]
+}
+
+@test "ralph-plan --workspace preserves [~] in-progress tasks across reruns" {
+    _ws_plan_setup_mock_workspace
+
+    # Pre-seed svc-a with an in-progress task that also appears in new plan
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+- [~] Add health endpoint to svc-a
+
+## svc-b
+
+## cross-repo
+EOF
+
+    cd ws
+    RALPH_PLAN_WS_MOCK_DIR="$TEST_DIR/mocks" run bash "$RALPH_PLAN_SCRIPT" --workspace
+    assert_success
+    # Summary reports preserved task (check before overwriting $output)
+    [[ "${output}" == *"1 in-progress"* ]]
+
+    run cat .ralph/fix_plan.md
+    [[ "$output" == *"- [~] Add health endpoint to svc-a"* ]]
+    # No duplicate [ ] entry for same task
+    local count
+    count=$(grep -c "Add health endpoint to svc-a" .ralph/fix_plan.md)
+    [[ "$count" == "1" ]]
+}
+
+@test "ralph-plan --workspace updates ## cross-repo with flagged tasks" {
+    _ws_plan_setup_mock_workspace
+
+    cd ws
+    RALPH_PLAN_WS_MOCK_DIR="$TEST_DIR/mocks" run bash "$RALPH_PLAN_SCRIPT" --workspace
+    assert_success
+
+    run cat .ralph/fix_plan.md
+    [[ "$output" == *"## cross-repo"* ]]
+    [[ "$output" == *"- [ ] Bridge svc-b events to notifications"* ]]
+}
+
+@test "ralph-plan --workspace fails preflight when run from a git repo" {
+    # cwd has .git
+    mkdir -p bad/.git bad/.ralph
+    echo "# Plan" > bad/.ralph/fix_plan.md
+
+    cd bad
+    RALPH_PLAN_WS_MOCK_DIR="$TEST_DIR/mocks" run bash "$RALPH_PLAN_SCRIPT" --workspace
+    assert_failure
+    [[ "$output" == *"git repository"* ]] || [[ "$output" == *"workspace"* ]]
+}
+
+@test "ralph-plan --workspace --repos filters to listed repos only" {
+    _ws_plan_setup_mock_workspace
+
+    cd ws
+    RALPH_PLAN_WS_MOCK_DIR="$TEST_DIR/mocks" run bash "$RALPH_PLAN_SCRIPT" --workspace --repos svc-a
+    assert_success
+    [[ "$output" == *"Repos planned:       1"* ]]
+
+    run cat .ralph/fix_plan.md
+    # svc-a was planned
+    [[ "$output" == *"- [ ] Add health endpoint to svc-a"* ]]
+    # svc-b section untouched — no new tasks injected
+    [[ "$output" != *"Publish event schema"* ]]
+}
+
+@test "ralph-plan --workspace --dry-run emits summary without writing" {
+    _ws_plan_setup_mock_workspace
+
+    # Snapshot original fix_plan
+    local before
+    before=$(cat ws/.ralph/fix_plan.md)
+
+    cd ws
+    RALPH_PLAN_WS_MOCK_DIR="$TEST_DIR/mocks" run bash "$RALPH_PLAN_SCRIPT" --workspace --dry-run
+    assert_success
+    [[ "$output" == *"Workspace Plan Summary"* ]]
+    [[ "$output" == *"DRY-RUN"* ]]
+
+    # fix_plan unchanged
+    local after
+    after=$(cat .ralph/fix_plan.md)
+    [[ "$before" == "$after" ]]
+}
+
+@test "ralph-plan --workspace skips repos without ai/ or .ralph/specs/ context" {
+    mkdir -p ws/.ralph ws/svc-a/.git ws/svc-b/.git
+    mkdir -p ws/svc-a/ai
+    echo "PRD" > ws/svc-a/ai/prd.md
+    # svc-b has no context at all
+
+    cat > ws/.ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## svc-a
+
+## svc-b
+EOF
+
+    mkdir -p mocks
+    cat > mocks/svc-a.out.md << 'EOF'
+## tasks
+- Task for svc-a
+EOF
+
+    cd ws
+    RALPH_PLAN_WS_MOCK_DIR="$TEST_DIR/mocks" run bash "$RALPH_PLAN_SCRIPT" --workspace
+    assert_success
+    [[ "$output" == *"Skipped (no context): 1"* ]] || [[ "$output" == *"svc-b"* ]]
 }
