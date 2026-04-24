@@ -1605,6 +1605,194 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+        <li class="change-item" data-type="feat" data-has-detail><span
+            class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">planning:</span> Workspace planning mode &mdash;
+            <code>ralph-plan --workspace</code> drives the selected engine per child repo sequentially and merges tasks
+            into <code>.ralph/fix_plan.md</code> while preserving existing <code>[~]</code> / <code>[x]</code>
+            lines</span><span class="change-hash">PR #38</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it does</h4>
+              <ul>
+                <li>Reuses <code>discover_workspace_repos()</code> so the same repo set as <code>ralph --workspace</code>
+                  (execution) is planned</li>
+                <li>Reads planning context from both <code>ai/</code> (workbench convention) and
+                  <code>.ralph/specs/</code> (ralph-native); concatenates when both exist</li>
+                <li>Engine writes structured output (<code>## tasks</code>, <code>## ambiguities</code>,
+                  <code>## cross-repo</code>) to <code>.ralph/.workspace_plan/&lt;repo&gt;.out.md</code>, then
+                  <code>workspace_plan_merge_repo_section</code> merges it back into the per-repo section with
+                  trim-compare dedupe against preserved <code>[~]</code> / <code>[x]</code> lines</li>
+                <li>Cross-repo tasks land in a consolidated <code>## cross-repo</code> section, deduped</li>
+                <li><code>--repos a,b,c</code> allowlist &mdash; unlisted repos are untouched</li>
+                <li><code>--dry-run</code> runs the planner per repo but does NOT write <code>fix_plan.md</code>;
+                  summary still emitted</li>
+                <li>End-of-run summary: repos planned, new vs preserved tasks, cross-repo count, ambiguities per repo,
+                  engine, elapsed time</li>
+                <li>Preflight: cwd must be a workspace root (no top-level <code>.git</code>, one or more child repos
+                  with <code>.git/</code>, <code>.ralph/fix_plan.md</code> present). Clean errors otherwise</li>
+                <li>Sequential execution only for now &mdash; parallel workspace planning is a follow-up</li>
+              </ul>
+              <h4>Usage</h4>
+              <pre>ralph-plan --workspace                       # default engine (Claude)
+ralph-plan --workspace --engine devin        # via Devin
+ralph-plan --workspace --repos svc-a,svc-b   # plan only two repos
+ralph-plan --workspace --dry-run             # summary only, no writes</pre>
+              <h4>New files</h4>
+              <ul>
+                <li><code>lib/workspace_plan.sh</code> &mdash; preflight, context collection, engine drive, parse, merge,
+                  cross-repo, filter</li>
+                <li><code>tests/unit/test_workspace_mode.bats</code> &mdash; 20 new tests (happy path, state
+                  preservation, cross-repo, preflight fail, <code>--repos</code>, <code>--dry-run</code>)</li>
+              </ul>
+            </div>
+          </div>
+        </li>
+        <li class="change-item" data-type="fix" data-has-detail><span
+            class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">worktree:</span> 3-way merge <code>fix_plan.md</code> on
+            cleanup &mdash; preserves sibling agents' <code>[~]</code> / <code>[x]</code> marks so parallel workers
+            never claim the same task</span><span class="change-hash">PR #34</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it fixes</h4>
+              <ul>
+                <li><code>worktree_cleanup</code>'s unconditional <code>cp worktree/fix_plan.md &rarr; main/fix_plan.md</code>
+                  clobbered sibling parallel agents' <code>[~]</code> / <code>[x]</code> marks under <code>rpc.p</code>
+                  / <code>rpd.p</code> / <code>rpx.p</code>, leading to duplicate task picks</li>
+                <li>The <code>pick_next_task</code> lock itself was correct (10 concurrent pickers &rarr; 10 distinct
+                  picks); the race was at cleanup time</li>
+              </ul>
+              <h4>How it works</h4>
+              <ul>
+                <li><code>worktree_create</code>: snapshot baseline copy of <code>fix_plan.md</code> to
+                  <code>.ralph/.fix_plan_baseline.md</code></li>
+                <li><code>worktree_cleanup</code>: call new <code>_merge_fix_plan_back</code> instead of raw
+                  <code>cp</code></li>
+                <li><code>_merge_fix_plan_back</code>: lock-guarded 3-way merge via <code>git merge-file</code>
+                  (worktree-final &times; baseline &times; main-current) under the existing
+                  <code>_acquire_task_lock</code> mutex, reused as shared mutex for all <code>fix_plan.md</code>
+                  writers</li>
+                <li><code>_merge_fix_plan_status</code>: awk line-level fallback, picks the most-advanced marker
+                  per task (<code>[x] &gt; [~] &gt; [ ]</code>) and preserves sibling-added rows; never regresses
+                  state</li>
+                <li>6 new tests in <code>tests/unit/test_worktree_merge.bats</code></li>
+              </ul>
+            </div>
+          </div>
+        </li>
+        <li class="change-item" data-type="fix" data-has-detail><span
+            class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">gates:</span> Timeout-wrap dependency install + stream gate
+            output live &mdash; no more silent "Running quality gates..." hangs</span><span
+            class="change-hash">PR #30 / #31</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it fixes</h4>
+              <ul>
+                <li><code>_worktree_install_deps</code> (pre-gate) had no timeout, no stdin redirect, no live output;
+                  a hung <code>npm install</code> / <code>pnpm install</code> (private-registry auth, network,
+                  interactive prompt) blocked the loop with only "Running quality gates..." visible</li>
+                <li>Gate output was captured via <code>gate_output=$(... 2>&amp;1)</code> and replayed after the fact,
+                  so operators saw nothing until the gate returned</li>
+              </ul>
+              <h4>How it works</h4>
+              <ul>
+                <li><code>WORKTREE_INSTALL_TIMEOUT</code> (default 600s, env/<code>.ralphrc</code> overridable) wraps the
+                  install step; stdin &rarr; <code>/dev/null</code> so registry-auth prompts can't block. Exit 124/137
+                  logged as <code>DEPS_INSTALL: TIMEOUT after Ns</code></li>
+                <li>All three engine loops (+ Claude <code>--qg</code> mode + QG retry loop, 4 sites) replaced the
+                  capture with a streaming pipeline:
+                  <code>worktree_run_quality_gates 2&gt;&amp;1 | while read; do log_status INFO; done</code> +
+                  <code>gate_result=${PIPESTATUS[0]}</code>. Operators now see <code>DEPS_INSTALL:</code> and
+                  <code>QUALITY_GATE[N]:</code> progress in real time</li>
+                <li>Start log prints the bounds: <code>Running quality gates (install timeout Ns, per-gate timeout
+                  Ns)...</code></li>
+              </ul>
+              <h4>Files</h4>
+              <ul>
+                <li><code>lib/worktree_manager.sh</code>, <code>devin/lib/worktree_manager.sh</code>,
+                  <code>codex/lib/worktree_manager.sh</code> &mdash; <code>WORKTREE_INSTALL_TIMEOUT</code> and
+                  timeout-wrapped install</li>
+                <li><code>ralph_loop.sh</code> (+ <code>run_qg_mode</code> + QG retry loop),
+                  <code>devin/ralph_loop_devin.sh</code>, <code>codex/ralph_loop_codex.sh</code> &mdash; gate streaming</li>
+              </ul>
+            </div>
+          </div>
+        </li>
+        <li class="change-item" data-type="feat" data-has-detail><span
+            class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">parallel:</span> Per-gate timeout, failure summary, and
+            <code>rpc.p</code> parity &mdash; fixes the <code>rpc.int.p</code> hang at "Running quality gates..."
+            and makes API-error output actionable</span><span class="change-hash">PR #29</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it does</h4>
+              <ul>
+                <li><strong>Per-gate timeout.</strong> <code>WORKTREE_GATE_TIMEOUT</code> (default 600s, env /
+                  <code>.ralphrc</code> overridable) wraps each detected/configured gate in
+                  <code>timeout --foreground &quot;$WORKTREE_GATE_TIMEOUT&quot; bash -c &quot;$cmd&quot; &lt;/dev/null</code>
+                  (falls back to <code>gtimeout</code> on macOS, no-op when neither exists). Stdin redirect prevents
+                  TTY-probing commands (npm test watch, prompts) from blocking forever. Exit 124/137 recorded as
+                  <code>FAIL: &lt;cmd&gt; (timeout Ns)</code> so the QG fix prompt and PR description carry the real
+                  reason</li>
+                <li><strong>Execution Failed box.</strong> The <code>else</code> branch of
+                  <code>if [[ $exec_result -eq 0 ]]</code> now prints a red summary with task name, exit code,
+                  preserved worktree branch (<code>worktree_cleanup &quot;false&quot;</code>), session ID, and the
+                  engine's resume command. Reverts the <code>[~]</code> marker to <code>[ ]</code> so the task is
+                  retryable on the next loop. Wired into all three engine loops</li>
+                <li><strong><code>rpc.p</code> / <code>rpc.p.b</code> parity.</strong> Previously <code>rpc.int.p</code>
+                  was the <em>only</em> Claude parallel alias &mdash; it forced every run through
+                  <code>--live --monitor</code>, whose tmux + stream-json tee/FIFO file descriptors leaked into the
+                  synchronous post-loop <code>gate_output=$(... 2&gt;&amp;1)</code> capture and hung the loop at
+                  "Running quality gates...". New <code>rpc.p</code> mirrors <code>rpd.p</code>
+                  (plain <code>ralph --parallel</code>, no <code>--live</code> / <code>--monitor</code>);
+                  <code>rpc.int.p</code> is now opt-in for the dashboard</li>
+                <li>Reworded misleading <code>Retrying with fresh session</code> WARN in <code>ralph_loop.sh</code>
+                  &mdash; <code>execute_claude_code</code> returns immediately after <code>reset_session</code>, there
+                  is no retry within the same invocation</li>
+              </ul>
+              <h4>Usage</h4>
+              <pre># Override gate timeout for a flaky test suite
+WORKTREE_GATE_TIMEOUT=1200 ralph
+
+# Or pin it in .ralphrc
+echo 'WORKTREE_GATE_TIMEOUT=1200' &gt;&gt; .ralphrc
+
+# Non-interactive parallel (new default for parity)
+rpc.p 3        # 3 parallel agents, auto-exit, no streaming
+rpc.live.p 3   # 3 parallel agents with streaming output (single pane)
+rpc.int.p 3    # 3 parallel agents with full tmux 3-pane split (opt-in)</pre>
+            </div>
+          </div>
+        </li>
+        <li class="change-item" data-type="fix" data-has-detail><span
+            class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">claude:</span> Skip session resume in worktree mode &mdash;
+            fresh Claude session per iteration so <code>--resume</code> doesn't hit
+            "No conversation found"</span><span class="change-hash">PR #28</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it fixes</h4>
+              <ul>
+                <li>Claude scopes session IDs by cwd. In worktree mode each iteration has a new worktree cwd, so
+                  <code>claude --resume &lt;id&gt;</code> looked in the new worktree's pool and reported
+                  "No conversation found with session ID &hellip;", killing the loop</li>
+                <li><code>rpc.int.p N</code> compounded the issue: every agent shared a single
+                  <code>.claude_session_id</code> resolved against the main project root; the first save
+                  raced/clobbered the rest, and every agent failed on its next iteration</li>
+              </ul>
+              <h4>How it works</h4>
+              <ul>
+                <li><code>init_claude_session</code>, <code>save_claude_session</code>, and the stream-mode fallback
+                  session-ID writer are now gated on <code>WORKTREE_ENABLED != true</code></li>
+                <li>In worktree mode every iteration is a fresh Claude session &mdash; the only behaviour consistent
+                  with worktree-per-iter cwds</li>
+                <li>Non-worktree mode keeps <code>--resume</code> continuity unchanged</li>
+              </ul>
+            </div>
+          </div>
+        </li>
         <li class="change-item" data-type="feat"><span
             class="change-type type-feat">feat</span><span
             class="change-text"><span class="change-scope">workspace:</span> Enable Ralph at workspace level
@@ -2599,15 +2787,20 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
     // Detail data keyed by section data-version → item index
     const CHANGE_DETAILS = {
       'latest': {
-        // 0 = workspace enable (no detail panel)
-        // 1 = workspace parallel (inline HTML detail, no JS entry needed)
-        // 2 = rpc.p / rpc.live.p / rpc.p.b / rpc.live.p.b alias additions (no JS entry needed — short one-liner)
-        // 3 = planning model + thinking (inline HTML detail, no JS entry needed)
-        // 4 = claude worktree cwd parity (inline HTML detail, no JS entry needed)
-        // 5 = task assignment directive fix (inline HTML detail, no JS entry needed)
-        // 6 = compress mode (inline HTML detail, no JS entry needed)
-        // 7 = file-based planning mode (inline HTML detail, no JS entry needed)
-        8: {
+        // 0 = workspace planning --workspace (inline HTML detail, no JS entry needed)
+        // 1 = 3-way merge fix_plan.md on cleanup (inline HTML detail, no JS entry needed)
+        // 2 = timeout dep-install + stream gate output (inline HTML detail, no JS entry needed)
+        // 3 = per-gate timeout + failure summary + rpc.p parity (inline HTML detail, no JS entry needed)
+        // 4 = skip session resume in worktree mode (inline HTML detail, no JS entry needed)
+        // 5 = workspace enable (no detail panel)
+        // 6 = workspace parallel (inline HTML detail, no JS entry needed)
+        // 7 = rpc.p / rpc.live.p / rpc.p.b / rpc.live.p.b alias additions (no JS entry needed — short one-liner)
+        // 8 = planning model + thinking (inline HTML detail, no JS entry needed)
+        // 9 = claude worktree cwd parity (inline HTML detail, no JS entry needed)
+        // 10 = task assignment directive fix (inline HTML detail, no JS entry needed)
+        // 11 = compress mode (inline HTML detail, no JS entry needed)
+        // 12 = file-based planning mode (inline HTML detail, no JS entry needed)
+        13: {
           how: [
             'Removed the inline QG retry <code>while</code> loop from all 3 engine loop scripts (~80 lines each)',
             'Main loop now runs quality gates once and always creates a PR &mdash; success or failure (with <code>quality-gates-failed</code> label)',
@@ -2618,7 +2811,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Run quality gate fix mode after a failed PR\nralph --qg\nrpc.qg\n\n# With specific engine\nralph-codex --qg\nrpx.qg\nralph-devin --qg\nrpd.qg\n\n# Configure max retry attempts in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts'
         },
-        9: {
+        14: {
           how: [
             '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
             'The task ID is pre-generated before AI invocation and injected into the prompt',
@@ -2627,7 +2820,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
         },
-        10: {
+        15: {
           how: [
             '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
             'Prompts for a one-liner task description (interactive or inline via argument)',
@@ -2637,28 +2830,28 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
         },
-        11: {
+        16: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: subagent strategy for parallel gate fixing within the main loop'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        12: {
+        17: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: inline retry loop after worktree execution'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        13: {
+        18: {
           how: [
             'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
             'Helps correlate loop iterations with Claude conversation context'
           ],
           usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
         },
-        14: {
+        19: {
           how: [
             'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
             'Matches the latest Codex CLI API naming convention'
