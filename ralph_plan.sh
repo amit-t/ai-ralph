@@ -56,6 +56,19 @@ SUPERPOWERS=false
 SUPERPOWERS_PLUGIN_DIR="${HOME}/.claude/plugins/repos/superpowers"
 SUPERPOWERS_REPO="https://github.com/obra/superpowers"
 
+# Model override (Claude + Devin engines; e.g. "opus", "sonnet",
+# "claude-opus-4-7[1m]", "claude-sonnet-4"). Passes --model <value> through
+# to the engine CLI. Codex is ignored with a WARN. Empty = engine default.
+MODEL=""
+
+# Thinking depth for planning prompt. One of:
+#   normal - no-op (default)
+#   hard   - prepends "Think hard..." preamble; Claude engine also gets --effort high
+#   ultra  - prepends "ultrathink" preamble; Claude engine also gets --effort max
+# The preamble is prepended to the planning prompt for every engine;
+# the --effort flag is Claude-only.
+THINKING_LEVEL="normal"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -95,6 +108,16 @@ Options:
     --pm-os <dir>      PM OS directory (contains PRDs, analyses, specs in outputs/)
     --doe-os <dir>     DoE OS directory (contains TDDs, tech specs in outputs/)
     --engine <name>    AI engine: claude (default), codex, devin
+    --model <name>     Model override for the planning session (Claude + Devin).
+                       Passes --model <name> through to the engine CLI.
+                       Examples: opus, sonnet, claude-opus-4-7, claude-sonnet-4
+                       Codex engine ignores this flag with a WARN.
+    --thinking <level> Planning thinking depth. One of:
+                         normal (default)
+                         hard   - "Think hard" preamble + --effort high (Claude)
+                         ultra  - "ultrathink" preamble + --effort max  (Claude)
+                       The preamble is prepended to the prompt for every engine;
+                       the --effort flag is Claude-only.
     --yolo             Yolo mode: --dangerously-skip-permissions (Claude only)
     --superpowers      Load obra/superpowers plugin (Claude only, auto-cloned)
     --sup              Alias for --superpowers
@@ -116,6 +139,10 @@ Examples:
     ralph-plan --engine devin                   # Use Devin for analysis
     ralph-plan --prd-dir ./specs --engine codex # Codex on specific directory
     ralph-plan --yolo --superpowers             # Claude yolo + superpowers (rpc.plan.sup)
+    ralph-plan --model opus                     # Plan with Claude Opus (rpc.plan.opus)
+    ralph-plan --thinking ultra                 # ultrathink preamble + --effort max (rpc.plan.ultra)
+    ralph-plan --model opus --thinking ultra \
+               --yolo --superpowers             # Opus + ultrathink + yolo + superpowers
     ralph-plan --pm-os ../product/my-pm-os --doe-os ../engineering/my-doe-os
     ralph-plan --status                         # AI fix plan status (Claude, default)
     ralph-plan --engine codex --status          # AI fix plan status via Codex
@@ -563,6 +590,18 @@ run_ai_planning() {
     # Build prompt file
     local prompt_file="$RALPH_DIR/.plan_prompt_input.md"
     {
+        case "$THINKING_LEVEL" in
+            hard)
+                echo "Think hard about every decision below before acting. Prefer correctness and specificity over speed."
+                echo ""
+                ;;
+            ultra)
+                echo "ultrathink"
+                echo ""
+                echo "Ultra-plan every decision below. Be exhaustive and precise. Prefer correctness over brevity."
+                echo ""
+                ;;
+        esac
         cat "$PROMPT_PLAN_FILE"
         echo ""
         echo "---"
@@ -612,6 +651,22 @@ run_ai_planning() {
                 log "PLAN" "Superpowers plugin: $SUPERPOWERS_PLUGIN_DIR"
             fi
 
+            if [[ -n "$MODEL" ]]; then
+                claude_flags+=("--model" "$MODEL")
+                log "PLAN" "Model override: $MODEL"
+            fi
+
+            case "$THINKING_LEVEL" in
+                hard)
+                    claude_flags+=("--effort" "high")
+                    log "PLAN" "Thinking level: hard (--effort high)"
+                    ;;
+                ultra)
+                    claude_flags+=("--effort" "max")
+                    log "PLAN" "Thinking level: ultra (--effort max + ultrathink preamble)"
+                    ;;
+            esac
+
             log "PLAN" "Launching: $cli_cmd (interactive) ${claude_flags[*]}"
             if "$cli_cmd" "${claude_flags[@]}" "$prompt_content"; then
                 cli_exit_code=0
@@ -620,6 +675,9 @@ run_ai_planning() {
             fi
             ;;
         codex)
+            if [[ -n "$MODEL" ]]; then
+                log "WARN" "--model is Claude+Devin only for ralph-plan; ignored for codex engine"
+            fi
             local -a codex_flags=(
                 "--dangerously-bypass-approvals-and-sandbox"
                 "--"
@@ -632,8 +690,14 @@ run_ai_planning() {
             fi
             ;;
         devin)
-            log "PLAN" "Launching: $cli_cmd (interactive) --permission-mode dangerous --prompt-file $prompt_file"
-            if "$cli_cmd" --permission-mode dangerous --prompt-file "$prompt_file"; then
+            local -a devin_flags=("--permission-mode" "dangerous")
+            if [[ -n "$MODEL" ]]; then
+                devin_flags+=("--model" "$MODEL")
+                log "PLAN" "Model override: $MODEL"
+            fi
+            devin_flags+=("--prompt-file" "$prompt_file")
+            log "PLAN" "Launching: $cli_cmd (interactive) ${devin_flags[*]}"
+            if "$cli_cmd" "${devin_flags[@]}"; then
                 cli_exit_code=0
             else
                 cli_exit_code=$?
@@ -677,6 +741,21 @@ parse_args() {
                 ;;
             --engine)
                 ENGINE="$2"
+                shift 2
+                ;;
+            --model)
+                MODEL="$2"
+                shift 2
+                ;;
+            --thinking)
+                THINKING_LEVEL="$2"
+                case "$THINKING_LEVEL" in
+                    normal|hard|ultra) ;;
+                    *)
+                        log "ERROR" "Invalid --thinking value: $THINKING_LEVEL (expected: normal, hard, ultra)"
+                        exit 1
+                        ;;
+                esac
                 shift 2
                 ;;
             --status)

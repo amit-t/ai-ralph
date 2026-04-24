@@ -94,6 +94,18 @@ alias rpc.plan.sup='ralph-plan --yolo --superpowers'
 # Fix plan status (note: rpc.status is agent session status; rpc.plan.s is fix plan status)
 alias rpc.plan.s='ralph-plan --status'
 
+# Model overrides for planning (Claude engine only)
+alias rpc.plan.opus='ralph-plan --model opus'
+alias rpc.plan.sonnet='ralph-plan --model sonnet'
+
+# Thinking depth for planning (prompt preamble + Claude --effort)
+alias rpc.plan.hard='ralph-plan --thinking hard'
+alias rpc.plan.ultra='ralph-plan --thinking ultra'
+
+# Combined: Opus + ultrathink + yolo + superpowers (max-depth planning)
+alias rpc.plan.opus.ultra='ralph-plan --model opus --thinking ultra'
+alias rpc.plan.max='ralph-plan --model opus --thinking ultra --yolo --superpowers'
+
 # Ad-hoc task mode (interactive one-liner to fix_plan entry)
 # Usage: rpc.adhoc                        -> prompts for task description
 # Usage: rpc.adhoc "Login broken on iOS"  -> inline description

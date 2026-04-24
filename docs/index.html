@@ -1605,12 +1605,69 @@
         <span class="version-tag tag-latest">latest</span>
       </div>
       <ul class="change-list">
+<<<<<<< HEAD
         <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
             class="change-text"><span class="change-scope">aliases:</span> Add <code>rpc.p</code>,
             <code>rpc.live.p</code>, and <code>rpc.p.b</code> / <code>rpc.live.p.b</code> variants &mdash; gives Claude
             engine parity with <code>rpd.p</code> / <code>rpx.int.p</code> plus a streaming-only parallel mode
             (<code>--live</code>) that skips the <code>--monitor</code> tmux 3-pane split</span><span
             class="change-hash">pending</span></li>
+=======
+        <li class="change-item" data-type="feat" data-has-detail><span
+            class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">planning:</span> Model + thinking-depth controls &mdash;
+            <code>ralph-plan --model &lt;name&gt;</code> routes Claude/Devin planning to a specific model
+            (Opus, Sonnet, etc.); <code>--thinking &lt;normal|hard|ultra&gt;</code> prepends a thinking preamble
+            and wires Claude <code>--effort</code></span><span
+            class="change-hash">df49710</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it does</h4>
+              <ul>
+                <li><code>--model &lt;name&gt;</code> passes <code>--model</code> through to the Claude or Devin CLI
+                  (e.g. <code>opus</code>, <code>sonnet</code>, <code>claude-opus-4-7</code>, <code>claude-sonnet-4</code>);
+                  Codex ignores with a <code>WARN</code></li>
+                <li><code>--thinking hard</code> prepends a "Think hard&hellip;" preamble to the planning prompt for
+                  every engine; Claude engine also gets <code>--effort high</code></li>
+                <li><code>--thinking ultra</code> prepends an <code>ultrathink</code> preamble; Claude engine also
+                  gets <code>--effort max</code>. Devin has no <code>--effort</code> equivalent so it stops at the
+                  preamble</li>
+                <li>Invalid <code>--thinking</code> values are rejected at parse time with a typed error</li>
+                <li>Previously <code>rpc.opus</code> / <code>rpd.opus</code> only changed the execution-loop model
+                  &mdash; planning sessions always used the engine default. This closes that gap</li>
+              </ul>
+              <h4>Usage</h4>
+              <pre>ralph-plan --model opus                                  # Claude + Opus
+ralph-plan --thinking ultra                              # ultrathink + --effort max
+ralph-plan --model opus --thinking ultra --yolo --superpowers  # deepest Claude planning
+ralph-plan --engine devin --model claude-opus-4.6        # Devin + Anthropic model
+
+# Aliases (Claude)
+rpc.plan.opus          # --model opus
+rpc.plan.sonnet        # --model sonnet
+rpc.plan.hard          # --thinking hard
+rpc.plan.ultra         # --thinking ultra
+rpc.plan.opus.ultra    # --model opus --thinking ultra
+rpc.plan.max           # --model opus --thinking ultra --yolo --superpowers
+
+# Aliases (Devin)
+rpd.plan.opus          # --engine devin --model opus
+rpd.plan.sonnet        # --engine devin --model sonnet
+rpd.plan.hard          # --engine devin --thinking hard
+rpd.plan.ultra         # --engine devin --thinking ultra
+rpd.plan.opus.ultra    # --engine devin --model opus --thinking ultra</pre>
+              <h4>Changed files</h4>
+              <ul>
+                <li><code>ralph_plan.sh</code> &mdash; flag parsing, validation, prompt preamble injection, Claude
+                  <code>--effort</code> wiring, Devin <code>--model</code> pass-through</li>
+                <li><code>ALIASES.sh</code> &mdash; 6 new <code>rpc.plan.*</code> aliases</li>
+                <li><code>devin/ALIASES.sh</code> &mdash; 5 new <code>rpd.plan.*</code> aliases</li>
+                <li><code>README.md</code> &mdash; feature bullets + rpc/rpd alias tables</li>
+              </ul>
+            </div>
+          </div>
+        </li>
+>>>>>>> e199daee2d8a849bf7718f97862be934df405916
         <li class="change-item" data-type="fix" data-has-detail><span
             class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">claude worktree:</span> Wrap CLI invocations in
