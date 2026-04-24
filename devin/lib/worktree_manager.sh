@@ -23,6 +23,7 @@ WORKTREE_AUTO_CLEANUP="${WORKTREE_AUTO_CLEANUP:-true}"
 WORKTREE_BRANCH_PREFIX="${WORKTREE_BRANCH_PREFIX:-ralph-devin}"
 WORKTREE_AUTO_COMMIT="${WORKTREE_AUTO_COMMIT:-true}"
 WORKTREE_GATE_TIMEOUT="${WORKTREE_GATE_TIMEOUT:-600}"          # per-gate seconds
+WORKTREE_INSTALL_TIMEOUT="${WORKTREE_INSTALL_TIMEOUT:-600}"    # dep-install seconds
 
 # Internal state
 _WT_BASE_DIR=""
@@ -230,13 +231,27 @@ _worktree_install_deps() {
         return 1
     fi
 
-    echo "DEPS_INSTALL: Installing dependencies ($install_cmd) in worktree..." >&2
+    echo "DEPS_INSTALL: Installing dependencies ($install_cmd, timeout ${WORKTREE_INSTALL_TIMEOUT}s)..." >&2
     local install_output install_exit
-    install_output=$(cd "$workdir" && eval "$install_cmd" 2>&1) || install_exit=$?
+    local _to_bin=""
+    if command -v timeout >/dev/null 2>&1; then
+        _to_bin="timeout"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        _to_bin="gtimeout"
+    fi
+    if [[ -n "$_to_bin" ]]; then
+        install_output=$(cd "$workdir" && "$_to_bin" --foreground "$WORKTREE_INSTALL_TIMEOUT" \
+            bash -c "$install_cmd" </dev/null 2>&1) || install_exit=$?
+    else
+        install_output=$(cd "$workdir" && bash -c "$install_cmd" </dev/null 2>&1) || install_exit=$?
+    fi
     install_exit=${install_exit:-0}
 
     if [[ $install_exit -eq 0 ]]; then
         echo "DEPS_INSTALL: Dependencies installed successfully" >&2
+    elif [[ $install_exit -eq 124 || $install_exit -eq 137 ]]; then
+        echo "DEPS_INSTALL: TIMEOUT after ${WORKTREE_INSTALL_TIMEOUT}s — gates may still fail" >&2
+        echo "DEPS_INSTALL: Output: $(echo "$install_output" | tail -3)" >&2
     else
         echo "DEPS_INSTALL: Install failed (exit $install_exit) — gates may still fail" >&2
         echo "DEPS_INSTALL: Output: $(echo "$install_output" | tail -3)" >&2

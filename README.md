@@ -35,6 +35,8 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
 - **Workspace mode** (`ralph --workspace`) for multi-repo orchestration -- run tasks across multiple git repos from a parent directory with a single workspace-level fix_plan.md
 - **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
+- **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
+- **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 
 ---
 
@@ -544,6 +546,11 @@ Source: `devin/ALIASES.sh`
 | `rpd.enable` | `ralph-devin-enable` | Enable Ralph+Devin in current project |
 | `rpd.plan` | `ralph-plan --engine devin` | Planning mode with Devin |
 | `rpd.plan.file <path>` | `ralph-plan --engine devin --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpd.plan.opus` | `ralph-plan --engine devin --model opus` | Plan via Devin using Opus |
+| `rpd.plan.sonnet` | `ralph-plan --engine devin --model sonnet` | Plan via Devin using Sonnet |
+| `rpd.plan.hard` | `ralph-plan --engine devin --thinking hard` | "Think hard" preamble for Devin planning |
+| `rpd.plan.ultra` | `ralph-plan --engine devin --thinking ultra` | `ultrathink` preamble for Devin planning |
+| `rpd.plan.opus.ultra` | `ralph-plan --engine devin --model opus --thinking ultra` | Opus + ultrathink via Devin |
 | `rpd.compress` | `ralph-plan --engine devin --compress` | Compress fix plan to reduce token usage |
 
 ---
@@ -617,11 +624,13 @@ Source: `ALIASES.sh`
 
 | Alias | Usage | Description |
 |---|---|---|
-| `rpc.int` | `rpc.int` | Interactive mode (live + monitor) |
+| `rpc.int` | `rpc.int` | Interactive mode (live + monitor, tmux split) |
 | `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (auto-exit, no live/monitor — mirrors `rpd.p`) |
-| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents in background (auto-exit) |
-| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with live tmux monitor |
-| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N agents in background with live tmux monitor |
+| `rpc.live.p N` | `rpc.live.p 3` | Spawn N parallel agents streaming Claude output (single pane, no tmux split) |
+| `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with full tmux 3-pane split (loop + log + monitor) |
+| `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (auto-exit) |
+| `rpc.live.p.b N` | `rpc.live.p.b 3` | Spawn N background agents with streaming output |
+| `rpc.int.p.b N` | `rpc.int.p.b 3` | Spawn N interactive (tmux-split) agents in background |
 
 #### Task-Specific Execution
 
@@ -656,6 +665,12 @@ Source: `ALIASES.sh`
 | `rpc.plan` | `ralph-plan` | Planning mode (Claude engine) |
 | `rpc.plan.sup` | `ralph-plan --yolo --superpowers` | Planning with yolo + superpowers plugin |
 | `rpc.plan.file <path>` | `ralph-plan --file <path>` | Plan from a specific file (MD/JSON/text) |
+| `rpc.plan.opus` | `ralph-plan --model opus` | Plan using Claude Opus |
+| `rpc.plan.sonnet` | `ralph-plan --model sonnet` | Plan using Claude Sonnet |
+| `rpc.plan.hard` | `ralph-plan --thinking hard` | "Think hard" preamble + `--effort high` |
+| `rpc.plan.ultra` | `ralph-plan --thinking ultra` | `ultrathink` preamble + `--effort max` |
+| `rpc.plan.opus.ultra` | `ralph-plan --model opus --thinking ultra` | Opus + ultrathink for deepest planning |
+| `rpc.plan.max` | `ralph-plan --model opus --thinking ultra --yolo --superpowers` | Max-depth: Opus + ultrathink + yolo + superpowers |
 | `rpc.compress` | `ralph-plan --compress` | Compress fix plan to reduce token usage |
 
 ---
@@ -1116,6 +1131,8 @@ Uninstalling one engine does not affect the others.
 - **Ad-hoc task mode** (`ralph-plan --adhoc`) for quick bug/task entry into `fix_plan.md` via AI
 - **Fix plan compression** (`ralph-plan --compress`) to reduce token consumption while preserving progress
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
+- **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
+- **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 - **150+ shell aliases** across three engines (`rpc.*`, `rpd.*`, `rpx.*`)
 - **Intelligent exit detection** -- dual-condition gate requiring BOTH completion indicators AND explicit EXIT_SIGNAL
 - **Circuit breaker** with cooldown timer, auto-recovery, and configurable thresholds
@@ -1162,6 +1179,14 @@ Uninstalling one engine does not affect the others.
   live mode, modern background mode, legacy background mode
 - Brings Claude to full parity with Devin and Codex engines, which already used this pattern
 - Added 4 new unit tests in `test_cli_modern.bats` to prevent regression
+
+**Claude Parallel Aliases Symmetry**
+- Added `rpc.live.p N` / `rpc.live.p.b N` for streaming Claude output without the `--monitor` tmux 3-pane split
+- Complements the existing `rpc.p` / `rpc.p.b` (quiet) and `rpc.int.p` / `rpc.int.p.b` (full tmux) variants
+- `rpc.p N` -> `ralph --parallel N` (quiet, no streaming)
+- `rpc.live.p N` -> `ralph --live --parallel N` (streaming output, single pane per tab)
+- `rpc.int.p N` -> `ralph --live --monitor --parallel N` (full tmux split: loop + log + monitor)
+- All 3 engines now expose both non-interactive (`rpc.p`, `rpd.p`, `rpx.*.p`) and interactive (`.int.p`) parallel variants
 
 **Task Assignment Directive**
 - Picked task info (ID, line number, description) is now injected into the AI prompt as a "task assignment directive"

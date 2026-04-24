@@ -2207,11 +2207,15 @@ main() {
 
         # ── Worktree: quality gates + commit + push + PR + cleanup ───────
         if [[ "$WORKTREE_ENABLED" == "true" ]] && worktree_is_active; then
-            log_status "INFO" "Running quality gates..."
-            local gate_output gate_result
-            gate_output=$(worktree_run_quality_gates 2>&1)
-            gate_result=$?
-            while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+            log_status "INFO" "Running quality gates (install timeout ${WORKTREE_INSTALL_TIMEOUT}s, per-gate timeout ${WORKTREE_GATE_TIMEOUT}s)..."
+            local gate_result
+            # Stream output live so dep-install + gate progress is visible
+            # immediately; previously the entire function output was captured
+            # and only emitted after return, hiding any in-flight hang.
+            worktree_run_quality_gates 2>&1 | while IFS= read -r line; do
+                [[ -n "$line" ]] && log_status "INFO" "$line"
+            done
+            gate_result=${PIPESTATUS[0]}
 
             local wt_branch_for_log pr_result=0
             wt_branch_for_log="$(worktree_get_branch)"
@@ -2358,11 +2362,12 @@ run_qg_mode() {
     _worktree_install_deps "$(pwd)"
 
     # Run quality gates
-    log_status "INFO" "Running quality gates..."
-    local gate_output gate_result
-    gate_output=$(worktree_run_quality_gates 2>&1)
-    gate_result=$?
-    while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+    log_status "INFO" "Running quality gates (install timeout ${WORKTREE_INSTALL_TIMEOUT}s, per-gate timeout ${WORKTREE_GATE_TIMEOUT}s)..."
+    local gate_result
+    worktree_run_quality_gates 2>&1 | while IFS= read -r line; do
+        [[ -n "$line" ]] && log_status "INFO" "$line"
+    done
+    gate_result=${PIPESTATUS[0]}
 
     if [[ $gate_result -eq 0 ]]; then
         log_status "SUCCESS" "All quality gates passed. Nothing to fix."
@@ -2432,9 +2437,10 @@ run_qg_mode() {
 
         # Re-run quality gates
         log_status "INFO" "Re-running quality gates after fix attempt $qg_attempt..."
-        gate_output=$(worktree_run_quality_gates 2>&1)
-        gate_result=$?
-        while IFS= read -r line; do [[ -n "$line" ]] && log_status "INFO" "$line"; done <<< "$gate_output"
+        worktree_run_quality_gates 2>&1 | while IFS= read -r line; do
+            [[ -n "$line" ]] && log_status "INFO" "$line"
+        done
+        gate_result=${PIPESTATUS[0]}
     done
 
     if [[ $gate_result -eq 0 ]]; then

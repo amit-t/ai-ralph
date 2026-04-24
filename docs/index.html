@@ -1636,6 +1636,66 @@ rpx.ws.p 3    # Codex alias</code></pre>
             </div>
           </div>
         </li>
+        <li class="change-item" data-type="feat"><span class="change-type type-feat">feat</span><span
+            class="change-text"><span class="change-scope">aliases:</span> Add <code>rpc.p</code>,
+            <code>rpc.live.p</code>, and <code>rpc.p.b</code> / <code>rpc.live.p.b</code> variants &mdash; gives Claude
+            engine parity with <code>rpd.p</code> / <code>rpx.int.p</code> plus a streaming-only parallel mode
+            (<code>--live</code>) that skips the <code>--monitor</code> tmux 3-pane split</span><span
+            class="change-hash">pending</span></li>
+        <li class="change-item" data-type="feat" data-has-detail><span
+            class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">planning:</span> Model + thinking-depth controls &mdash;
+            <code>ralph-plan --model &lt;name&gt;</code> routes Claude/Devin planning to a specific model
+            (Opus, Sonnet, etc.); <code>--thinking &lt;normal|hard|ultra&gt;</code> prepends a thinking preamble
+            and wires Claude <code>--effort</code></span><span
+            class="change-hash">df49710</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it does</h4>
+              <ul>
+                <li><code>--model &lt;name&gt;</code> passes <code>--model</code> through to the Claude or Devin CLI
+                  (e.g. <code>opus</code>, <code>sonnet</code>, <code>claude-opus-4-7</code>, <code>claude-sonnet-4</code>);
+                  Codex ignores with a <code>WARN</code></li>
+                <li><code>--thinking hard</code> prepends a "Think hard&hellip;" preamble to the planning prompt for
+                  every engine; Claude engine also gets <code>--effort high</code></li>
+                <li><code>--thinking ultra</code> prepends an <code>ultrathink</code> preamble; Claude engine also
+                  gets <code>--effort max</code>. Devin has no <code>--effort</code> equivalent so it stops at the
+                  preamble</li>
+                <li>Invalid <code>--thinking</code> values are rejected at parse time with a typed error</li>
+                <li>Previously <code>rpc.opus</code> / <code>rpd.opus</code> only changed the execution-loop model
+                  &mdash; planning sessions always used the engine default. This closes that gap</li>
+              </ul>
+              <h4>Usage</h4>
+              <pre>ralph-plan --model opus                                  # Claude + Opus
+ralph-plan --thinking ultra                              # ultrathink + --effort max
+ralph-plan --model opus --thinking ultra --yolo --superpowers  # deepest Claude planning
+ralph-plan --engine devin --model claude-opus-4.6        # Devin + Anthropic model
+
+# Aliases (Claude)
+rpc.plan.opus          # --model opus
+rpc.plan.sonnet        # --model sonnet
+rpc.plan.hard          # --thinking hard
+rpc.plan.ultra         # --thinking ultra
+rpc.plan.opus.ultra    # --model opus --thinking ultra
+rpc.plan.max           # --model opus --thinking ultra --yolo --superpowers
+
+# Aliases (Devin)
+rpd.plan.opus          # --engine devin --model opus
+rpd.plan.sonnet        # --engine devin --model sonnet
+rpd.plan.hard          # --engine devin --thinking hard
+rpd.plan.ultra         # --engine devin --thinking ultra
+rpd.plan.opus.ultra    # --engine devin --model opus --thinking ultra</pre>
+              <h4>Changed files</h4>
+              <ul>
+                <li><code>ralph_plan.sh</code> &mdash; flag parsing, validation, prompt preamble injection, Claude
+                  <code>--effort</code> wiring, Devin <code>--model</code> pass-through</li>
+                <li><code>ALIASES.sh</code> &mdash; 6 new <code>rpc.plan.*</code> aliases</li>
+                <li><code>devin/ALIASES.sh</code> &mdash; 5 new <code>rpd.plan.*</code> aliases</li>
+                <li><code>README.md</code> &mdash; feature bullets + rpc/rpd alias tables</li>
+              </ul>
+            </div>
+          </div>
+        </li>
         <li class="change-item" data-type="fix" data-has-detail><span
             class="change-type type-fix">fix</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">claude worktree:</span> Wrap CLI invocations in
@@ -2541,11 +2601,13 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       'latest': {
         // 0 = workspace enable (no detail panel)
         // 1 = workspace parallel (inline HTML detail, no JS entry needed)
-        // 2 = claude worktree cwd parity (inline HTML detail, no JS entry needed)
-        // 3 = task assignment directive fix (inline HTML detail, no JS entry needed)
-        // 4 = compress mode (inline HTML detail, no JS entry needed)
-        // 5 = file-based planning mode (inline HTML detail, no JS entry needed)
-        6: {
+        // 2 = rpc.p / rpc.live.p / rpc.p.b / rpc.live.p.b alias additions (no JS entry needed — short one-liner)
+        // 3 = planning model + thinking (inline HTML detail, no JS entry needed)
+        // 4 = claude worktree cwd parity (inline HTML detail, no JS entry needed)
+        // 5 = task assignment directive fix (inline HTML detail, no JS entry needed)
+        // 6 = compress mode (inline HTML detail, no JS entry needed)
+        // 7 = file-based planning mode (inline HTML detail, no JS entry needed)
+        8: {
           how: [
             'Removed the inline QG retry <code>while</code> loop from all 3 engine loop scripts (~80 lines each)',
             'Main loop now runs quality gates once and always creates a PR &mdash; success or failure (with <code>quality-gates-failed</code> label)',
@@ -2556,7 +2618,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Run quality gate fix mode after a failed PR\nralph --qg\nrpc.qg\n\n# With specific engine\nralph-codex --qg\nrpx.qg\nralph-devin --qg\nrpd.qg\n\n# Configure max retry attempts in .ralphrc:\nMAX_QG_RETRIES=3    # default: 3 attempts'
         },
-        7: {
+        9: {
           how: [
             '<code>next_adhoc_id()</code> scans <code>fix_plan.md</code> for existing <strong>AHxx</strong> IDs and generates the next sequential one (AH01, AH02, &hellip;)',
             'The task ID is pre-generated before AI invocation and injected into the prompt',
@@ -2565,7 +2627,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 shows task ID in output, prints it to stdout\nrpc.adhoc "Login broken on iOS"\n# Output: AH01\n\n# Inline + pipe to execute immediately\nTASK_ID=$(rpc.adhoc "Login broken on iOS")\nrpd.task $TASK_ID\n\n# Works with all engines\nrpx.adhoc "API timeout on large payloads"\nrpd.adhoc "Dark mode toggle broken"'
         },
-        8: {
+        10: {
           how: [
             '<code>find_fix_plan_for_adhoc()</code> walks upward from CWD to locate <code>.ralph/fix_plan.md</code>',
             'Prompts for a one-liner task description (interactive or inline via argument)',
@@ -2575,28 +2637,28 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
           ],
           usage: '# Interactive \u2014 prompts for description\nrpc.adhoc\n\n# Inline description\nrpc.adhoc "Login button unresponsive on mobile Safari"\n\n# With specific engine\nrpx.adhoc "API returns 500 on null email"\nrpd.adhoc "Dark mode toggle doesn\'t persist"'
         },
-        9: {
+        11: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: subagent strategy for parallel gate fixing within the main loop'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        10: {
+        12: {
           how: [
             '<s>Superseded by <code>ralph --qg</code> standalone mode (c47b700)</s>',
             'Original: inline retry loop after worktree execution'
           ],
           usage: '# Now use standalone mode instead:\nralph --qg\nrpc.qg'
         },
-        11: {
+        13: {
           how: [
             'After each Claude Code execution, the session ID from <code>.ralph/.claude_session_id</code> is included in the execution summary',
             'Helps correlate loop iterations with Claude conversation context'
           ],
           usage: '# Visible in loop output automatically\n# Example output:\n# Session: sess_abc123def456\n# Files changed: 3 | +42 -8'
         },
-        12: {
+        14: {
           how: [
             'Updates the Codex CLI permission bypass flag from <code>--dangerously-skip-permissions</code> to the new <code>--dangerously-bypass-approvals-and-sandbox</code>',
             'Matches the latest Codex CLI API naming convention'
@@ -2824,7 +2886,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
             'Agents pick unclaimed tasks from <code>fix_plan.md</code> using atomic file locking',
             'Each worktree gets a copy of <code>.ralph/</code> configuration'
           ],
-          usage: 'rpc.int.p 3      # 3 parallel Claude agents\nrpd.p 4          # 4 parallel Devin agents\nrpx.int.p 2      # 2 parallel Codex agents'
+          usage: 'rpc.p 3          # 3 parallel Claude agents (quiet)\nrpc.live.p 3     # 3 parallel Claude agents with streaming output (no tmux split)\nrpc.int.p 3      # 3 parallel Claude agents with tmux 3-pane split\nrpd.p 4          # 4 parallel Devin agents\nrpx.int.p 2      # 2 parallel Codex agents'
         },
         1: {
           how: [
@@ -2838,7 +2900,7 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
             'Runs parallel agents as background processes in any terminal',
             'Does not require IDE terminal tabs or tmux \u2014 works in plain terminals'
           ],
-          usage: 'rpc.int.p.b 3    # 3 background Claude agents\nrpd.p.b 4        # 4 background Devin agents'
+          usage: 'rpc.p.b 3        # 3 background Claude agents (quiet)\nrpc.live.p.b 3   # 3 background agents with streaming output\nrpc.int.p.b 3    # 3 background interactive Claude agents\nrpd.p.b 4        # 4 background Devin agents'
         },
         3: {
           how: [
@@ -3637,9 +3699,13 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       { alias: 'rpc.qg', cmd: 'ralph --qg', desc: 'Quality gate fix mode (retry loop)', engine: 'claude', cat: 'worktree' },
       { alias: 'rpc.wt.full', cmd: 'ralph --live --monitor --merge-strategy squash --quality-gates auto', desc: 'Full worktree mode', engine: 'claude', cat: 'worktree' },
       // Interactive / Parallel
-      { alias: 'rpc.int', cmd: 'ralph --live --monitor', desc: 'Interactive mode (live + monitor)', engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.int.p N', cmd: 'ralph --live --monitor --parallel N', desc: 'Spawn N parallel agents', engine: 'claude', cat: 'interactive' },
-      { alias: 'rpc.int.p.b N', cmd: 'ralph --live --monitor --parallel-bg N', desc: 'Spawn N agents in background', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int', cmd: 'ralph --live --monitor', desc: 'Interactive mode (live + monitor, tmux split)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.p N', cmd: 'ralph --parallel N', desc: 'Spawn N parallel agents (quiet, no streaming)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.live.p N', cmd: 'ralph --live --parallel N', desc: 'Spawn N parallel agents streaming Claude output (no tmux split)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p N', cmd: 'ralph --live --monitor --parallel N', desc: 'Spawn N parallel agents with tmux 3-pane split (loop + log + monitor)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.p.b N', cmd: 'ralph --parallel-bg N', desc: 'Spawn N agents as background processes (quiet)', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.live.p.b N', cmd: 'ralph --live --parallel-bg N', desc: 'Spawn N background agents with streaming output', engine: 'claude', cat: 'interactive' },
+      { alias: 'rpc.int.p.b N', cmd: 'ralph --live --monitor --parallel-bg N', desc: 'Spawn N interactive (tmux-split) agents in background', engine: 'claude', cat: 'interactive' },
       // Workflow
       { alias: 'rpc.dev', cmd: 'ralph --live --monitor --verbose', desc: 'Development mode', engine: 'claude', cat: 'workflow' },
       { alias: 'rpc.prod', cmd: 'ralph --calls 50 --auto-reset-circuit', desc: 'Production / unattended mode', engine: 'claude', cat: 'workflow' },

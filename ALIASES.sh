@@ -55,18 +55,27 @@ alias rpc.int='ralph --live --monitor'
 # --live + --monitor wraps execution in a tmux pane and a stream-json
 # tee/FIFO whose file descriptors leak into the post-loop quality-gate
 # capture and can hang `worktree_run_quality_gates` indefinitely.
-# Use rpc.int.p when you actually want the live tmux dashboard.
+# Use rpc.live.p for streaming output in a single pane, or rpc.int.p for
+# the full tmux dashboard.
 # Usage: rpc.p 3  -> spawns 3 parallel ralph agents (auto-exit)
 rpc.p() { ralph --parallel "${1:?Usage: rpc.p <number>}"; }
 
+# Parallel live-only (streams Claude output in each tab, no tmux split / monitor)
+# Usage: rpc.live.p 3  -> spawns 3 parallel ralph agents with streaming output only
+rpc.live.p() { ralph --live --parallel "${1:?Usage: rpc.live.p <number>}"; }
+
 # Parallel interactive (spawns N agents in live + tmux monitor mode)
+# Note: this creates a 3-pane tmux split (loop + log + monitor) in each tab.
+# Prefer rpc.live.p for a single-pane streaming view.
 # Usage: rpc.int.p 3  -> spawns 3 parallel ralph agents with live monitor
 rpc.int.p() { ralph --live --monitor --parallel "${1:?Usage: rpc.int.p <number>}"; }
 
 # Parallel background mode (spawns N agents as background processes in any terminal)
-# Usage: rpc.p.b 3      -> 3 parallel ralph agents in background (auto-exit)
-# Usage: rpc.int.p.b 3  -> 3 parallel ralph agents in background with live monitor
+# Usage: rpc.p.b 3       -> 3 parallel ralph agents in background (auto-exit)
+# Usage: rpc.live.p.b 3  -> 3 parallel agents with streaming output (background)
+# Usage: rpc.int.p.b 3   -> 3 parallel ralph agents in background with live monitor
 rpc.p.b() { ralph --parallel-bg "${1:?Usage: rpc.p.b <number>}"; }
+rpc.live.p.b() { ralph --live --parallel-bg "${1:?Usage: rpc.live.p.b <number>}"; }
 rpc.int.p.b() { ralph --live --monitor --parallel-bg "${1:?Usage: rpc.int.p.b <number>}"; }
 
 # Combined common workflows
@@ -84,6 +93,18 @@ alias rpc.plan='ralph-plan'
 alias rpc.plan.sup='ralph-plan --yolo --superpowers'
 # Fix plan status (note: rpc.status is agent session status; rpc.plan.s is fix plan status)
 alias rpc.plan.s='ralph-plan --status'
+
+# Model overrides for planning (Claude engine only)
+alias rpc.plan.opus='ralph-plan --model opus'
+alias rpc.plan.sonnet='ralph-plan --model sonnet'
+
+# Thinking depth for planning (prompt preamble + Claude --effort)
+alias rpc.plan.hard='ralph-plan --thinking hard'
+alias rpc.plan.ultra='ralph-plan --thinking ultra'
+
+# Combined: Opus + ultrathink + yolo + superpowers (max-depth planning)
+alias rpc.plan.opus.ultra='ralph-plan --model opus --thinking ultra'
+alias rpc.plan.max='ralph-plan --model opus --thinking ultra --yolo --superpowers'
 
 # Ad-hoc task mode (interactive one-liner to fix_plan entry)
 # Usage: rpc.adhoc                        -> prompts for task description

@@ -23,6 +23,7 @@ WORKTREE_AUTO_CLEANUP="${WORKTREE_AUTO_CLEANUP:-true}"
 WORKTREE_BRANCH_PREFIX="${WORKTREE_BRANCH_PREFIX:-ralph-claude}"
 WORKTREE_AUTO_COMMIT="${WORKTREE_AUTO_COMMIT:-true}"
 WORKTREE_GATE_TIMEOUT="${WORKTREE_GATE_TIMEOUT:-600}"          # per-gate seconds
+WORKTREE_INSTALL_TIMEOUT="${WORKTREE_INSTALL_TIMEOUT:-600}"    # dep-install seconds
 
 # Internal state
 _WT_BASE_DIR=""
@@ -136,6 +137,14 @@ worktree_create() {
     # Without full context the AI agent may navigate back to the main project directory.
     if [[ -d "${_WT_MAIN_DIR}/.ralph" ]]; then
         cp -R "${_WT_MAIN_DIR}/.ralph" "$_WT_CURRENT_PATH/.ralph"
+        # Snapshot fix_plan.md as the shared ancestor for a 3-way merge on cleanup.
+        # Without this snapshot, worktree_cleanup's cp would clobber [~]/[x] marks
+        # written to main fix_plan.md by sibling parallel agents after this worktree
+        # was created (see worktree_cleanup).
+        if [[ -f "$_WT_CURRENT_PATH/.ralph/fix_plan.md" ]]; then
+            cp "$_WT_CURRENT_PATH/.ralph/fix_plan.md" \
+               "$_WT_CURRENT_PATH/.ralph/.fix_plan_baseline.md" 2>/dev/null || true
+        fi
         # Ensure logs and docs dirs exist (may not be in source if empty)
         mkdir -p "$_WT_CURRENT_PATH/.ralph/logs"
         mkdir -p "$_WT_CURRENT_PATH/.ralph/docs/generated"
@@ -232,13 +241,30 @@ _worktree_install_deps() {
         return 1
     fi
 
-    echo "DEPS_INSTALL: Installing dependencies ($install_cmd) in worktree..." >&2
+    echo "DEPS_INSTALL: Installing dependencies ($install_cmd, timeout ${WORKTREE_INSTALL_TIMEOUT}s)..." >&2
     local install_output install_exit
-    install_output=$(cd "$workdir" && eval "$install_cmd" 2>&1) || install_exit=$?
+    local _to_bin=""
+    if command -v timeout >/dev/null 2>&1; then
+        _to_bin="timeout"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        _to_bin="gtimeout"
+    fi
+    # Stdin → /dev/null so prompts (npm login, registry auth) can't block.
+    # Wrap in `timeout` so a hung install can't stall the entire loop's
+    # post-execution PR phase indefinitely.
+    if [[ -n "$_to_bin" ]]; then
+        install_output=$(cd "$workdir" && "$_to_bin" --foreground "$WORKTREE_INSTALL_TIMEOUT" \
+            bash -c "$install_cmd" </dev/null 2>&1) || install_exit=$?
+    else
+        install_output=$(cd "$workdir" && bash -c "$install_cmd" </dev/null 2>&1) || install_exit=$?
+    fi
     install_exit=${install_exit:-0}
 
     if [[ $install_exit -eq 0 ]]; then
         echo "DEPS_INSTALL: Dependencies installed successfully" >&2
+    elif [[ $install_exit -eq 124 || $install_exit -eq 137 ]]; then
+        echo "DEPS_INSTALL: TIMEOUT after ${WORKTREE_INSTALL_TIMEOUT}s — gates may still fail" >&2
+        echo "DEPS_INSTALL: Output: $(echo "$install_output" | tail -3)" >&2
     else
         echo "DEPS_INSTALL: Install failed (exit $install_exit) — gates may still fail" >&2
         echo "DEPS_INSTALL: Output: $(echo "$install_output" | tail -3)" >&2
@@ -637,6 +663,160 @@ worktree_merge() {
 # CLEANUP
 # =============================================================================
 
+# 3-way merge worktree's fix_plan.md back to main fix_plan.md under lock.
+# Prevents parallel worktrees from clobbering each other's [~]/[x] marks.
+#
+# Args:
+#   $1 - wt_fp:    worktree's final fix_plan.md
+#   $2 - main_fp:  main repo's fix_plan.md (destination)
+#   $3 - baseline: snapshot taken at worktree_create time (shared ancestor)
+_merge_fix_plan_back() {
+    local wt_fp="$1"
+    local main_fp="$2"
+    local baseline="$3"
+
+    # No main fix_plan yet → just copy.
+    if [[ ! -f "$main_fp" ]]; then
+        cp "$wt_fp" "$main_fp" 2>/dev/null || true
+        return 0
+    fi
+
+    # Missing baseline (e.g. legacy worktree created before this fix) → copy to
+    # preserve old behavior rather than silently dropping worktree changes.
+    if [[ ! -f "$baseline" ]]; then
+        cp "$wt_fp" "$main_fp" 2>/dev/null || true
+        return 0
+    fi
+
+    # Fast path: main unchanged since snapshot → no siblings raced, plain copy.
+    if cmp -s "$baseline" "$main_fp" 2>/dev/null; then
+        cp "$wt_fp" "$main_fp" 2>/dev/null || true
+        return 0
+    fi
+
+    # Lock to serialize with sibling worktrees merging back at the same time,
+    # and with any in-flight pick_next_task. Reuses the task-pick lock so all
+    # writers to fix_plan.md share a single mutex.
+    local lock_dir
+    lock_dir="$(dirname "$main_fp")/.task_pick_lock"
+    local have_lock=0
+    if command -v _acquire_task_lock >/dev/null 2>&1 && _acquire_task_lock "$lock_dir" 30; then
+        have_lock=1
+    else
+        echo "WARN: fix_plan merge proceeding without lock (acquisition failed)" >&2
+    fi
+
+    local merged_tmp="${main_fp}.merge.$$"
+    local merge_exit=1
+    if command -v git >/dev/null 2>&1; then
+        # git merge-file does a diff3-style merge. Exit 0 = clean, >0 = conflicts.
+        # `|| merge_exit=$?` so a non-zero status cannot trip set -e in callers.
+        merge_exit=0
+        git merge-file -p --quiet "$wt_fp" "$baseline" "$main_fp" > "$merged_tmp" 2>/dev/null || merge_exit=$?
+    fi
+
+    if [[ $merge_exit -eq 0 && -s "$merged_tmp" ]]; then
+        mv "$merged_tmp" "$main_fp"
+    else
+        # Conflict or no git: pick most-advanced status per line, preferring
+        # worktree's body. Never regress [x] → [~] or [~] → [ ].
+        rm -f "$merged_tmp"
+        _merge_fix_plan_status "$baseline" "$wt_fp" "$main_fp"
+    fi
+
+    [[ $have_lock -eq 1 ]] && _release_task_lock "$lock_dir"
+    return 0
+}
+
+# Fallback status-aware merge when git merge-file reports conflicts.
+# Walks worktree and main fix_plans, picking the most-advanced task mark
+# ([x]/[X] > [~] > [ ]) per matching task line. Non-task lines taken from
+# worktree's version (it carries the latest body text). Task lines present
+# only in main but not worktree are preserved (sibling additions).
+#
+# Args:
+#   $1 - baseline (unused by current impl, reserved for future use)
+#   $2 - wt_fp:   worktree final
+#   $3 - main_fp: main current (destination)
+_merge_fix_plan_status() {
+    local baseline="$1"  # reserved
+    local wt_fp="$2"
+    local main_fp="$3"
+    local tmp="${main_fp}.statusmerge.$$"
+
+    awk '
+        function rank(c) {
+            if (c == "x" || c == "X") return 3
+            if (c == "~") return 2
+            return 1
+        }
+        function tkey(line,   k) {
+            # Strip leading "- [.] " to get task identity key.
+            k = line
+            sub(/^[[:space:]]*- \[[ ~xX]\] /, "", k)
+            return k
+        }
+        function is_task(line) {
+            return line ~ /^[[:space:]]*- \[[ ~xX]\] /
+        }
+        function mark(line,   m) {
+            m = line
+            sub(/^[[:space:]]*- \[/, "", m)
+            return substr(m, 1, 1)
+        }
+        FNR == 1 { fn++ }
+        fn == 1 {  # main_fp first: record main marks keyed by task body
+            if (is_task($0)) {
+                main_mark[tkey($0)] = mark($0)
+            }
+            next
+        }
+        fn == 2 {  # wt_fp: emit merged
+            if (is_task($0)) {
+                k = tkey($0)
+                wt_m = mark($0)
+                if (k in main_mark) {
+                    # Choose higher-rank mark; preserve worktree body text.
+                    chosen = (rank(main_mark[k]) > rank(wt_m)) ? main_mark[k] : wt_m
+                    sub(/\[[ ~xX]\]/, "[" chosen "]", $0)
+                    seen[k] = 1
+                }
+                print
+            } else {
+                print
+            }
+        }
+        END {
+            # Append task lines from main not present in worktree (sibling adds).
+            # (main_mark holds all main task keys.)
+        }
+    ' "$main_fp" "$wt_fp" > "$tmp"
+
+    # Append sibling-only task lines. Read main again for the full source line
+    # so indentation and body are preserved exactly.
+    awk -v wt="$wt_fp" '
+        function is_task(line) { return line ~ /^[[:space:]]*- \[[ ~xX]\] / }
+        function tkey(line,   k) {
+            k = line
+            sub(/^[[:space:]]*- \[[ ~xX]\] /, "", k)
+            return k
+        }
+        BEGIN {
+            while ((getline l < wt) > 0) {
+                if (is_task(l)) wt_keys[tkey(l)] = 1
+            }
+            close(wt)
+        }
+        {
+            if (is_task($0) && !(tkey($0) in wt_keys)) {
+                print >> OUT
+            }
+        }
+    ' OUT="$tmp" "$main_fp"
+
+    mv "$tmp" "$main_fp"
+}
+
 # Sync worktree state back to main project, remove worktree, optionally delete branch
 # Args:
 #   $1 - delete_branch: "true" to delete the branch, "false" to preserve it (default: WORKTREE_AUTO_CLEANUP)
@@ -650,9 +830,13 @@ worktree_cleanup() {
         return 0
     fi
 
-    # Sync .ralph state back to main project (fix_plan.md may have been updated by claude)
+    # Sync .ralph state back to main project (fix_plan.md may have been updated by claude).
+    # 3-way merge under lock to avoid clobbering sibling parallel agents' [~]/[x] marks
+    # written to main fix_plan.md after this worktree's snapshot was taken.
     if [[ -f "$workdir/.ralph/fix_plan.md" ]]; then
-        cp "$workdir/.ralph/fix_plan.md" "${_WT_MAIN_DIR}/.ralph/fix_plan.md" 2>/dev/null || true
+        _merge_fix_plan_back "$workdir/.ralph/fix_plan.md" \
+                             "${_WT_MAIN_DIR}/.ralph/fix_plan.md" \
+                             "$workdir/.ralph/.fix_plan_baseline.md"
     fi
     if [[ -f "$workdir/.ralph/AGENT.md" ]]; then
         cp "$workdir/.ralph/AGENT.md" "${_WT_MAIN_DIR}/.ralph/AGENT.md" 2>/dev/null || true
