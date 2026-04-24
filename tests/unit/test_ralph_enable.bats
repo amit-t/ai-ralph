@@ -397,3 +397,69 @@ EOF
     assert_success
     [[ "$output" =~ "successfully" ]]
 }
+
+# =============================================================================
+# WORKSPACE ENABLE (6 tests)
+# =============================================================================
+
+@test "ralph enable --help shows --workspace option" {
+    run bash "$RALPH_ENABLE" --help
+
+    assert_success
+    [[ "$output" =~ "--workspace" ]]
+}
+
+@test "ralph enable-ci --help shows --workspace option" {
+    run bash "$RALPH_ENABLE_CI" --help
+
+    assert_success
+    [[ "$output" =~ "--workspace" ]]
+}
+
+@test "ralph enable-ci --workspace creates workspace files" {
+    # Undo the git init from setup (workspace must NOT be a git repo)
+    rm -rf .git
+
+    # Create child git repos
+    mkdir -p repo-alpha repo-beta
+    (cd repo-alpha && git init > /dev/null 2>&1)
+    (cd repo-beta && git init > /dev/null 2>&1)
+
+    run bash "$RALPH_ENABLE_CI" --workspace
+
+    assert_success
+    [[ -f ".ralph/PROMPT.md" ]]
+    [[ -f ".ralph/fix_plan.md" ]]
+    [[ -f ".ralph/AGENT.md" ]]
+    [[ -f ".ralphrc" ]]
+}
+
+@test "ralph enable-ci --workspace fix_plan has repo sections" {
+    rm -rf .git
+    mkdir -p alpha/.git beta/.git
+
+    bash "$RALPH_ENABLE_CI" --workspace > /dev/null 2>&1
+
+    grep -qF "## alpha" .ralph/fix_plan.md
+    grep -qF "## beta" .ralph/fix_plan.md
+    grep -qF "## cross-repo" .ralph/fix_plan.md
+}
+
+@test "ralph enable-ci --workspace ralphrc has WORKSPACE_MODE" {
+    rm -rf .git
+    mkdir -p repo-one/.git
+
+    bash "$RALPH_ENABLE_CI" --workspace > /dev/null 2>&1
+
+    grep -qF "WORKSPACE_MODE=true" .ralphrc
+    grep -qF 'PROJECT_TYPE="workspace"' .ralphrc
+}
+
+@test "ralph enable-ci --workspace fails in git repo" {
+    # setup() already did git init so this IS a git repo
+    mkdir -p repo-alpha/.git
+
+    run bash "$RALPH_ENABLE_CI" --workspace
+
+    assert_failure
+}

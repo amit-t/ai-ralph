@@ -125,6 +125,11 @@ rpc.plan.file() { ralph-plan --file "${1:?Usage: rpc.plan.file <file_path>}"; }
 rpc.task() { ralph --task "${1:?Usage: rpc.task <task_number>}"; }
 rpc.task.int() { ralph --live --monitor --task "${1:?Usage: rpc.task.int <task_number>}"; }
 
+# Workspace mode (multi-repo orchestration)
+alias rpc.ws='ralph --workspace'
+alias rpc.ws.int='ralph --workspace --live --monitor'
+rpc.ws.p() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p <N>}"; }
+
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'
 alias ralph.enable='ralph-enable'
