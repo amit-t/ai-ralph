@@ -8,6 +8,10 @@ This is the Ralph for Claude Code repository - an autonomous AI development loop
 
 See [README.md](README.md) for version info, changelog, and user documentation.
 
+## Branch Safety
+
+**Never delete `dev` or `main` branches — locally or on any remote.** These are long-lived shared branches. All branch cleanup commands (`git branch -d`, `git branch -D`, `git push --delete`) must exclude `dev` and `main`. Applies even when the user asks for broad cleanup.
+
 ## Core Architecture
 
 The system consists of four main bash scripts and a modular library system:
