@@ -38,6 +38,10 @@ gh pr create --repo amit-t/ai-ralph --base dev  --head <branch> ...
 
 If the user asks for a single PR with no remote specified, default to `amit-t/ai-ralph` on the `amit-t` account.
 
+## Branch Safety
+
+**Never delete `dev` or `main` branches — locally or on any remote.** These are long-lived shared branches. All branch cleanup commands (`git branch -d`, `git branch -D`, `git push --delete`) must exclude `dev` and `main`. This applies even when the user asks for broad cleanup.
+
 ## Worktrees
 
 Long docs/refactor tasks are often delegated to a subagent with `isolation: worktree`. The worktree lives at `.claude/worktrees/agent-<id>/` and is a sibling checkout sharing the same `.git/`.
