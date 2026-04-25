@@ -8,6 +8,10 @@ This is the Ralph for Claude Code repository - an autonomous AI development loop
 
 See [README.md](README.md) for version info, changelog, and user documentation.
 
+## Branch Safety
+
+**Never delete `dev` or `main` branches — locally or on any remote.** These are long-lived shared branches. All branch cleanup commands (`git branch -d`, `git branch -D`, `git push --delete`) must exclude `dev` and `main`. Applies even when the user asks for broad cleanup.
+
 ## Core Architecture
 
 The system consists of four main bash scripts and a modular library system:
@@ -999,6 +1003,34 @@ These standards ensure:
 - **Automation**: Ralph integration ensures continuous development practices
 
 **Enforcement**: AI agents should automatically apply these standards to all feature development tasks without requiring explicit instruction for each task.
+
+## Worktrees and Pull Requests
+
+### Remotes
+
+| Remote | URL | gh account | Repo slug |
+|---|---|---|---|
+| `origin` | `github.com-at:amit-t/ai-ralph` | `amit-t` | `amit-t/ai-ralph` |
+| `inv` | `github.com-atv:Invenco-Cloud-Systems-ICS/ai-ralph` | `amit-tiwari_vnt` | `Invenco-Cloud-Systems-ICS/ai-ralph` |
+| `upstream` | `frankbria/ralph-claude-code` | — | never target for PRs |
+
+Both `origin` and `inv` have `main` and `dev` branches.
+
+### PR rules
+
+- Always pass `--repo` to `gh pr create`. Without it, it defaults to the upstream fork.
+- "PRs to both remotes" / "to main and dev on both remotes" → open **4 PRs**: `origin/main`, `origin/dev`, `inv/main`, `inv/dev`.
+- Switch `gh` accounts before creating PRs for each remote: `amit-tiwari_vnt` for `inv`, `amit-t` for `origin`.
+- Single-PR requests with no remote specified default to `amit-t/ai-ralph` on `amit-t`.
+
+### Worktrees
+
+Subagent tasks often run with `isolation: worktree`, producing `.claude/worktrees/agent-<id>/` sharing the parent `.git/`.
+
+- Use absolute paths with `git -C <path>` for all worktree operations. `cd .claude/...` can fail in some shell states; absolute paths always work.
+- Push from the parent checkout: `git -C <worktree-path> push <remote> <branch>`. Do not `cd` into the worktree to push.
+- `git worktree list` shows active worktrees; entries marked `locked` are held by live agent sessions — do not prune them.
+- Leave the worktree in place until the user has reviewed the diff; cleanup is explicit.
 
 ## graphify
 
