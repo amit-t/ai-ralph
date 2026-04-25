@@ -23,6 +23,10 @@ The correct `gh` account for this repo is `amit-t`. If `gh auth status` shows `a
 gh auth switch --user amit-t
 ```
 
+## Branch Safety
+
+**Never delete `dev` or `main` branches — locally or on any remote.** These are long-lived shared branches. All branch cleanup commands (`git branch -d`, `git branch -D`, `git push --delete`) must exclude `dev` and `main`. This applies even when the user asks for broad cleanup.
+
 ## graphify
 
 This project has a graphify knowledge graph at graphify-out/.
