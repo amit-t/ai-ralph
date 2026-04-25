@@ -37,6 +37,12 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
 - **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
 - **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
+- **Workspace planning** (`ralph-plan --workspace`) — sequential multi-repo planning with state preservation for `[~]` / `[x]` lines, `--repos` allowlist filter, and `--dry-run` preview
+- **Per-gate and install timeouts** (`WORKTREE_GATE_TIMEOUT`, `WORKTREE_INSTALL_TIMEOUT`, both 600s by default) wrapped around dependency installs and each quality gate with live streaming output — no more silent "Running quality gates..." hangs
+- **Quality gate fix mode aliases** (`rpc.qg`, `rpd.qg`, `rpx.qg`) for running gates and auto-fixing failures without a full loop iteration
+- **3-way merge for `fix_plan.md`** on worktree cleanup — preserves sibling agents' `[~]` / `[x]` marks in parallel runs so no two workers claim the same task
+- **Worktree-safe Claude sessions** — in worktree mode Claude runs a fresh session per iteration (no `--resume`), preventing "No conversation found" errors when each loop lives in its own cwd
+- **Execution Failed summary box** — red-bordered report with task name, exit code, preserved branch, session ID, and resume command on API errors or timeouts (across all three engines)
 
 ---
 
@@ -496,6 +502,7 @@ Source: `devin/ALIASES.sh`
 | `rpd.wt.merge` | `ralph-devin --merge-strategy merge` | Merge commit strategy |
 | `rpd.wt.rebase` | `ralph-devin --merge-strategy rebase` | Rebase strategy |
 | `rpd.wt.nogate` | `ralph-devin --quality-gates none` | Skip quality gates |
+| `rpd.qg` | `ralph-devin --qg` | Quality-gate fix mode: run gates, retry loop with AI to fix failures |
 
 #### Interactive / TUI Mode
 
@@ -619,6 +626,7 @@ Source: `ALIASES.sh`
 | `rpc.wt.rebase` | `ralph --merge-strategy rebase` | Rebase strategy |
 | `rpc.wt.nogate` | `ralph --quality-gates none` | Skip quality gates |
 | `rpc.wt.full` | `ralph --live --monitor --merge-strategy squash --quality-gates auto` | Full worktree mode |
+| `rpc.qg` | `ralph --qg` | Quality-gate fix mode: run gates, retry loop with AI to fix failures |
 
 #### Interactive / Parallel
 
@@ -739,6 +747,7 @@ Source: `codex/ALIASES.sh`
 | `rpx.wt.merge` | `ralph-codex --merge-strategy merge` | Merge commit strategy |
 | `rpx.wt.rebase` | `ralph-codex --merge-strategy rebase` | Rebase strategy |
 | `rpx.wt.nogate` | `ralph-codex --quality-gates none` | Skip quality gates |
+| `rpx.qg` | `ralph-codex --qg` | Quality-gate fix mode: run gates, retry loop with AI to fix failures |
 
 #### Auto-Exit / Interactive
 
@@ -838,6 +847,9 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 --auto-reset-circuit    Auto-reset circuit breaker on startup
 --reset-session         Reset session state
 --task NUM|ID           Execute a specific task by number (1-based) or bold ID (e.g. R05)
+--qg                    Quality-gate fix mode: run gates, loop AI until gates pass or MAX_QG_RETRIES hit
+--workspace             Multi-repo workspace mode (requires `ralph-enable --workspace` first)
+--parallel N            Spawn N parallel agents (or N repos in `--workspace` mode)
 ```
 
 ### Devin-Specific Options
@@ -878,6 +890,25 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 --yolo                  Skip all permission checks (plan mode)
 --superpowers           Load superpowers plugin (plan mode)
 ```
+
+### `ralph-plan` Options
+
+```
+--engine NAME           AI engine: claude (default), codex, devin
+--model NAME            Planning model override (Claude + Devin)
+--thinking LEVEL        Planning depth: normal, hard, ultra
+--yolo                  --dangerously-skip-permissions (Claude only)
+--superpowers / --sup   Load obra/superpowers plugin (Claude only)
+--status                AI-powered fix plan status (no planning runs)
+--adhoc [desc]          Ad-hoc task mode -- describe a bug, AI adds fix_plan entry
+--compress              Compress fix_plan.md to reduce token consumption
+--file <path>           File-based planning from MD, JSON, YAML, or text file
+--workspace             Multi-repo workspace planning (sequential, preserves state)
+--repos <list>          Comma-separated repo allowlist (workspace only)
+--dry-run               Run the planner per repo but do NOT write fix_plan.md
+```
+
+Workspace planning (`--workspace`) reuses the same repo discovery as `ralph --workspace` and merges new tasks into `.ralph/fix_plan.md` per-repo section. Existing `[~]` and `[x]` lines are preserved across reruns; new tasks are deduped against them. Cross-repo tasks land in a consolidated `## cross-repo` section. The end-of-run summary lists repos planned, new vs preserved tasks, cross-repo count, ambiguities, engine, and elapsed time.
 
 ---
 
@@ -931,6 +962,14 @@ WORKTREE_MERGE_STRATEGY=squash
 WORKTREE_QUALITY_GATES=auto
 WORKTREE_AUTO_CLEANUP=true
 WORKTREE_BRANCH_PREFIX=ralph-devin
+
+# Quality-gate and dependency-install timeouts (seconds; 600 = 10 minutes)
+# Hard cap per gate and on the pre-gate `npm/pnpm/yarn/bun install` step.
+# Both paths redirect stdin from /dev/null so registry-auth / TTY prompts
+# can't block the loop. Exit 124/137 is logged as `TIMEOUT after Ns` and
+# surfaced in the PR description / QG fix prompt.
+WORKTREE_GATE_TIMEOUT=600
+WORKTREE_INSTALL_TIMEOUT=600
 ```
 
 ### Codex-Specific Configuration (.ralphrc.codex)
@@ -947,6 +986,8 @@ CODEX_AUTO_EXIT=true
 WORKTREE_ENABLED=true
 WORKTREE_MERGE_STRATEGY=squash
 WORKTREE_QUALITY_GATES=auto
+WORKTREE_GATE_TIMEOUT=600
+WORKTREE_INSTALL_TIMEOUT=600
 ```
 
 ---
@@ -1046,7 +1087,8 @@ Worktrees are created from a fresh git checkout and don't inherit `node_modules`
 Before running quality gates, Ralph automatically:
 1. Checks if `package.json` exists and `node_modules` is missing or empty
 2. Detects the package manager from lock files (`pnpm-lock.yaml` -> pnpm, `bun.lockb` -> bun, `yarn.lock` -> yarn, default -> npm)
-3. Runs the appropriate install command (e.g., `pnpm install --frozen-lockfile`)
+3. Runs the appropriate install command (e.g., `pnpm install --frozen-lockfile`) wrapped in `timeout $WORKTREE_INSTALL_TIMEOUT` with stdin redirected to `/dev/null` so private-registry / npm-login prompts can't block
+4. Logs exit 124/137 as `DEPS_INSTALL: TIMEOUT after Ns` so the hang is visible
 
 This is a no-op if `node_modules` already exists or if the project isn't Node.js-based.
 
@@ -1059,6 +1101,26 @@ This is a no-op if `node_modules` already exists or if the project isn't Node.js
 | Go | `go vet ./...`, `go test ./...` |
 | Rust | `cargo clippy`, `cargo test` |
 | Makefile | `make lint`, `make test` |
+
+Each gate runs under `timeout --foreground $WORKTREE_GATE_TIMEOUT bash -c "$cmd" </dev/null` (falls back to `gtimeout` on macOS). Output streams live to the loop log -- no more blind "Running quality gates..." wait. Exit 124/137 is recorded as `FAIL: <cmd> (timeout Ns)` in the QG fix prompt and PR description so operators see the real reason.
+
+#### Parallel-Safe `fix_plan.md` Merge
+
+With `rpc.p` / `rpd.p` / `rpx.p`, multiple worktrees edit `fix_plan.md` concurrently. On cleanup, Ralph performs a **3-way merge** of `(worktree_final × baseline_at_worktree_create × main_current)` via `git merge-file`, guarded by the existing `_acquire_task_lock` mutex. If `git merge-file` can't resolve, a line-level fallback picks the most-advanced marker per task (`[x] > [~] > [ ]`) and preserves sibling-added rows. Net effect: no sibling `[~]` / `[x]` marks are ever clobbered, so no two workers claim the same task under `--parallel`.
+
+#### Worktree-Safe Claude Sessions
+
+Claude scopes session IDs by cwd. In worktree mode each iteration has a fresh cwd, so `claude --resume <id>` from a previous iteration fails with "No conversation found". Ralph gates `init_claude_session` / `save_claude_session` and the stream-mode session-ID writer on `WORKTREE_ENABLED != true`. In worktree mode every iteration is a fresh Claude session; non-worktree mode keeps `--resume` continuity unchanged.
+
+#### Execution Failed Summary
+
+When the agent invocation fails (API error, timeout, non-zero exit), Ralph prints a red "Execution Failed" box with:
+
+- Task name and exit code
+- Preserved worktree branch (so failures can be inspected and re-run)
+- Session ID and the engine's resume command
+
+The picked `[~]` marker is reverted to `[ ]` so the task is retryable on the next loop. This is wired into all three engine loops (Claude, Devin, Codex).
 
 ### Intelligent Exit Detection
 
@@ -1146,7 +1208,44 @@ Uninstalling one engine does not affect the others.
 
 ### Recent Changes
 
-**Workspace Enable** (latest)
+**Workspace Planning** (latest, PR #38)
+- `ralph-plan --workspace` drives the selected engine (Claude/Codex/Devin) per child repo sequentially
+- Preserves existing `- [~]` and `- [x]` lines in each `## repo-name` section across reruns; new tasks are deduped against them
+- `--repos a,b,c` allowlist to only plan a subset of repos
+- `--dry-run` runs the planner per repo but skips writing `fix_plan.md` (summary still printed)
+- Consolidates cross-repo tasks into a single `## cross-repo` section
+- Reads planning context from both `ai/` (workbench convention) and `.ralph/specs/` (ralph-native); concatenates when both exist
+- End-of-run summary: repos planned, new vs preserved tasks, cross-repo count, ambiguities per repo, engine, elapsed time
+- New `lib/workspace_plan.sh` + 20 new tests in `test_workspace_mode.bats`
+- Sequential execution only for now; parallel workspace planning is a follow-up
+
+**Parallel-Safe `fix_plan.md` 3-Way Merge** (PR #34)
+- `worktree_cleanup`'s unconditional `cp worktree/fix_plan.md -> main/fix_plan.md` was clobbering sibling parallel agents' `[~]` / `[x]` marks under `rpc.p` / `rpd.p` / `rpx.p`, causing duplicate task claims
+- Fix: snapshot baseline on `worktree_create`, then 3-way merge (worktree-final × baseline × main-current) via `git merge-file` on cleanup, under the existing `_acquire_task_lock` mutex
+- Conflict fallback: awk line-level pick of the most-advanced mark per task line (`[x] > [~] > [ ]`), preserving sibling-added rows
+- New `lib/worktree_manager.sh` helpers `_merge_fix_plan_back` and `_merge_fix_plan_status`
+- 6 new tests in `test_worktree_merge.bats`; stress test: 10 concurrent `pick_next_task` calls -> 10 distinct picks
+
+**Dependency-Install Timeout + Live Gate Output** (PR #30 / #31)
+- `WORKTREE_INSTALL_TIMEOUT` (default 600s) wraps the pre-gate `npm/pnpm/yarn/bun install` step; exit 124/137 logged as `DEPS_INSTALL: TIMEOUT after Ns`
+- Stdin redirected to `/dev/null` so private-registry auth / `npm login` prompts can't block the loop
+- All three engine loops (and Claude `--qg` mode + QG retry loop, 4 sites) switched from capture-then-replay `gate_output=$(... 2>&1)` to a streaming pipeline so `DEPS_INSTALL:` and `QUALITY_GATE[N]:` progress lines appear in the loop log in real time
+- Start log now prints the bounds: `Running quality gates (install timeout Ns, per-gate timeout Ns)...`
+
+**Per-Gate Timeout + Failure Summary + `rpc.p` Parity** (PR #29)
+- `WORKTREE_GATE_TIMEOUT` (default 600s, env/`.ralphrc` overridable) wraps each detected/configured quality gate in `timeout --foreground` with stdin redirected to `/dev/null`
+- Exit 124/137 recorded as `FAIL: <cmd> (timeout Ns)` in the QG fix prompt and PR description
+- Red "Execution Failed" summary box added across all three engine loops: task name, exit code, preserved worktree branch, session ID, resume command; `[~]` marker reverted to `[ ]` for retry
+- New `rpc.p N` / `rpc.p.b N` Claude aliases for parity with `rpd.p` / `rpx.int.p` (plain `ralph --parallel`, no `--live`/`--monitor`); closes the tmux-FD-leak hang at "Running quality gates..."
+- Reworded misleading "Retrying with fresh session" WARN in `ralph_loop.sh` -- `execute_claude_code` returns immediately after `reset_session`, there is no retry within the same invocation
+
+**Worktree-Safe Claude Sessions** (PR #28)
+- Worktree mode creates a fresh worktree per iteration; Claude scopes session IDs by cwd, so iter 2's `--resume <id>` previously looked in the new worktree's pool and reported "No conversation found"
+- Fix: `init_claude_session`, `save_claude_session`, and the stream-mode fallback session-ID writer are now gated on `WORKTREE_ENABLED != true`
+- In worktree mode every iteration is a fresh Claude session; non-worktree `--resume` continuity is unchanged
+- Particularly impactful for `rpc.int.p N` (parallel) where every agent shared `.claude_session_id` and raced each other
+
+**Workspace Enable**
 - `ralph-enable --workspace` / `ralph-enable-ci --workspace` bootstraps Ralph at the workspace level
 - Auto-discovers child git repos and generates per-repo `## repo-name` sections in `fix_plan.md`
 - Workspace-specific `PROMPT.md` with multi-repo orchestration instructions
