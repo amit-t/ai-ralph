@@ -931,8 +931,12 @@ pick_task_by_number() {
 }
 
 # pick_task_by_id - Select a specific task from fix_plan.md by its bold-markdown
-# identifier (e.g. **R05**).  The match is case-insensitive so both "R05" and
-# "r05" resolve to a line containing **R05**.
+# identifier (e.g. **R05**, **E5**, **E5.**).  Match is case-insensitive and
+# tolerates trailing punctuation inside the bold marker that humans commonly
+# add when listing items: ".", ":", ")", "]" (e.g. **E5.**, **E5:**).  Also
+# accepts non-bold occurrences that are followed by punctuation/whitespace
+# (e.g. "- [ ] E5. Description") so plans without consistent bold styling
+# still resolve.
 #
 # If the task is already completed ([x]), returns error.
 # If the task is unclaimed ([ ]), marks it in-progress ([~]).
@@ -940,7 +944,7 @@ pick_task_by_number() {
 #
 # Args:
 #   $1 - fix_plan_file: Path to fix_plan.md
-#   $2 - task_id_query: The task identifier (e.g. "R05", "r05")
+#   $2 - task_id_query: The task identifier (e.g. "R05", "r05", "E5")
 # Outputs: "task_id|line_num|bead_id" on stdout (same format as pick_task_by_number)
 # Returns:
 #   0 - Found the task (output on stdout)
@@ -954,12 +958,29 @@ pick_task_by_id() {
         return 1
     fi
 
-    # Build case-insensitive pattern: **R05** or **r05**
+    # Normalize for branch naming + fixed-string variants below.
     local upper_id lower_id
     upper_id=$(echo "$task_id_query" | tr '[:lower:]' '[:upper:]')
     lower_id=$(echo "$task_id_query" | tr '[:upper:]' '[:lower:]')
 
-    # Scan fix_plan.md for a task line containing **<id>** (case-insensitive)
+    # Bold-form fixed strings: **ID**, **ID.**, **ID:**, **ID)**, **ID]**.
+    # Generated for both upper and lower case so the match is robust on BSD
+    # and GNU grep alike (no regex char-class portability surprises).
+    local -a bold_variants=(
+        "**${upper_id}**"  "**${upper_id}.**"  "**${upper_id}:**"  "**${upper_id})**"  "**${upper_id}]**"
+        "**${lower_id}**"  "**${lower_id}.**"  "**${lower_id}:**"  "**${lower_id})**"  "**${lower_id}]**"
+    )
+
+    # Plain-form ERE: ID as a standalone token, optionally followed by
+    # ".", ":", ")", "]" then whitespace or end-of-line. Requires a leading
+    # boundary (start, whitespace, "[", or "(") so "E5" doesn't match "E50".
+    # Escape ERE meta chars that can legitimately appear in an ID (most
+    # commonly "."). "]" intentionally not escaped — keep IDs ASCII-friendly.
+    local id_re
+    id_re=$(printf '%s' "$task_id_query" | sed -e 's/[.\\*^$()+?{|/[]/\\&/g')
+    local plain_pattern="(^|[[:space:]([])${id_re}[.:)]?([[:space:]]|$)"
+
+    # Scan fix_plan.md for a task line containing the ID
     local line_num=0
     local target_line=""
     local target_line_num=0
@@ -968,12 +989,21 @@ pick_task_by_id() {
         line_num=$((line_num + 1))
 
         # Must be a task line
-        if ! echo "$line" | grep -qE '^\s*- \[[ ~xX]\] '; then
+        if ! echo "$line" | grep -qE '^[[:space:]]*- \[[ ~xX]\] '; then
             continue
         fi
 
-        # Check for **ID** (case-insensitive) by testing both upper and lower
-        if echo "$line" | grep -qF "**${upper_id}**" || echo "$line" | grep -qF "**${lower_id}**"; then
+        local matched=0 v
+        for v in "${bold_variants[@]}"; do
+            if echo "$line" | grep -qF -- "$v"; then
+                matched=1
+                break
+            fi
+        done
+        if (( ! matched )) && echo "$line" | grep -qiE -- "$plain_pattern"; then
+            matched=1
+        fi
+        if (( matched )); then
             target_line="$line"
             target_line_num=$line_num
             break
