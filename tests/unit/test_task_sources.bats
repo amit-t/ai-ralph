@@ -267,3 +267,137 @@ EOF
     # 'none' doesn't import anything, so fails
     assert_failure
 }
+
+# =============================================================================
+# pick_task_by_id (bold-id resolution, regression for E5/`**E5.**`)
+# =============================================================================
+
+# Helper: write a fix_plan.md with task lines to a path. First arg is the path,
+# remaining args are appended verbatim as task lines.
+_write_fix_plan() {
+    local path="$1"; shift
+    mkdir -p "$(dirname "$path")"
+    : > "$path"
+    local line
+    for line in "$@"; do
+        printf '%s\n' "$line" >> "$path"
+    done
+}
+
+@test "pick_task_by_id matches plain bold **E5**" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E1** First task" \
+        "- [ ] **E5** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+    [[ "$output" == E5\|2\|* ]]
+}
+
+@test "pick_task_by_id matches **E5.** with trailing period" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E1.** First" \
+        "- [ ] **E5.** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+    [[ "$output" == E5\|2\|* ]]
+}
+
+@test "pick_task_by_id matches **E5:** with colon" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E5:** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+}
+
+@test "pick_task_by_id matches **E5)** with paren" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E5)** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+}
+
+@test "pick_task_by_id is case-insensitive (e5 finds **E5.**)" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E5.** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md e5
+    assert_success
+}
+
+@test "pick_task_by_id matches non-bold ID followed by period" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] E5. Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+}
+
+@test "pick_task_by_id does not partial-match E5 inside E50" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E50.** Bigger task"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_failure
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "pick_task_by_id rejects already-completed task" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [x] **E5.** Already done"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_failure
+    [[ "$output" == *"already completed"* ]]
+}
+
+@test "pick_task_by_id marks unclaimed task in-progress on hit" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E5.** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+    run grep -F -e '- [~] **E5.**' .ralph/fix_plan.md
+    assert_success
+}
+
+@test "pick_task_by_id leaves in-progress task as-is" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [~] **E5.** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+    run grep -F -e '- [~] **E5.**' .ralph/fix_plan.md
+    assert_success
+}
+
+@test "pick_task_by_id returns error when fix_plan.md missing" {
+    run pick_task_by_id .ralph/missing.md E5
+    assert_failure
+}
+
+@test "pick_task_by_id returns error when ID not present" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E1.** First"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_failure
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "pick_task_by_id ignores non-task lines (e.g. headings) containing the ID" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "## E5 design" \
+        "Some prose mentioning **E5.**" \
+        "- [ ] **E5.** The actual task"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+    [[ "$output" == E5\|3\|* ]]
+}
+
+@test "pick_task_by_id extracts bead_id when present" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] [bd-42] **E5.** Subset filter"
+    run pick_task_by_id .ralph/fix_plan.md E5
+    assert_success
+    [[ "$output" == E5\|1\|bd-42 ]]
+}
+
+@test "pick_task_by_id handles dotted IDs like v1.0" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **v1.0** Release task"
+    run pick_task_by_id .ralph/fix_plan.md v1.0
+    assert_success
+}

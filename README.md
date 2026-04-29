@@ -1019,7 +1019,7 @@ ralph --task 5 --live       # Execute the 5th task with live output
 ralph-codex --task r05      # Case-insensitive: matches **R05**
 ```
 
-Task numbers are 1-based ordinals counting all task lines (`[ ]`, `[~]`, and `[x]` markers). Task IDs match the bold `**ID**` prefix in the task line (case-insensitive). The corresponding aliases are:
+Task numbers are 1-based ordinals counting all task lines (`[ ]`, `[~]`, and `[x]` markers). Task IDs match the bold `**ID**` prefix in the task line (case-insensitive). Trailing punctuation inside the bold marker is tolerated, so all of `**E5**`, `**E5.**`, `**E5:**`, `**E5)**`, and `**E5]**` resolve to the same task when you pass `--task E5`. A non-bold ID followed by `.`/`:`/`)`/`]` and whitespace (e.g. `- [ ] E5. Description`) also resolves. Partial matches are rejected -- `--task E5` will not pick up a line whose ID is `E50`. The corresponding aliases are:
 
 ```bash
 rpd.task 3                  # Devin: non-interactive, task #3
