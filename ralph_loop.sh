@@ -42,6 +42,8 @@ USE_TMUX=false
 SPECIFIC_TASK_NUM=""
 QG_MODE=false
 WORKSPACE_MODE=false
+WORKSPACE_REPOS_FLAG=""    # comma-separated allowlist from --repos
+WORKSPACE_EXCLUDE_FLAG=""  # comma-separated denylist from --exclude
 
 # Save environment variable state BEFORE setting defaults
 # These are used by load_ralphrc() to determine which values came from environment
@@ -369,6 +371,13 @@ setup_tmux_session() {
     # Forward parallel count for workspace parallel mode
     if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
         ralph_cmd="$ralph_cmd --parallel $PARALLEL_COUNT"
+    fi
+    # Forward workspace repo filter
+    if [[ -n "$WORKSPACE_REPOS_FLAG" ]]; then
+        ralph_cmd="$ralph_cmd --repos '$WORKSPACE_REPOS_FLAG'"
+    fi
+    if [[ -n "$WORKSPACE_EXCLUDE_FLAG" ]]; then
+        ralph_cmd="$ralph_cmd --exclude '$WORKSPACE_EXCLUDE_FLAG'"
     fi
 
     # Chain tmux kill-session after the loop command so the entire tmux
@@ -2493,9 +2502,23 @@ run_workspace_mode() {
     fi
     log_status "INFO" "$ws_validation"
 
-    # List discovered repos
+    # List discovered repos. When --repos / --exclude is active, narrow scope
+    # via discover_workspace_repos_filtered which validates names and rejects
+    # an empty result set.
     local repos
-    repos=$(discover_workspace_repos ".")
+    if is_workspace_filter_active; then
+        if ! repos=$(discover_workspace_repos_filtered "."); then
+            exit 1
+        fi
+        local _allow="${RALPH_WORKSPACE_REPOS_RESOLVED:-}"
+        local _deny="${RALPH_WORKSPACE_EXCLUDE_RESOLVED:-}"
+        local _allow_csv _deny_csv
+        _allow_csv=$(echo "$_allow" | tr '\n' ',' | sed 's/,$//')
+        _deny_csv=$(echo "$_deny" | tr '\n' ',' | sed 's/,$//')
+        log_status "INFO" "[workspace] filter active: include=[$_allow_csv] exclude=[$_deny_csv] cross-repo=skipped"
+    else
+        repos=$(discover_workspace_repos ".")
+    fi
     log_status "INFO" "Repos: $(echo "$repos" | tr '\n' ' ')"
 
     # Initialize directories and tracking
@@ -2511,15 +2534,22 @@ run_workspace_mode() {
 
     local fix_plan="$RALPH_DIR/fix_plan.md"
 
+    # Pickers honor the filtered set so they only consider in-scope repos
+    # (cross-repo is also skipped under filter — see lib/workspace_manager.sh).
+    local allowed_repos=""
+    if is_workspace_filter_active; then
+        allowed_repos="$repos"
+    fi
+
     # ── Parallel workspace mode ──────────────────────────────────────
     if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
-        _run_workspace_parallel "$fix_plan" "." "$PARALLEL_COUNT"
+        _run_workspace_parallel "$fix_plan" "." "$PARALLEL_COUNT" "$allowed_repos"
         return $?
     fi
 
     # ── Sequential workspace mode: pick one task ─────────────────────
     local task_info
-    task_info=$(pick_workspace_task "$fix_plan")
+    task_info=$(pick_workspace_task "$fix_plan" "$allowed_repos")
     if [[ $? -ne 0 || -z "$task_info" ]]; then
         log_status "INFO" "No unclaimed workspace tasks — nothing to do."
         exit 0
@@ -2732,13 +2762,16 @@ run_workspace_mode() {
 #   $1 - fix_plan: Path to workspace fix_plan.md
 #   $2 - workspace_dir: Workspace root directory
 #   $3 - requested_count: Requested number of parallel workers
+#   $4 - allowed_repos (optional): newline-separated allowlist passed through
+#        to limit calc and picker.
 _run_workspace_parallel() {
     local fix_plan="$1"
     local workspace_dir="$2"
     local requested_count="$3"
+    local allowed_repos="${4:-}"
 
     local actual_count
-    actual_count=$(get_workspace_parallel_limit "$fix_plan" "$workspace_dir" "$requested_count")
+    actual_count=$(get_workspace_parallel_limit "$fix_plan" "$workspace_dir" "$requested_count" "$allowed_repos")
 
     if [[ "$actual_count" -eq 0 ]]; then
         log_status "INFO" "No repos with pending tasks for parallel execution — nothing to do."
@@ -2747,7 +2780,7 @@ _run_workspace_parallel() {
 
     log_status "INFO" "Parallel workspace: spawning $actual_count worker(s) (requested: $requested_count)..."
 
-    run_workspace_tasks_parallel "$fix_plan" "$workspace_dir" "$actual_count" "_workspace_execute_task"
+    run_workspace_tasks_parallel "$fix_plan" "$workspace_dir" "$actual_count" "_workspace_execute_task" "$allowed_repos"
     local result=$?
 
     if [[ $result -eq 0 ]]; then
@@ -2925,6 +2958,16 @@ Workspace Mode:
     --workspace             Enable multi-repo workspace mode
                             Run from a parent directory containing multiple git repos
                             Uses workspace-level .ralph/fix_plan.md with per-repo sections
+    --repos LIST            Comma-separated allowlist: limit workspace mode to these repos
+                            (e.g. --repos api,worker). Cross-repo tasks are skipped under filter.
+                            Mutually exclusive with --exclude. Workspace mode only.
+    --exclude LIST          Comma-separated denylist: skip these repos in workspace mode
+                            (e.g. --exclude web). Cross-repo tasks are skipped under filter.
+                            Mutually exclusive with --repos. Workspace mode only.
+
+Workspace Filter Env Vars:
+    RALPH_WORKSPACE_REPOS=a,b      Same as --repos a,b (CLI flag wins)
+    RALPH_WORKSPACE_EXCLUDE=c      Same as --exclude c (CLI flag wins)
 
 Files created:
     - $LOG_DIR/: All execution logs
@@ -3129,6 +3172,22 @@ while [[ $# -gt 0 ]]; do
             WORKSPACE_MODE=true
             shift
             ;;
+        --repos)
+            if [[ -z "$2" ]]; then
+                echo "Error: --repos requires a comma-separated list of repo names"
+                exit 1
+            fi
+            WORKSPACE_REPOS_FLAG="$2"
+            shift 2
+            ;;
+        --exclude)
+            if [[ -z "$2" ]]; then
+                echo "Error: --exclude requires a comma-separated list of repo names"
+                exit 1
+            fi
+            WORKSPACE_EXCLUDE_FLAG="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             show_help
@@ -3139,9 +3198,21 @@ done
 
 # Only execute when run directly, not when sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # --repos / --exclude only apply to workspace mode. Reject early so users
+    # do not get a confusing "no effect" silent surprise.
+    if [[ "$WORKSPACE_MODE" != "true" && ( -n "$WORKSPACE_REPOS_FLAG" || -n "$WORKSPACE_EXCLUDE_FLAG" ) ]]; then
+        echo "Error: --repos / --exclude only apply to --workspace mode"
+        exit 1
+    fi
+
     # If workspace mode requested, route to workspace handler
     # (workspace handles its own parallelism via run_workspace_tasks_parallel)
     if [[ "$WORKSPACE_MODE" == "true" ]]; then
+        # Resolve filter spec (CLI > env > unset). Mutual-exclusion errors print
+        # to stderr and abort.
+        if ! resolve_workspace_filter_spec "$WORKSPACE_REPOS_FLAG" "$WORKSPACE_EXCLUDE_FLAG"; then
+            exit 1
+        fi
         # Workspace + tmux: forward --workspace flag through tmux
         if [[ "$USE_TMUX" == "true" ]]; then
             check_tmux_available

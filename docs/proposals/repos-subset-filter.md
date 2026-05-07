@@ -1,6 +1,7 @@
 # Upstream ralph V2: `--repos <subset>` filter for `ralph --workspace`
 
-Status: draft (design only, not implementation).
+Status: **implemented** (initial ship: feat/workspace-repos-filter).
+Tests: `tests/unit/test_workspace_repo_filter.bats` (33 tests, all green; pre-existing main suite unchanged at 946/951).
 Audience: ai-ralph maintainers. This doc lives in workbench because the workbench team is the primary requester; once accepted, the implementation PR moves to `ai-ralph`.
 Author: ai-workbench team.
 Date: 2026-04-29.
