@@ -42,16 +42,16 @@ Add to `ralph-plan` (workspace mode only):
 
 ```
 --parallel-plan N      # number of concurrent per-repo plan workers
---workers N            # alias for --parallel-plan, matches `ralph --parallel`
 ```
 
-Both flags resolve to the same internal setting. We support both because the existing `ralph --workspace --parallel N` uses `--parallel`; adding the same name to `ralph-plan` would collide with future parallelism semantics for the planning loop itself. `--parallel-plan` is the canonical name; `--workers` is provided for symmetry with the engine community vocabulary.
+Single flag. No alias. (An earlier draft proposed `--workers` as an alias; dropped after self-review — a second name added confusion without a clear benefit, since `ralph --workspace --parallel N` already uses `--parallel` for executor concurrency and we want the planner-side knob distinguishable.)
 
 Semantic:
 
 - N = 1 ⇒ current sequential behavior. Identical output.
 - N > 1 ⇒ up to N per-repo plan calls run concurrently. Output is collected into per-repo buffers, then written into the merged `fix_plan.md` in REPO list order (stable).
-- N = 0 ⇒ error: `--parallel-plan must be >= 1`.
+- N <= 0 ⇒ error: `--parallel-plan must be >= 1`. Negative values rejected.
+- Non-integer ⇒ error: `--parallel-plan must be a positive integer`.
 - N > len(REPOS) ⇒ silently capped at `len(REPOS)`, no warning required.
 
 In per-repo mode (`ralph-plan` without `--workspace`) the flag is rejected with a clear error: parallelism is a workspace-mode concept.
@@ -76,9 +76,10 @@ When ralph hits a 429 / rate-limit error from any engine, it backs off and retri
 
 Concurrent writers must not corrupt the merged plan. The chosen design is **buffer-then-merge**, not in-place concurrent writes:
 
-1. Each worker writes its repo's plan output to a unique temp file under `repos/.ralph/.plan-tmp/<repo>.md`. No locking needed; each worker owns its own file.
-2. Once all workers finish (or fail-out), the main process holds an advisory lock on `repos/.ralph/.plan.lock` via `flock`, then concatenates the per-repo temp files into the final `repos/.ralph/fix_plan.md` in REPO list order.
-3. Temp directory is cleaned up on success. On failure it is preserved for debugging.
+1. Each invocation gets a per-run token (PID + epoch ms) and a private temp dir at `repos/.ralph/.plan-tmp/<token>/`. Each worker writes its repo's plan output to `repos/.ralph/.plan-tmp/<token>/<repo>.md`. No locking needed; each worker owns its own file, and two concurrent invocations cannot collide on temp paths.
+2. Once all workers finish (or fail-out), the main process holds an advisory lock on `repos/.ralph/.plan.lock` via `flock`, then concatenates the per-repo temp files from `<token>/` into the final `repos/.ralph/fix_plan.md` in REPO list order.
+3. On success, the per-run `<token>/` dir is removed. On failure it is preserved for debugging.
+4. **Startup cleanup.** On every `ralph-plan --workspace` start, scan `repos/.ralph/.plan-tmp/` for any `<token>/` dirs whose owning PID is not alive. Delete them silently. This sweeps orphans from prior crashed runs without surprising a concurrent live run.
 
 Why not concurrent in-place writes:
 - `fix_plan.md` is a single markdown file with section headers like `## repo: <name>`. Concurrent appends would interleave lines.
