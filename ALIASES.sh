@@ -130,6 +130,12 @@ alias rpc.ws='ralph --workspace'
 alias rpc.ws.int='ralph --workspace --live --monitor'
 rpc.ws.p() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p <N>}"; }
 
+# Continuous parallel execution: keep N workers saturated until M attempts.
+# Usage: rpc.cont <N> <M>          → single-repo, N concurrent, M total
+#        rpc.ws.cont <N> <M>       → multi-repo workspace
+rpc.cont() { ralph --parallel "${1:?Usage: rpc.cont <N> <M>}" --max-tasks "${2:?Usage: rpc.cont <N> <M>}"; }
+rpc.ws.cont() { ralph --workspace --parallel "${1:?Usage: rpc.ws.cont <N> <M>}" --max-tasks "${2:?Usage: rpc.ws.cont <N> <M>}"; }
+
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'
 alias ralph.enable='ralph-enable'

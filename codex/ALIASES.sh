@@ -100,3 +100,9 @@ rpx.task.int() { ralph-codex --no-codex-auto-exit --task "${1:?Usage: rpx.task.i
 alias rpx.ws='ralph-codex --workspace'
 alias rpx.ws.int='ralph-codex --workspace --live --monitor'
 rpx.ws.p() { ralph-codex --workspace --parallel "${1:?Usage: rpx.ws.p <N>}"; }
+
+# Continuous parallel execution: keep N workers saturated until M attempts.
+# Usage: rpx.cont <N> <M>          → single-repo, N concurrent, M total
+#        rpx.ws.cont <N> <M>       → multi-repo workspace
+rpx.cont() { ralph-codex --parallel "${1:?Usage: rpx.cont <N> <M>}" --max-tasks "${2:?Usage: rpx.cont <N> <M>}"; }
+rpx.ws.cont() { ralph-codex --workspace --parallel "${1:?Usage: rpx.ws.cont <N> <M>}" --max-tasks "${2:?Usage: rpx.ws.cont <N> <M>}"; }

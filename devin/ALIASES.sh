@@ -112,3 +112,9 @@ rpd.task.int() { ralph-devin --no-devin-auto-exit --task "${1:?Usage: rpd.task.i
 alias rpd.ws='ralph-devin --workspace'
 alias rpd.ws.int='ralph-devin --workspace --live --monitor'
 rpd.ws.p() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.p <N>}"; }
+
+# Continuous parallel execution: keep N workers saturated until M attempts.
+# Usage: rpd.cont <N> <M>          → single-repo, N concurrent, M total
+#        rpd.ws.cont <N> <M>       → multi-repo workspace
+rpd.cont() { ralph-devin --parallel "${1:?Usage: rpd.cont <N> <M>}" --max-tasks "${2:?Usage: rpd.cont <N> <M>}"; }
+rpd.ws.cont() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.cont <N> <M>}" --max-tasks "${2:?Usage: rpd.ws.cont <N> <M>}"; }

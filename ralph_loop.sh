@@ -20,6 +20,8 @@ source "$SCRIPT_DIR/lib/parallel_spawn.sh" || { echo "FATAL: Failed to source li
 source "$SCRIPT_DIR/lib/worktree_manager.sh" || { echo "FATAL: Failed to source lib/worktree_manager.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/pr_manager.sh" || { echo "FATAL: Failed to source lib/pr_manager.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/workspace_manager.sh" || { echo "FATAL: Failed to source lib/workspace_manager.sh" >&2; exit 1; }
+source "$SCRIPT_DIR/lib/worker_pool.sh" || { echo "FATAL: Failed to source lib/worker_pool.sh" >&2; exit 1; }
+source "$SCRIPT_DIR/lib/continuous_recovery.sh" || { echo "FATAL: Failed to source lib/continuous_recovery.sh" >&2; exit 1; }
 
 # Configuration
 # Ralph-specific files live in .ralph/ subfolder
@@ -42,6 +44,14 @@ USE_TMUX=false
 SPECIFIC_TASK_NUM=""
 QG_MODE=false
 WORKSPACE_MODE=false
+
+# Continuous parallel execution (proposal: docs/proposals/continuous-parallel-execution.md)
+# These are strictly opt-in: --max-tasks engages continuous mode.  Without it,
+# --parallel N retains its V1 batch-spawn behavior byte-identically.
+MAX_TASKS=""           # M — total attempts before stopping (engages continuous mode when set)
+MAX_TASK_ATTEMPTS=1    # K — per-task retry threshold within a single run
+RESPAWN_DELAY=0        # SEC — cooldown between worker replacements
+CONTINUOUS_MODE=false  # set true after CLI parsing if MAX_TASKS resolves to a value
 
 # Save environment variable state BEFORE setting defaults
 # These are used by load_ralphrc() to determine which values came from environment
@@ -2875,6 +2885,266 @@ _workspace_execute_task() {
 }
 export -f _workspace_execute_task
 
+# =============================================================================
+# CONTINUOUS PARALLEL EXECUTION — workspace + single-repo entry points
+# =============================================================================
+# These functions wrap run_continuous_worker_pool from lib/worker_pool.sh
+# with engine-specific picker and executor closures. They are only invoked
+# when CONTINUOUS_MODE=true (i.e. --max-tasks was passed).
+
+# _continuous_workspace_picker — Picker for workspace continuous mode.
+# Reads the skip-list from $1 and returns the next eligible task on stdout.
+# Output format: "repo|task_id|line|description" (the descriptor is consumed
+# by _continuous_workspace_executor below).
+_continuous_workspace_picker() {
+    local skip_list="${1:-}"
+    pick_workspace_task_for_pool "${RALPH_DIR}/fix_plan.md" "$skip_list"
+}
+export -f _continuous_workspace_picker
+
+# _continuous_workspace_executor — Executor for workspace continuous mode.
+# Receives a "repo|task_id|line|description" descriptor, parses it, and
+# delegates to the existing _workspace_execute_task. On success, marks the
+# task complete. On failure, reverts to [ ] so the next manual run can
+# retry.
+_continuous_workspace_executor() {
+    local descriptor="$1"
+    local repo_name task_id line_num task_desc
+    repo_name=$(echo "$descriptor" | cut -d'|' -f1)
+    task_id=$(echo "$descriptor" | cut -d'|' -f2)
+    line_num=$(echo "$descriptor" | cut -d'|' -f3)
+    task_desc=$(echo "$descriptor" | cut -d'|' -f4)
+
+    local fix_plan="${RALPH_DIR}/fix_plan.md"
+
+    if _workspace_execute_task "$repo_name" "$task_desc" "."; then
+        mark_workspace_task_complete "$fix_plan" "$line_num"
+        return 0
+    else
+        revert_workspace_task "$fix_plan" "$line_num"
+        return 1
+    fi
+}
+export -f _continuous_workspace_executor
+
+# _continuous_workspace_on_complete — Per-completion hook (currently a no-op;
+# the executor already handles task marking). Reserved for future telemetry.
+_continuous_workspace_on_complete() {
+    : # no-op
+}
+export -f _continuous_workspace_on_complete
+
+# run_continuous_workspace — Top-level dispatch for `--workspace --parallel N
+# --max-tasks M`. Validates the workspace, then runs the worker pool until
+# M attempts are spent or the queue empties.
+run_continuous_workspace() {
+    if load_ralphrc; then
+        [[ "$RALPHRC_LOADED" == "true" ]] && log_status "INFO" "Loaded configuration from .ralphrc"
+    fi
+    if ! validate_claude_command; then
+        log_status "ERROR" "Claude Code CLI not found: $CLAUDE_CODE_CMD"
+        return 1
+    fi
+    check_claude_version
+    check_claude_updates
+
+    log_status "SUCCESS" "Ralph continuous workspace mode (N=$PARALLEL_COUNT, M=$MAX_TASKS)"
+
+    local ws_validation
+    ws_validation=$(validate_workspace "." 2>&1)
+    if [[ $? -ne 0 ]]; then
+        log_status "ERROR" "Invalid workspace structure"
+        echo "$ws_validation" >&2
+        return 1
+    fi
+    log_status "INFO" "$ws_validation"
+
+    mkdir -p "$LOG_DIR" "$DOCS_DIR"
+    init_session_tracking
+    update_session_last_used
+    init_call_tracking
+    echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}' > "$EXIT_SIGNALS_FILE"
+    rm -f "$RESPONSE_ANALYSIS_FILE" 2>/dev/null
+
+    run_continuous_worker_pool \
+        "$PARALLEL_COUNT" \
+        "$MAX_TASKS" \
+        "$MAX_TASK_ATTEMPTS" \
+        "$RESPAWN_DELAY" \
+        _continuous_workspace_picker \
+        _continuous_workspace_executor \
+        _continuous_workspace_on_complete
+}
+
+# _continuous_singlerepo_picker — Picker for single-repo continuous mode.
+_continuous_singlerepo_picker() {
+    local skip_list="${1:-}"
+    pick_next_task_for_pool "${RALPH_DIR}/fix_plan.md" "$skip_list"
+}
+export -f _continuous_singlerepo_picker
+
+# _singlerepo_execute_task — Stand-alone executor wrapping execute_claude_code
+# with worktree isolation, change detection, quality gates, PR creation, and
+# task marking. Mirrors _workspace_execute_task semantics for single-repo
+# tasks (no per-repo cd).
+#
+# Args:
+#   $1 - task descriptor: "task_id|line_num|bead_id"
+# Returns:
+#   0 - task completed (marked [x] by caller), 1 - task reverted
+_singlerepo_execute_task() {
+    local descriptor="$1"
+    local task_id line_num bead_id
+    task_id=$(echo "$descriptor" | cut -d'|' -f1)
+    line_num=$(echo "$descriptor" | cut -d'|' -f2)
+    bead_id=$(echo "$descriptor" | cut -d'|' -f3)
+
+    local fix_plan="${RALPH_DIR}/fix_plan.md"
+    local task_desc=""
+    task_desc=$(sed -n "${line_num}p" "$fix_plan" 2>/dev/null | sed 's/.*\[.\] //' | tr -d '\n' || echo "")
+
+    # Worktree isolation per-task (each worker gets its own branch, keyed on
+    # task_id). Worker subshells have their own _WT_* state so concurrent
+    # workers don't clobber each other.
+    local work_dir
+    work_dir="$(pwd)"
+    local sr_worktree_active=false
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        local wt_task_id="${task_id:-task-$(date +%s)}"
+        if worktree_create 1 "$wt_task_id" > /dev/null 2>&1; then
+            work_dir="$(worktree_get_path)"
+            sr_worktree_active=true
+        fi
+    fi
+
+    local pre_exec_sha=""
+    pre_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+
+    set +e
+    execute_claude_code 1 "$work_dir" "$task_id" "$line_num" "$task_desc"
+    local exec_result=$?
+    set -e
+
+    if [[ $exec_result -ne 0 ]]; then
+        if [[ "$sr_worktree_active" == "true" ]]; then
+            worktree_cleanup "false" 2>/dev/null || true
+        fi
+        return 1
+    fi
+
+    # Change detection (same logic as workspace executor).
+    local files_changed=0
+    if command -v git &>/dev/null; then
+        local post_exec_sha=""
+        post_exec_sha=$(cd "$work_dir" && git rev-parse HEAD 2>/dev/null || echo "")
+        if [[ -n "$pre_exec_sha" && -n "$post_exec_sha" && "$pre_exec_sha" != "$post_exec_sha" ]]; then
+            files_changed=$(cd "$work_dir" && git diff --name-only "$pre_exec_sha" "$post_exec_sha" 2>/dev/null | wc -l | tr -d ' ')
+        fi
+        local uncommitted_files=0
+        uncommitted_files=$(cd "$work_dir" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+        files_changed=$((files_changed + uncommitted_files))
+    fi
+
+    if [[ $files_changed -eq 0 ]]; then
+        if [[ "$sr_worktree_active" == "true" ]]; then
+            worktree_cleanup "false" 2>/dev/null || true
+        fi
+        return 1
+    fi
+
+    # Quality gates + PR creation (best-effort; failures don't revert the task).
+    local gate_result=0
+    if [[ "$WORKTREE_QUALITY_GATES" != "none" ]] && worktree_is_active; then
+        worktree_run_quality_gates 2>&1 || gate_result=1
+    fi
+
+    if [[ "${PR_ENABLED:-true}" != "false" ]]; then
+        local gate_flag="true"
+        [[ $gate_result -ne 0 ]] && gate_flag="false"
+        if worktree_is_active; then
+            worktree_commit_and_pr "$task_id" "$task_desc" "$gate_flag" "1" || true
+        else
+            worktree_fallback_branch_pr "$task_id" "$task_desc" "1" "$gate_flag" || true
+        fi
+    fi
+
+    if [[ "$sr_worktree_active" == "true" ]]; then
+        worktree_cleanup "false" 2>/dev/null || true
+    fi
+
+    return 0
+}
+export -f _singlerepo_execute_task
+
+_continuous_singlerepo_executor() {
+    local descriptor="$1"
+    local task_id line_num
+    task_id=$(echo "$descriptor" | cut -d'|' -f1)
+    line_num=$(echo "$descriptor" | cut -d'|' -f2)
+
+    local fix_plan="${RALPH_DIR}/fix_plan.md"
+
+    if _singlerepo_execute_task "$descriptor"; then
+        mark_fix_plan_complete "$fix_plan" "$line_num"
+        return 0
+    else
+        # Revert [~] back to [ ] so the next run can try again.
+        local tmp_file="${fix_plan}.tmp.$$"
+        awk -v ln="$line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "$fix_plan" > "$tmp_file" \
+            && mv "$tmp_file" "$fix_plan"
+        return 1
+    fi
+}
+export -f _continuous_singlerepo_executor
+
+_continuous_singlerepo_on_complete() {
+    : # no-op
+}
+export -f _continuous_singlerepo_on_complete
+
+# run_continuous_singlerepo — Top-level dispatch for `--parallel N --max-tasks
+# M` (no --workspace). Each worker picks a task from .ralph/fix_plan.md and
+# runs it in its own worktree branch.
+run_continuous_singlerepo() {
+    if load_ralphrc; then
+        [[ "$RALPHRC_LOADED" == "true" ]] && log_status "INFO" "Loaded configuration from .ralphrc"
+    fi
+    if ! validate_claude_command; then
+        log_status "ERROR" "Claude Code CLI not found: $CLAUDE_CODE_CMD"
+        return 1
+    fi
+    check_claude_version
+    check_claude_updates
+
+    log_status "SUCCESS" "Ralph continuous single-repo mode (N=$PARALLEL_COUNT, M=$MAX_TASKS)"
+
+    if [[ ! -f "${RALPH_DIR}/PROMPT.md" || ! -f "${RALPH_DIR}/fix_plan.md" ]]; then
+        log_status "ERROR" "Not a Ralph project (missing ${RALPH_DIR}/PROMPT.md or fix_plan.md)"
+        return 1
+    fi
+
+    mkdir -p "$LOG_DIR" "$DOCS_DIR"
+    init_session_tracking
+    update_session_last_used
+    init_call_tracking
+    echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}' > "$EXIT_SIGNALS_FILE"
+    rm -f "$RESPONSE_ANALYSIS_FILE" 2>/dev/null
+
+    # Initialise worktree state so worker subshells inherit it.
+    if [[ "$WORKTREE_ENABLED" == "true" ]]; then
+        worktree_init || true
+    fi
+
+    run_continuous_worker_pool \
+        "$PARALLEL_COUNT" \
+        "$MAX_TASKS" \
+        "$MAX_TASK_ATTEMPTS" \
+        "$RESPAWN_DELAY" \
+        _continuous_singlerepo_picker \
+        _continuous_singlerepo_executor \
+        _continuous_singlerepo_on_complete
+}
+
 # Help function
 show_help() {
     cat << HELPEOF
@@ -2925,6 +3195,20 @@ Workspace Mode:
     --workspace             Enable multi-repo workspace mode
                             Run from a parent directory containing multiple git repos
                             Uses workspace-level .ralph/fix_plan.md with per-repo sections
+
+Continuous Parallel Execution:
+    --max-tasks M           Total attempts before stopping (engages continuous mode)
+                            Pair with --parallel N to keep N workers saturated until
+                            M total attempts (success or failure) have been spent.
+                            Without --max-tasks, --parallel N retains its V1 batch behavior.
+    --max-task-attempts K   Per-task retry threshold within a run (default: 1)
+                            A task that fails K times is added to the per-run skip-list.
+    --respawn-delay SEC     Cooldown between worker replacements (default: 0)
+                            Useful for engines that throttle session creation.
+    Env overrides: RALPH_MAX_TASKS, RALPH_MAX_TASK_ATTEMPTS, RALPH_RESPAWN_DELAY
+    Examples:
+        ralph --parallel 3 --max-tasks 20             # single-repo, 3 workers, 20 attempts
+        ralph --workspace --parallel 3 --max-tasks 20 # multi-repo workspace
 
 Files created:
     - $LOG_DIR/: All execution logs
@@ -3129,6 +3413,31 @@ while [[ $# -gt 0 ]]; do
             WORKSPACE_MODE=true
             shift
             ;;
+        --max-tasks)
+            if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: --max-tasks requires a positive integer (got: ${2:-})"
+                exit 1
+            fi
+            MAX_TASKS="$2"
+            CONTINUOUS_MODE=true
+            shift 2
+            ;;
+        --max-task-attempts)
+            if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: --max-task-attempts requires a positive integer (got: ${2:-})"
+                exit 1
+            fi
+            MAX_TASK_ATTEMPTS="$2"
+            shift 2
+            ;;
+        --respawn-delay)
+            if [[ -z "$2" || ! "$2" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                echo "Error: --respawn-delay requires a non-negative number (got: ${2:-})"
+                exit 1
+            fi
+            RESPAWN_DELAY="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             show_help
@@ -3137,8 +3446,67 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Resolve env-var fallbacks (CLI flag wins; env is fallback).
+if [[ -z "$MAX_TASKS" && -n "${RALPH_MAX_TASKS:-}" ]]; then
+    if [[ ! "$RALPH_MAX_TASKS" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: RALPH_MAX_TASKS must be a positive integer (got: $RALPH_MAX_TASKS)"
+        exit 1
+    fi
+    MAX_TASKS="$RALPH_MAX_TASKS"
+    CONTINUOUS_MODE=true
+fi
+if [[ "$MAX_TASK_ATTEMPTS" == "1" && -n "${RALPH_MAX_TASK_ATTEMPTS:-}" ]]; then
+    if [[ ! "$RALPH_MAX_TASK_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: RALPH_MAX_TASK_ATTEMPTS must be a positive integer"
+        exit 1
+    fi
+    MAX_TASK_ATTEMPTS="$RALPH_MAX_TASK_ATTEMPTS"
+fi
+if [[ "$RESPAWN_DELAY" == "0" && -n "${RALPH_RESPAWN_DELAY:-}" ]]; then
+    if [[ ! "$RALPH_RESPAWN_DELAY" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "Error: RALPH_RESPAWN_DELAY must be a non-negative number"
+        exit 1
+    fi
+    RESPAWN_DELAY="$RALPH_RESPAWN_DELAY"
+fi
+
+# Validate continuous-mode flag combinations (proposal §4).
+if [[ "$CONTINUOUS_MODE" == "true" ]]; then
+    if [[ "$PARALLEL_COUNT" -lt 1 ]]; then
+        echo "Error: --max-tasks requires --parallel N"
+        exit 1
+    fi
+    if [[ -n "$SPECIFIC_TASK_NUM" ]]; then
+        echo "Error: --task and --max-tasks are mutually exclusive"
+        exit 1
+    fi
+    if [[ "$QG_MODE" == "true" ]]; then
+        echo "Error: --max-tasks does not apply to --qg mode"
+        exit 1
+    fi
+    if [[ "$PARALLEL_BG" == "true" ]]; then
+        echo "Error: --max-tasks requires a single coordinator; use --parallel (not --parallel-bg) with --max-tasks"
+        exit 1
+    fi
+fi
+
 # Only execute when run directly, not when sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Sweep stale [~] markers from prior crashed continuous-mode runs.
+    sweep_stale_continuous_state 2>/dev/null || true
+
+    # If continuous mode engaged, dispatch to the worker pool BEFORE any of
+    # the existing batch dispatches so we keep V1 byte-compatibility on the
+    # non-continuous paths.
+    if [[ "$CONTINUOUS_MODE" == "true" ]]; then
+        if [[ "$WORKSPACE_MODE" == "true" ]]; then
+            run_continuous_workspace
+        else
+            run_continuous_singlerepo
+        fi
+        exit $?
+    fi
+
     # If workspace mode requested, route to workspace handler
     # (workspace handles its own parallelism via run_workspace_tasks_parallel)
     if [[ "$WORKSPACE_MODE" == "true" ]]; then
