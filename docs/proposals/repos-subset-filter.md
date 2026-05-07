@@ -5,6 +5,18 @@ Audience: ai-ralph maintainers. This doc lives in workbench because the workbenc
 Author: ai-workbench team.
 Date: 2026-04-29.
 
+## 0. Existing precedent
+
+`ralph-plan --workspace --repos <list>` already exists on the **planner side**: see `ralph_plan.sh:1014` and the helper `workspace_plan_filter_repos()` in `lib/workspace_plan.sh:629`. Today the planner accepts a comma-separated allowlist and runs the function against the discovered repo set.
+
+This proposal **mirrors that flag onto the executor side** (`ralph --workspace`) and **extends both sides** with:
+
+- A `--exclude <list>` denylist (planner does not have one today).
+- Stricter validation: empty result-set is a fail-fast error; unknown repo names are a fail-fast error with the available set listed in the message.
+- Env-var passthrough so workbench can drive the filter from `project.conf` without re-passing flags.
+
+Where the implementation lives: the executor side gets a new code path; the planner side reuses `workspace_plan_filter_repos()` plus the new validation wrapper. The doc proposes a single shared filter helper in `lib/workspace_manager.sh` that both sides call.
+
 ## 1. Problem statement
 
 `ralph --workspace` (shipped via the workspace-mode work in `lib/workspace_manager.sh`) walks every git repo under `repos/` and either picks a single task (sequential) or fans out one task per repo (parallel). The repo set is fixed at runtime by `discover_workspace_repos()`: any directory under the workspace root that contains a `.git/` is in scope.
@@ -42,7 +54,7 @@ Both flags accept a comma-separated list of repo directory names (matching the n
 Semantics:
 
 - Flags are mutually exclusive. `--repos a,b` together with `--exclude c` is a parse error: `--repos and --exclude cannot be combined`.
-- Names are matched exact-string against the discovery output. No globs, no regex. If `repos/api-v2` exists but the user passes `--repos api`, that is a parse error: `unknown repo: api`.
+- Names are matched exact-string against the discovery output. No globs, no regex. (Globs deferred — easy non-breaking addition later.) If `repos/api-v2` exists but the user passes `--repos api`, that is a parse error: `unknown repo: api. Available: api-v2, web, worker.` The error message must list the discovered set so the user can correct without an extra `ls`.
 - Names that resolve to no on-disk directory are an error, not a warning. The intent is to fail fast on typos.
 - After applying the filter, the resulting set is empty ⇒ error: `--repos / --exclude filtered out every repository`.
 - After applying the filter, the resulting set is one repo ⇒ workspace mode still runs (it is a one-repo workspace for this invocation). Sequential and parallel paths both handle N=1 correctly today.
@@ -57,9 +69,16 @@ The filter is applied inside `discover_workspace_repos()` (or in a thin wrapper 
 | A | Inside `discover_workspace_repos()` itself | Single chokepoint; everything downstream sees the filtered set automatically (`validate_workspace`, parallel picker, sequential picker). | Function takes on a global side effect via env. Breaks the "pure discovery" contract. |
 | B | In a new wrapper `discover_workspace_repos_filtered()` called by `run_workspace_mode()` only | Discovery stays pure; explicit filter call site. | Two functions to keep in sync; downstream callers (e.g., future tooling) might still use the unfiltered version and mis-report scope. |
 
-The doc recommends **Option A with an explicit argument**: extend `discover_workspace_repos()` to accept an optional second arg `repo_filter_spec`, which is parsed once at CLI entry and threaded through. Existing callers (one in `validate_workspace`, one in `run_workspace_mode`) pass through the filter spec; new callers default to empty (no filter). This keeps the chokepoint single, avoids env-var side effects, and preserves back-compat: callers that pass no second arg get unfiltered behavior identical to V1.
+The doc recommends **Option B with a guarded wrapper**: keep `discover_workspace_repos()` pure, add a sibling `discover_workspace_repos_filtered()` in `lib/workspace_manager.sh` that calls the pure function then applies a filter spec read from caller-set env vars (`RALPH_WORKSPACE_REPOS`, `RALPH_WORKSPACE_EXCLUDE`).
 
-The filter spec is a simple struct in shell terms: two arrays `INCLUDE_REPOS` and `EXCLUDE_REPOS`, populated from the CLI flags at parse time. `discover_workspace_repos()` walks the filesystem, then drops any name not in `INCLUDE_REPOS` (when set) and any name in `EXCLUDE_REPOS` (when set), then sorts.
+Why Option B over Option A (positional second arg): adding a positional arg to a shell function is brittle. Future callers that add a different second arg shift the filter into a wrong slot silently. A separately-named wrapper makes "this call site participates in filtering" explicit at every site, and existing callers stay untouched. The "two functions to keep in sync" downside is mitigated by `discover_workspace_repos_filtered()` calling `discover_workspace_repos()` directly, not duplicating the discovery walk.
+
+The filter spec lives as two newline-separated lists set into env at CLI parse time:
+
+- `RALPH_WORKSPACE_REPOS_RESOLVED` — non-empty if allowlist active.
+- `RALPH_WORKSPACE_EXCLUDE_RESOLVED` — non-empty if denylist active.
+
+Callers that want filtered output use the wrapper; callers that need raw discovery (e.g., a future doctor command) keep using the pure function. `validate_workspace` is updated to use the wrapper so its missing-repo warnings only fire for in-scope repos.
 
 ## 5. Interaction with cross-repo tasks
 
