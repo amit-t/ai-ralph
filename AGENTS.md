@@ -178,6 +178,7 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - `discover_workspace_repos()`: finds git repos (directories with `.git/`) in a workspace, sorted alphabetically, skips hidden dirs
     - `parse_workspace_fix_plan()`: extracts pending tasks grouped by repo from `## repo-name` sections in workspace fix_plan.md
     - `pick_workspace_task()`: picks first unclaimed task, atomically marks `[~]`, returns `repo_name|task_id|line_num|description`
+    - `pick_workspace_task_for_pool()`: skip-list-aware variant of `pick_workspace_task()` used by the continuous worker pool
     - `get_repo_default_branch()`: detects default branch of a git repository via `git symbolic-ref`
     - `validate_workspace()`: validates workspace structure (`.ralph/fix_plan.md` exists, repos found, warns about missing repos)
     - `build_workspace_repo_context()`: builds AI prompt context with repo name, task, and working directory constraint
@@ -194,6 +195,41 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - `workspace_repo_cleanup()`: cleans up worktree for a workspace repo — preserves branch for PR, syncs state back
     - Workspace fix_plan.md format uses `## repo-name` section headers with standard checkbox tasks underneath
     - Supports `cross-repo` section for tasks spanning multiple repositories
+
+15. **lib/worker_pool.sh** — Continuous parallel execution worker pool (proposal: `docs/proposals/continuous-parallel-execution.md`)
+    - `run_continuous_worker_pool()`: bounded continuous orchestrator. Keeps ≤ N workers running, spawns a replacement as soon as one finishes, until M total attempts are spent or the picker returns no more tasks. Args: `N M K respawn_delay picker_fn executor_fn on_complete_fn`.
+    - `_wait_for_any()`: portable wait-for-any-PID via polling (works on macOS bash 3.2; bash 4.3+'s `wait -n` is not required). Sets `_WAIT_FOR_ANY_SLOT` and `_WAIT_FOR_ANY_RC` globals — must be called directly (not via `$()`) so `wait` runs in the orchestrator shell where worker PIDs are children.
+    - `_atomic_inc_call_count()`: race-free `CALL_COUNT_FILE` increment under an `mkdir`-based lock. Replaces the inline `cat`/`echo` pattern from the V1 batch path.
+    - `init_continuous_state()` / `record_inflight()` / `clear_inflight()` / `cleanup_continuous_state()`: lifecycle helpers for `.ralph/.continuous_state` (a flat TSV format — no jq dependency).
+    - `_continuous_emit_summary()`: prints the run summary block AND appends to `.ralph/logs/continuous-summary.log`.
+    - SIGINT/SIGTERM trap: the orchestrator catches both signals identically (drain only — finish in-flight workers, no new spawns). Note: bash backgrounded `(...) &` inherit SIGINT as ignored, so test harnesses must use SIGTERM to exercise the drain path.
+
+16. **lib/continuous_recovery.sh** — Stale `[~]` marker sweeper (proposal §16)
+    - `sweep_stale_continuous_state()`: runs at the top of every ralph entry point. Reads `.ralph/.continuous_state`, checks the orchestrator PID with `kill -0`, and if the PID is dead reverts each in-flight `[~]` line back to `[ ]` then deletes the state file.
+    - Silent no-op when the state file is absent (the common case).
+    - Falls back to `.ralph/fix_plan.md` when `WORKSPACE_FIX_PLAN` is unset; handles malformed PIDs / missing fix_plan / jq absence gracefully.
+
+### Continuous Parallel Execution
+
+`--max-tasks M` engages a continuous worker pool: keep ≤ N concurrent until M total attempts (success or failure) are spent, then drain. Strictly opt-in — without `--max-tasks`, `--parallel N` retains its V1 batch behavior byte-identically.
+
+Flags (all three engines: claude / devin / codex):
+
+```
+--max-tasks M             total attempts before stopping (engages continuous mode)
+--max-task-attempts K     per-task retry threshold (default 1)
+--respawn-delay SEC       cooldown between worker replacements (default 0)
+```
+
+Env overrides: `RALPH_MAX_TASKS`, `RALPH_MAX_TASK_ATTEMPTS`, `RALPH_RESPAWN_DELAY`. CLI flag wins over env.
+
+Aliases: `rpc.cont N M`, `rpc.ws.cont N M`, plus `rpd.cont` / `rpx.cont` (workspace variants `rpd.ws.cont` / `rpx.ws.cont`).
+
+Mutually exclusive with `--task`, `--qg` (Claude only), and `--parallel-bg`. Requires `--parallel N`.
+
+Stop reasons reported in the summary: `target reached (M)`, `queue empty`, `user interrupt`, `circuit breaker open`, `fatal error`. Hard-kill (SIGKILL) leaves stale `[~]` markers; the next ralph startup auto-recovers them via `sweep_stale_continuous_state`.
+
+Skip-list (per-run, in-memory): when a task fails K times within a run it is added to the orchestrator's skip-list and never re-picked on that run. The pickers (`pick_workspace_task_for_pool`, `pick_next_task_for_pool`) accept the skip-list as their second argument and silently skip over listed line numbers.
 
 ### Quality Gate Behaviour
 
@@ -624,7 +660,7 @@ Ralph installs to:
 - **Commands**: `~/.local/bin/` (ralph, ralph-monitor, ralph-setup, ralph-import, ralph-migrate, ralph-enable, ralph-enable-ci)
 - **Templates**: `~/.ralph/templates/`
 - **Scripts**: `~/.ralph/` (ralph_loop.sh, ralph_monitor.sh, setup.sh, ralph_import.sh, migrate_to_ralph_folder.sh, ralph_enable.sh, ralph_enable_ci.sh)
-- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh, workspace_manager.sh)
+- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh, workspace_manager.sh, worker_pool.sh, continuous_recovery.sh)
 
 After installation, the following global commands are available:
 - `ralph` - Start the autonomous development loop

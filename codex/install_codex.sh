@@ -230,6 +230,9 @@ install_shared_libs() {
         "lib/task_sources.sh"
         "lib/parallel_spawn.sh"
         "lib/pr_manager.sh"
+        "lib/workspace_manager.sh"
+        "lib/worker_pool.sh"
+        "lib/continuous_recovery.sh"
     )
 
     for lib in "${shared_libs[@]}"; do
