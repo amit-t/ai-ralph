@@ -1058,6 +1058,69 @@ mark_single_bead_in_progress() {
     return 1
 }
 
+# pick_next_task_for_pool - Skip-list-aware variant of pick_next_task for use
+# by the continuous worker pool (see lib/worker_pool.sh).
+#
+# Behavior is identical to pick_next_task except: any task whose 1-based line
+# number appears in the newline-separated skip-list is silently skipped. This
+# lets the orchestrator avoid re-picking tasks that have hit the per-task
+# max-attempts limit within a run.
+#
+# Args:
+#   $1 - fix_plan_file: Path to fix_plan.md
+#   $2 - skip_list:     Newline-separated list of line numbers to skip
+# Output (stdout): task_id|line_num|bead_id (same as pick_next_task)
+# Returns: 0 on success, 1 if no eligible tasks remain.
+pick_next_task_for_pool() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local skip_list="${2:-}"
+
+    if [[ ! -f "$fix_plan_file" ]]; then
+        return 1
+    fi
+
+    local lock_dir
+    lock_dir="$(dirname "$fix_plan_file")/.task_pick_lock"
+    if ! _acquire_task_lock "$lock_dir"; then
+        echo "WARN: Could not acquire task pick lock after timeout" >&2
+        return 1
+    fi
+
+    local line_num=0
+    local found=1
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+
+        if echo "$line" | grep -qE '^\s*- \[ \] '; then
+            # Skip if this line is in the skip-list.
+            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$line_num"; then
+                continue
+            fi
+
+            local bead_id=""
+            bead_id=$(echo "$line" | sed -n 's/.*\[ \] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
+
+            local task_id=""
+            if [[ -n "$bead_id" ]]; then
+                task_id="$bead_id"
+            else
+                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+            fi
+
+            local tmp_file="${fix_plan_file}.tmp.$$"
+            awk -v ln="$line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
+                && mv "$tmp_file" "$fix_plan_file"
+
+            echo "${task_id}|${line_num}|${bead_id}"
+            found=0
+            break
+        fi
+    done < "$fix_plan_file"
+
+    _release_task_lock "$lock_dir"
+    return $found
+}
+
 # =============================================================================
 # EXPORTS
 # =============================================================================
@@ -1080,6 +1143,7 @@ export -f beads_post_sync
 export -f _acquire_task_lock
 export -f _release_task_lock
 export -f pick_next_task
+export -f pick_next_task_for_pool
 export -f pick_task_by_id
 export -f mark_fix_plan_in_progress
 export -f mark_fix_plan_complete

@@ -817,10 +817,97 @@ workspace_repo_cleanup() {
     return 0
 }
 
+# pick_workspace_task_for_pool — Skip-list-aware variant of pick_workspace_task
+# for use by the continuous worker pool (see lib/worker_pool.sh).
+#
+# Behavior is identical to pick_workspace_task except: any task whose 1-based
+# line number appears in the newline-separated skip-list is silently skipped.
+# This lets the worker-pool orchestrator avoid re-picking tasks that have hit
+# the per-task max-attempts limit within a single run.
+#
+# Args:
+#   $1 - fix_plan_file: Path to workspace fix_plan.md
+#   $2 - skip_list:     Newline-separated list of line numbers to skip
+# Output (stdout): repo_name|task_id|line_num|task_description (same as pick_workspace_task)
+# Returns: 0 on success, 1 if no eligible tasks remain.
+pick_workspace_task_for_pool() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local skip_list="${2:-}"
+
+    if [[ ! -f "$fix_plan_file" ]]; then
+        return 1
+    fi
+
+    # Acquire the same lock used by pick_workspace_task so concurrent picks
+    # remain atomic.
+    local lock_dir
+    lock_dir="$(dirname "$fix_plan_file")/.workspace_task_lock"
+    if command -v _acquire_task_lock &>/dev/null; then
+        if ! _acquire_task_lock "$lock_dir"; then
+            echo "WARN: Could not acquire workspace task lock after timeout" >&2
+            return 1
+        fi
+    else
+        mkdir "$lock_dir" 2>/dev/null || true
+    fi
+
+    local current_repo=""
+    local line_num=0
+    local found=1
+
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+
+        if echo "$line" | grep -qE '^#{2,3} [A-Za-z0-9]'; then
+            current_repo=$(echo "$line" | sed 's/^#\{2,3\} *//' | sed 's/[[:space:]]*$//')
+            continue
+        fi
+
+        [[ -z "$current_repo" ]] && continue
+        [[ "$current_repo" == "cross-repo" ]] && continue
+
+        if echo "$line" | grep -qE '^- \[ \] '; then
+            # Skip if this line is in the skip-list.
+            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$line_num"; then
+                continue
+            fi
+
+            local task_desc
+            task_desc=$(echo "$line" | sed 's/^- \[ \] //')
+
+            local bead_id=""
+            bead_id=$(echo "$line" | sed -n 's/.*\[ \] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
+
+            local task_id=""
+            if [[ -n "$bead_id" ]]; then
+                task_id="$bead_id"
+            else
+                task_id=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+            fi
+
+            local tmp_file="${fix_plan_file}.tmp.$$"
+            awk -v ln="$line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
+                && mv "$tmp_file" "$fix_plan_file"
+
+            echo "${current_repo}|${task_id}|${line_num}|${task_desc}"
+            found=0
+            break
+        fi
+    done < "$fix_plan_file"
+
+    if command -v _release_task_lock &>/dev/null; then
+        _release_task_lock "$lock_dir"
+    else
+        rmdir "$lock_dir" 2>/dev/null || true
+    fi
+    return $found
+}
+
 # Export all functions for use in subshells
 export -f discover_workspace_repos
 export -f parse_workspace_fix_plan
 export -f pick_workspace_task
+export -f pick_workspace_task_for_pool
 export -f get_repo_default_branch
 export -f validate_workspace
 export -f build_workspace_repo_context
