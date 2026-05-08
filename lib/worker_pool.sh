@@ -266,23 +266,25 @@ run_continuous_worker_pool() {
     }
     trap _continuous_handle_signal INT TERM
 
+    # Increments the attempt count for `id` and writes the new count into
+    # the global var $_ATTEMPTS_LAST. Must NOT be called via $(...) — that
+    # runs in a subshell where the array mutations would be discarded,
+    # leaving the counter pinned at 1 forever and the K=max-task-attempts
+    # skip-list permanently silent for K >= 2 (regression covered by
+    # tests/unit/test_worker_pool.bats).
     _attempts_increment() {
         local id="$1"
-        local found=0
         local idx
         for ((idx = 0; idx < ${#_att_id[@]}; idx++)); do
             if [[ "${_att_id[$idx]}" == "$id" ]]; then
                 _att_count[$idx]=$(( ${_att_count[$idx]} + 1 ))
-                found=1
-                echo "${_att_count[$idx]}"
+                _ATTEMPTS_LAST="${_att_count[$idx]}"
                 return
             fi
         done
-        if [[ $found -eq 0 ]]; then
-            _att_id+=("$id")
-            _att_count+=(1)
-            echo "1"
-        fi
+        _att_id+=("$id")
+        _att_count+=(1)
+        _ATTEMPTS_LAST="1"
     }
 
     _spawn_worker() {
@@ -360,8 +362,11 @@ run_continuous_worker_pool() {
         else
             failed=$((failed + 1))
             local task_key="${finished_descriptor%% *}"
-            local n_attempts
-            n_attempts=$(_attempts_increment "$task_key")
+            # Direct call (not $(_attempts_increment …)) so the function's
+            # array mutations persist in our shell. See the helper's docstring.
+            _ATTEMPTS_LAST=""
+            _attempts_increment "$task_key"
+            local n_attempts="$_ATTEMPTS_LAST"
             if [[ "$n_attempts" -ge "$K" ]]; then
                 skip_list="${skip_list}${task_key}"$'\n'
                 skipped=$((skipped + 1))

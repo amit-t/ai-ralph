@@ -625,14 +625,100 @@ EOF
 }
 
 @test "K=2: task fails twice → IS added to skip-list on 2nd failure" {
+    # Use distinct queue entries (different rc-tag suffixes) so each pick
+    # consumes exactly one queue line. With three identical entries the
+    # picker's `grep -vxF "$line"` pops all three at once, masking the
+    # K-counter behavior — the original test was a false positive.
     cat > "${TEST_DIR}/.test_queue" << 'EOF'
-TBAD rc=1
-TBAD rc=1
-TBAD rc=1
+TBAD rc=1 a
+TBAD rc=1 b
+TBAD rc=1 c
 EOF
+    : > "${TEST_DIR}/.test_executions"
     run run_continuous_worker_pool 1 5 2 0 _test_picker _test_executor _test_on_complete
-    [[ "$output" == *"skip-list"* ]]
-    [[ "$output" == *"TBAD"* ]]
+    [[ "$output" == *"skip-list += TBAD"* ]]
+    # Regression guard: `_attempts_increment` must NOT be called via $(...).
+    # When run via command substitution, the `_att_*` array mutations are
+    # discarded, the counter pins at 1, and the skip-list message only
+    # fires for K=1. The "failed 2 ≥ K=2" string only appears when the
+    # counter persists across calls.
+    [[ "$output" == *"failed 2 ≥ K=2"* ]]
+    # And the orchestrator must drain after the skip — total attempts
+    # should be exactly 2 (1st fail, 2nd fail → skip-list, then drain),
+    # not the full M=5.
+    local attempts
+    attempts=$(wc -l < "${TEST_DIR}/.test_executions" | tr -d ' ')
+    [[ "$attempts" == "2" ]]
+}
+
+@test "K=3: skip-list message fires at exactly the 3rd failure (counter persists)" {
+    # Companion regression for the subshell-counter bug. Distinct queue
+    # entries (a/b/c/d suffix) so each pick consumes exactly one line.
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+TBAD3 rc=1 a
+TBAD3 rc=1 b
+TBAD3 rc=1 c
+TBAD3 rc=1 d
+EOF
+    : > "${TEST_DIR}/.test_executions"
+    run run_continuous_worker_pool 1 6 3 0 _test_picker _test_executor _test_on_complete
+    [[ "$output" == *"skip-list += TBAD3 (failed 3 ≥ K=3)"* ]]
+    # The skip-list line must NOT appear for n=1 or n=2.
+    [[ "$output" != *"failed 1 ≥ K=3"* ]]
+    [[ "$output" != *"failed 2 ≥ K=3"* ]]
+    local attempts
+    attempts=$(wc -l < "${TEST_DIR}/.test_executions" | tr -d ' ')
+    [[ "$attempts" == "3" ]]
+}
+
+@test "_attempts_increment must NOT be called via \$(...) — direct-call invariant" {
+    # Direct probe of the subshell-counter regression.  We re-implement
+    # the helper inline because it is defined `local` to
+    # run_continuous_worker_pool and isn't externally callable.  The
+    # invariant we lock down: when the helper writes its result to a
+    # global ($_PROBE_LAST), repeated calls accumulate; when called via
+    # $(...) command substitution, the array mutations are discarded
+    # and the counter pins at 1.
+    local -a _ids=()
+    local -a _cnt=()
+    local _PROBE_LAST=""
+    _probe_inc() {
+        local id="$1" idx
+        for ((idx = 0; idx < ${#_ids[@]}; idx++)); do
+            if [[ "${_ids[$idx]}" == "$id" ]]; then
+                _cnt[$idx]=$(( ${_cnt[$idx]} + 1 ))
+                _PROBE_LAST="${_cnt[$idx]}"
+                return
+            fi
+        done
+        _ids+=("$id"); _cnt+=(1); _PROBE_LAST="1"
+    }
+
+    # Direct calls: counter accumulates.
+    _probe_inc "X"; [[ "$_PROBE_LAST" == "1" ]]
+    _probe_inc "X"; [[ "$_PROBE_LAST" == "2" ]]
+    _probe_inc "X"; [[ "$_PROBE_LAST" == "3" ]]
+
+    # Now demonstrate the regression mode: command substitution discards
+    # array mutations.  We DON'T expect the orchestrator's production
+    # path to use this form — the test exists to document why.
+    local -a _ids2=()
+    local -a _cnt2=()
+    _probe_inc_subshell() {
+        local id="$1" idx
+        for ((idx = 0; idx < ${#_ids2[@]}; idx++)); do
+            if [[ "${_ids2[$idx]}" == "$id" ]]; then
+                _cnt2[$idx]=$(( ${_cnt2[$idx]} + 1 ))
+                echo "${_cnt2[$idx]}"
+                return
+            fi
+        done
+        _ids2+=("$id"); _cnt2+=(1); echo "1"
+    }
+    local n
+    n=$(_probe_inc_subshell "Y"); [[ "$n" == "1" ]]
+    n=$(_probe_inc_subshell "Y"); [[ "$n" == "1" ]]   # ← regression: pinned at 1
+    n=$(_probe_inc_subshell "Y"); [[ "$n" == "1" ]]
 }
 
 # =============================================================================

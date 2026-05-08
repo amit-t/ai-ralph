@@ -1039,19 +1039,29 @@ workspace_repo_cleanup() {
 # pick_workspace_task_for_pool — Skip-list-aware variant of pick_workspace_task
 # for use by the continuous worker pool (see lib/worker_pool.sh).
 #
-# Behavior is identical to pick_workspace_task except: any task whose 1-based
-# line number appears in the newline-separated skip-list is silently skipped.
-# This lets the worker-pool orchestrator avoid re-picking tasks that have hit
-# the per-task max-attempts limit within a single run.
+# Skip-list semantics (must match the orchestrator in lib/worker_pool.sh):
+#   The worker pool skip-lists a task by inserting `${descriptor%% *}` — the
+#   first-space-prefix of the descriptor that this picker emits — one per
+#   line. So the picker must compute the same prefix from its candidate
+#   descriptor BEFORE marking `[~]`, and skip if it matches.
+#
+#   Earlier (buggy) versions of this function checked `skip_list` against the
+#   bare line number, which never matched what the orchestrator had inserted,
+#   so the K=max-task-attempts limit was silently a no-op. Do not revert to
+#   that form without realigning worker_pool.sh's insertion logic too.
 #
 # Args:
 #   $1 - fix_plan_file: Path to workspace fix_plan.md
-#   $2 - skip_list:     Newline-separated list of line numbers to skip
+#   $2 - skip_list:     Newline-separated list of descriptor-prefix tokens.
+#   $3 - allowed_repos (optional): newline-separated allowlist of repo
+#        section names (same semantics as pick_workspace_task's $2). When
+#        non-empty, cross-repo and any section not in the list are skipped.
 # Output (stdout): repo_name|task_id|line_num|task_description (same as pick_workspace_task)
 # Returns: 0 on success, 1 if no eligible tasks remain.
 pick_workspace_task_for_pool() {
     local fix_plan_file="${1:-.ralph/fix_plan.md}"
     local skip_list="${2:-}"
+    local allowed_repos="${3:-}"
 
     if [[ ! -f "$fix_plan_file" ]]; then
         return 1
@@ -1085,12 +1095,16 @@ pick_workspace_task_for_pool() {
         [[ -z "$current_repo" ]] && continue
         [[ "$current_repo" == "cross-repo" ]] && continue
 
-        if echo "$line" | grep -qE '^- \[ \] '; then
-            # Skip if this line is in the skip-list.
-            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$line_num"; then
+        # Filter: when allowed_repos is non-empty, skip any section not in
+        # the list. Matches pick_workspace_task's V1 behavior so --repos /
+        # --exclude are honored in continuous mode too.
+        if [[ -n "$allowed_repos" ]]; then
+            if ! echo "$allowed_repos" | grep -qxF "$current_repo"; then
                 continue
             fi
+        fi
 
+        if echo "$line" | grep -qE '^- \[ \] '; then
             local task_desc
             task_desc=$(echo "$line" | sed 's/^- \[ \] //')
 
@@ -1104,11 +1118,19 @@ pick_workspace_task_for_pool() {
                 task_id=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
             fi
 
+            # Skip-list check: compute the same descriptor-prefix the worker
+            # pool stores so skip_list entries match 1:1.
+            local candidate_desc="${current_repo}|${task_id}|${line_num}|${task_desc}"
+            local candidate_token="${candidate_desc%% *}"
+            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$candidate_token"; then
+                continue
+            fi
+
             local tmp_file="${fix_plan_file}.tmp.$$"
             awk -v ln="$line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
                 && mv "$tmp_file" "$fix_plan_file"
 
-            echo "${current_repo}|${task_id}|${line_num}|${task_desc}"
+            echo "$candidate_desc"
             found=0
             break
         fi

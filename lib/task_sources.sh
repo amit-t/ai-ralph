@@ -1061,14 +1061,20 @@ mark_single_bead_in_progress() {
 # pick_next_task_for_pool - Skip-list-aware variant of pick_next_task for use
 # by the continuous worker pool (see lib/worker_pool.sh).
 #
-# Behavior is identical to pick_next_task except: any task whose 1-based line
-# number appears in the newline-separated skip-list is silently skipped. This
-# lets the orchestrator avoid re-picking tasks that have hit the per-task
-# max-attempts limit within a run.
+# Skip-list semantics (must match the orchestrator in lib/worker_pool.sh):
+#   The worker pool skip-lists a task by inserting `${descriptor%% *}` — the
+#   first-space-prefix of the descriptor that this picker emits — one per
+#   line. The single-repo descriptor `task_id|line_num|bead_id` has no
+#   spaces (task_id is sanitized to [a-z0-9-]), so the prefix equals the
+#   whole descriptor.
+#
+#   Earlier (buggy) versions checked `skip_list` against the bare line
+#   number, which never matched the orchestrator's insertion, so the
+#   K=max-task-attempts limit was silently a no-op.
 #
 # Args:
 #   $1 - fix_plan_file: Path to fix_plan.md
-#   $2 - skip_list:     Newline-separated list of line numbers to skip
+#   $2 - skip_list:     Newline-separated list of descriptor-prefix tokens.
 # Output (stdout): task_id|line_num|bead_id (same as pick_next_task)
 # Returns: 0 on success, 1 if no eligible tasks remain.
 pick_next_task_for_pool() {
@@ -1092,11 +1098,6 @@ pick_next_task_for_pool() {
         line_num=$((line_num + 1))
 
         if echo "$line" | grep -qE '^\s*- \[ \] '; then
-            # Skip if this line is in the skip-list.
-            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$line_num"; then
-                continue
-            fi
-
             local bead_id=""
             bead_id=$(echo "$line" | sed -n 's/.*\[ \] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
 
@@ -1107,11 +1108,20 @@ pick_next_task_for_pool() {
                 task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
             fi
 
+            # Skip-list check: compute the same descriptor-prefix the worker
+            # pool stores so skip_list entries match 1:1. The single-repo
+            # descriptor has no spaces, so the prefix is the whole string.
+            local candidate_desc="${task_id}|${line_num}|${bead_id}"
+            local candidate_token="${candidate_desc%% *}"
+            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$candidate_token"; then
+                continue
+            fi
+
             local tmp_file="${fix_plan_file}.tmp.$$"
             awk -v ln="$line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
                 && mv "$tmp_file" "$fix_plan_file"
 
-            echo "${task_id}|${line_num}|${bead_id}"
+            echo "$candidate_desc"
             found=0
             break
         fi

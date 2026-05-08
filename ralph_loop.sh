@@ -2929,9 +2929,13 @@ export -f _workspace_execute_task
 # Reads the skip-list from $1 and returns the next eligible task on stdout.
 # Output format: "repo|task_id|line|description" (the descriptor is consumed
 # by _continuous_workspace_executor below).
+#
+# Honors --repos / --exclude via $RALPH_WORKSPACE_ALLOWED_REPOS, which is
+# pre-computed and exported by run_continuous_workspace once we know the
+# resolved filter spec. Empty == V1 behavior (all repos eligible).
 _continuous_workspace_picker() {
     local skip_list="${1:-}"
-    pick_workspace_task_for_pool "${RALPH_DIR}/fix_plan.md" "$skip_list"
+    pick_workspace_task_for_pool "${RALPH_DIR}/fix_plan.md" "$skip_list" "${RALPH_WORKSPACE_ALLOWED_REPOS:-}"
 }
 export -f _continuous_workspace_picker
 
@@ -2991,6 +2995,24 @@ run_continuous_workspace() {
         return 1
     fi
     log_status "INFO" "$ws_validation"
+
+    # Pre-compute the in-scope repo set for the picker. When --repos /
+    # --exclude is active, narrow via discover_workspace_repos_filtered
+    # (validates names, rejects empty result). Empty list == V1 behavior.
+    if is_workspace_filter_active; then
+        if ! RALPH_WORKSPACE_ALLOWED_REPOS=$(discover_workspace_repos_filtered "."); then
+            return 1
+        fi
+        local _allow="${RALPH_WORKSPACE_REPOS_RESOLVED:-}"
+        local _deny="${RALPH_WORKSPACE_EXCLUDE_RESOLVED:-}"
+        local _allow_csv _deny_csv
+        _allow_csv=$(echo "$_allow" | tr '\n' ',' | sed 's/,$//')
+        _deny_csv=$(echo "$_deny" | tr '\n' ',' | sed 's/,$//')
+        log_status "INFO" "[workspace] filter active: include=[$_allow_csv] exclude=[$_deny_csv] cross-repo=skipped"
+    else
+        RALPH_WORKSPACE_ALLOWED_REPOS=""
+    fi
+    export RALPH_WORKSPACE_ALLOWED_REPOS
 
     mkdir -p "$LOG_DIR" "$DOCS_DIR"
     init_session_tracking

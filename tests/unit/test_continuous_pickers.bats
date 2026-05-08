@@ -66,21 +66,21 @@ EOF
 - [ ] Second task
 EOF
 
-    # The first picker call would yield line 4 (or whatever line the first
-    # task is on). Pre-mark that line in the skip-list.
+    # Skip-list entries are the descriptor's first-space-prefix —
+    # the same key the worker pool inserts via `${descriptor%% *}`
+    # (see lib/worker_pool.sh). Capture the first descriptor to
+    # build the matching skip key.
     local first
     first=$(pick_workspace_task "${TEST_DIR}/.ralph/fix_plan.md")
     local first_line
     first_line=$(echo "$first" | cut -d'|' -f3)
-    # Re-set fix_plan back to [ ] so we can re-pick.
     revert_workspace_task "${TEST_DIR}/.ralph/fix_plan.md" "$first_line"
 
-    local skip_list="$first_line"
-    run pick_workspace_task_for_pool ".ralph/fix_plan.md" "$skip_list"
+    local skip_token="${first%% *}"   # e.g. "repo-alpha|first-task|4|First"
+    run pick_workspace_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_success
-    # The picker should have skipped the first task and chosen the second.
-    [[ "$output" != *"$first_line|"* ]] || [[ "$output" == *"Second task"* ]]
-    [[ "$output" == *"repo-beta"* ]] || [[ "$output" == *"Second"* ]]
+    [[ "$output" != "$first" ]]
+    [[ "$output" == *"Second task"* ]]
 }
 
 @test "pick_workspace_task_for_pool returns failure when all eligible are skipped" {
@@ -91,8 +91,16 @@ EOF
 ## repo-alpha
 - [ ] Only task
 EOF
-    # Skip lines 4 (the only task) and 5 to exhaust the queue.
-    run pick_workspace_task_for_pool ".ralph/fix_plan.md" $'4\n5\n6\n7\n8'
+    # Build the descriptor-prefix that the picker would produce for the
+    # only task, then skip it and assert the picker drains.
+    local first
+    first=$(pick_workspace_task "${TEST_DIR}/.ralph/fix_plan.md")
+    local first_line
+    first_line=$(echo "$first" | cut -d'|' -f3)
+    revert_workspace_task "${TEST_DIR}/.ralph/fix_plan.md" "$first_line"
+
+    local skip_token="${first%% *}"
+    run pick_workspace_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_failure
 }
 
@@ -156,7 +164,9 @@ EOF
 - [ ] Task three
 EOF
 
-    # Pick + revert to identify the first line, then put it in skip-list.
+    # Skip-list entries are the descriptor's first-space-prefix — same key
+    # the worker pool stores. For the single-repo descriptor `task_id|line|bead_id`
+    # there are no spaces, so the prefix equals the whole descriptor.
     local first
     first=$(pick_next_task "${TEST_DIR}/.ralph/fix_plan.md")
     local first_line
@@ -165,9 +175,10 @@ EOF
         "${TEST_DIR}/.ralph/fix_plan.md" > "${TEST_DIR}/.ralph/fix_plan.md.tmp" \
         && mv "${TEST_DIR}/.ralph/fix_plan.md.tmp" "${TEST_DIR}/.ralph/fix_plan.md"
 
-    run pick_next_task_for_pool ".ralph/fix_plan.md" "$first_line"
+    local skip_token="${first%% *}"
+    run pick_next_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_success
-    # Should not pick the first line again.
+    [[ "$output" != "$first" ]]
     local picked_line
     picked_line=$(echo "$output" | cut -d'|' -f2)
     [[ "$picked_line" != "$first_line" ]]
@@ -179,9 +190,18 @@ EOF
 # Fix Plan
 - [ ] Lone task
 EOF
+    # Build the descriptor-prefix the picker would produce for the only
+    # task, then skip it and assert the picker drains.
+    local first
+    first=$(pick_next_task "${TEST_DIR}/.ralph/fix_plan.md")
+    local first_line
+    first_line=$(echo "$first" | cut -d'|' -f2)
+    awk -v ln="$first_line" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' \
+        "${TEST_DIR}/.ralph/fix_plan.md" > "${TEST_DIR}/.ralph/fix_plan.md.tmp" \
+        && mv "${TEST_DIR}/.ralph/fix_plan.md.tmp" "${TEST_DIR}/.ralph/fix_plan.md"
 
-    # The only task is on line 2 (line 1 is the heading).
-    run pick_next_task_for_pool ".ralph/fix_plan.md" $'2\n3\n4'
+    local skip_token="${first%% *}"
+    run pick_next_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_failure
 }
 
@@ -364,33 +384,27 @@ EOF
 # Skip-list edge cases
 # =============================================================================
 
-@test "pick_next_task_for_pool skip-list does NOT match line-number prefixes (5 vs 55)" {
+@test "pick_next_task_for_pool skip-list does NOT match descriptor-prefix substrings" {
     # Regression guard for `grep -F` (substring) vs `grep -xF` (exact-match)
-    # in skip-list filtering. The skip-list is line numbers; if the picker
-    # used substring matching, a skip-list of "5" would also exclude line 55.
+    # in skip-list filtering. The skip-list now contains descriptor-prefix
+    # tokens (e.g. `task-5|2|`); substring matching would mis-skip a task
+    # whose descriptor token was a superset (e.g. `task-55|2|`).
     mkdir -p .ralph
     {
         echo "# Fix Plan"
-        # Add 60 tasks so we have lines 2..61.
-        for i in $(seq 1 60); do
-            echo "- [ ] Task $i"
-        done
+        echo "- [ ] task 5"
+        echo "- [ ] task 55"
     } > .ralph/fix_plan.md
 
-    # Skip line 5 only. The picker should pick line 2 (first unclaimed).
-    run pick_next_task_for_pool ".ralph/fix_plan.md" "5"
+    # Skip-list contains the FULL descriptor prefix for the line-2 task —
+    # `task-5|2|`. Substring check would also match `task-55|3|`; -xF must
+    # not.
+    run pick_next_task_for_pool ".ralph/fix_plan.md" "task-5|2|"
     assert_success
     local picked_line
     picked_line=$(echo "$output" | cut -d'|' -f2)
-    [[ "$picked_line" == "2" ]]
-
-    # Now pre-mark lines 2,3,4,5 [~] and skip line 5; picker should pick 6, NOT 55.
-    awk 'NR>=2 && NR<=5 { sub(/- \[ \]/, "- [~]") } 1' .ralph/fix_plan.md > .ralph/fix_plan.md.tmp \
-        && mv .ralph/fix_plan.md.tmp .ralph/fix_plan.md
-    run pick_next_task_for_pool ".ralph/fix_plan.md" "5"
-    assert_success
-    picked_line=$(echo "$output" | cut -d'|' -f2)
-    [[ "$picked_line" == "6" ]]
+    # Line 2 is skipped via descriptor match; line 3 (`task-55|3|`) wins.
+    [[ "$picked_line" == "3" ]]
 }
 
 @test "pick_next_task_for_pool skip-list ignores trailing blank line" {
@@ -400,10 +414,184 @@ EOF
 - [ ] Task one
 - [ ] Task two
 EOF
-    # Skip-list with trailing newline.
-    run pick_next_task_for_pool ".ralph/fix_plan.md" $'2\n'
+    # Skip-list with trailing newline; entry is the descriptor-prefix for
+    # line 2 (`task-one|2|`), not the bare line number.
+    run pick_next_task_for_pool ".ralph/fix_plan.md" $'task-one|2|\n'
     assert_success
     local picked_line
     picked_line=$(echo "$output" | cut -d'|' -f2)
     [[ "$picked_line" == "3" ]]
+}
+
+# =============================================================================
+# End-to-end production-shape contract: the worker pool's skip-list keys
+# (built via `${descriptor%% *}`) must round-trip with the production
+# picker so K=max-task-attempts actually limits attempts on a real failing
+# task. Earlier, the picker checked bare line numbers while the
+# orchestrator inserted descriptor-prefix tokens — they never matched, so
+# a single bad task ate the entire M budget. Repro:
+#
+#   # 1 task, K=2, M=10. Expected: 2 attempts then drain (queue empty).
+#   # Buggy: 10 attempts, all on the same task.
+#
+# These tests fail loudly if either side of the contract drifts.
+# =============================================================================
+
+@test "REGRESSION: workspace skip-list round-trips through worker_pool + production picker" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worker_pool.sh"
+
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## api-repo
+
+- [ ] Fix login bug on mobile
+EOF
+
+    # Production-shape executor: always fail, revert [~] → [ ] like
+    # _continuous_workspace_executor does in ralph_loop.sh.
+    _prod_ws_exec() {
+        local descriptor="$1"
+        local line_num
+        line_num=$(echo "$descriptor" | cut -d'|' -f3)
+        local tmp="${PWD}/.ralph/fix_plan.md.tmp.$$"
+        awk -v ln="$line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "${PWD}/.ralph/fix_plan.md" > "$tmp" \
+            && mv "$tmp" "${PWD}/.ralph/fix_plan.md"
+        return 1
+    }
+    export -f _prod_ws_exec
+    _prod_ws_pick() { pick_workspace_task_for_pool "${PWD}/.ralph/fix_plan.md" "$1"; }
+    export -f _prod_ws_pick
+    _prod_ws_oc() { :; }
+    export -f _prod_ws_oc
+
+    export RALPH_DIR="${PWD}/.ralph"
+    run run_continuous_worker_pool 1 10 2 0 _prod_ws_pick _prod_ws_exec _prod_ws_oc
+
+    # With K=2 and 1 bad task, the orchestrator should add the descriptor
+    # prefix to the skip-list on the 2nd failure, then the picker drains
+    # on the 3rd call. Total completions = 2, NOT 10.
+    [[ "$output" == *"skip-list +="* ]]
+    local last_completed
+    last_completed=$(echo "$output" | grep -oE 'completed=[0-9]+/10' | tail -1 | grep -oE '[0-9]+' | head -1)
+    [[ "$last_completed" == "2" ]] || {
+        echo "FAIL: expected 2 attempts but got $last_completed (skip-list bug regressed)" >&2
+        echo "$output" >&2
+        return 1
+    }
+    [[ "$output" == *"queue empty"* ]]
+}
+
+@test "REGRESSION: single-repo skip-list round-trips through worker_pool + production picker" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worker_pool.sh"
+
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Fix Plan
+- [ ] Fix login bug
+EOF
+
+    _prod_sr_exec() {
+        local descriptor="$1"
+        local line_num
+        line_num=$(echo "$descriptor" | cut -d'|' -f2)
+        local tmp="${PWD}/.ralph/fix_plan.md.tmp.$$"
+        awk -v ln="$line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "${PWD}/.ralph/fix_plan.md" > "$tmp" \
+            && mv "$tmp" "${PWD}/.ralph/fix_plan.md"
+        return 1
+    }
+    export -f _prod_sr_exec
+    _prod_sr_pick() { pick_next_task_for_pool "${PWD}/.ralph/fix_plan.md" "$1"; }
+    export -f _prod_sr_pick
+    _prod_sr_oc() { :; }
+    export -f _prod_sr_oc
+
+    export RALPH_DIR="${PWD}/.ralph"
+    run run_continuous_worker_pool 1 8 2 0 _prod_sr_pick _prod_sr_exec _prod_sr_oc
+
+    [[ "$output" == *"skip-list +="* ]]
+    local last_completed
+    last_completed=$(echo "$output" | grep -oE 'completed=[0-9]+/8' | tail -1 | grep -oE '[0-9]+' | head -1)
+    [[ "$last_completed" == "2" ]] || {
+        echo "FAIL: expected 2 attempts but got $last_completed (skip-list bug regressed)" >&2
+        echo "$output" >&2
+        return 1
+    }
+    [[ "$output" == *"queue empty"* ]]
+}
+
+# =============================================================================
+# Workspace filter (--repos / --exclude) must work in continuous mode.
+# Earlier, pick_workspace_task_for_pool didn't accept allowed_repos at all,
+# so --repos was silently ignored.
+# =============================================================================
+
+@test "pick_workspace_task_for_pool honors allowed_repos (allowlist)" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace
+
+## repo-skip
+- [ ] Skip me
+- [ ] Skip me too
+
+## repo-keep
+- [ ] Keep this
+EOF
+    # allowed_repos restricts to repo-keep; cross-repo and repo-skip are
+    # filtered out exactly like pick_workspace_task does in V1.
+    run pick_workspace_task_for_pool ".ralph/fix_plan.md" "" "repo-keep"
+    assert_success
+    [[ "$output" == repo-keep* ]]
+    [[ "$output" == *"Keep this"* ]]
+}
+
+@test "pick_workspace_task_for_pool: empty allowed_repos ⇒ V1 behavior (any repo)" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace
+
+## repo-a
+- [ ] First task
+
+## repo-b
+- [ ] Second task
+EOF
+    run pick_workspace_task_for_pool ".ralph/fix_plan.md" "" ""
+    assert_success
+    [[ "$output" == repo-a* ]]
+}
+
+@test "pick_workspace_task_for_pool: allowlist filters out cross-repo section too" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace
+
+## cross-repo
+- [ ] Cross-cutting work
+
+## repo-keep
+- [ ] Real work
+EOF
+    run pick_workspace_task_for_pool ".ralph/fix_plan.md" "" "repo-keep"
+    assert_success
+    [[ "$output" == repo-keep* ]]
+    [[ "$output" != *"Cross-cutting"* ]]
+}
+
+@test "pick_workspace_task_for_pool: allowlist excluding all repos drains" {
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace
+
+## repo-a
+- [ ] T1
+
+## repo-b
+- [ ] T2
+EOF
+    # No matching repo in allowlist ⇒ picker drains.
+    run pick_workspace_task_for_pool ".ralph/fix_plan.md" "" "no-such-repo"
+    assert_failure
 }
