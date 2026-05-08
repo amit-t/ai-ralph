@@ -595,3 +595,35 @@ EOF
     run pick_workspace_task_for_pool ".ralph/fix_plan.md" "" "no-such-repo"
     assert_failure
 }
+
+# =============================================================================
+# Wiring: ralph_loop.sh's _continuous_workspace_picker MUST forward
+# RALPH_WORKSPACE_ALLOWED_REPOS as the 3rd arg to
+# pick_workspace_task_for_pool. Otherwise --repos / --exclude in
+# continuous mode would silently fail.
+# =============================================================================
+
+@test "_continuous_workspace_picker forwards RALPH_WORKSPACE_ALLOWED_REPOS to picker" {
+    # Spy on the picker — capture its 3rd arg.
+    pick_workspace_task_for_pool() {
+        echo "ARGS:fix_plan=$1|skip=$2|allowed=$3" > "${TEST_DIR}/.spy"
+        return 0
+    }
+    export -f pick_workspace_task_for_pool
+
+    # Source the closure definition. It's defined inline in ralph_loop.sh
+    # so we shell-source the file's relevant section by extracting it.
+    eval "$(sed -n '/^_continuous_workspace_picker()/,/^}/p' "${BATS_TEST_DIRNAME}/../../ralph_loop.sh")"
+
+    export RALPH_DIR="${TEST_DIR}/.ralph"
+    mkdir -p "${RALPH_DIR}"
+    : > "${RALPH_DIR}/fix_plan.md"
+
+    export RALPH_WORKSPACE_ALLOWED_REPOS=$'apirepo\nworkerrepo'
+    _continuous_workspace_picker "skipped-token"
+
+    local spy
+    spy=$(cat "${TEST_DIR}/.spy")
+    [[ "$spy" == *"skip=skipped-token"* ]]
+    [[ "$spy" == *$'allowed=apirepo\nworkerrepo' ]]
+}
