@@ -1412,16 +1412,27 @@ EOF
 }
 
 @test "workspace mode entry point routes before main() call" {
-    # Verify that the entry point checks WORKSPACE_MODE before calling main()
-    local workspace_route_line main_call_line
+    # Verify that the entry point invokes run_workspace_mode before calling
+    # main(). The original test grepped for a single line containing both
+    # `WORKSPACE_MODE.*true` and `run_workspace_mode`, but the routing block
+    # spans multiple lines:
+    #     if [[ "$WORKSPACE_MODE" == "true" ]]; then
+    #         ...
+    #         run_workspace_mode
+    #     fi
+    # so the inline grep returned empty. On bash 3.2 (macOS) the empty result
+    # silently passed the comparison (`[[ "" -lt 3259 ]]` is true under arith
+    # context); on bash 5+ (Linux CI) `set -e` aborted the test on the
+    # `[[ -n "$workspace_route_line" ]]` precondition. Anchor on the call
+    # site directly and keep the precondition for diagnostics.
+    local ws_call_line main_call_line
 
-    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$RALPH_SCRIPT" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
-    main_call_line=$(grep -n '^\s*main$' "$RALPH_SCRIPT" | tail -1 | cut -d: -f1)
+    ws_call_line=$(grep -nE '^[[:space:]]*run_workspace_mode$' "$RALPH_SCRIPT" | tail -1 | cut -d: -f1)
+    main_call_line=$(grep -nE '^[[:space:]]*main$' "$RALPH_SCRIPT" | tail -1 | cut -d: -f1)
 
-    [[ -n "$workspace_route_line" ]]
+    [[ -n "$ws_call_line" ]]
     [[ -n "$main_call_line" ]]
-    # Workspace routing must come before main() call
-    [[ "$workspace_route_line" -lt "$main_call_line" ]]
+    [[ "$ws_call_line" -lt "$main_call_line" ]]
 }
 
 @test "workspace mode entry point routes before QG mode" {
@@ -1443,15 +1454,17 @@ EOF
     # Verify that the parallel spawn check excludes workspace mode
     grep -q 'PARALLEL_COUNT.*-gt.*0' "$RALPH_SCRIPT"
 
-    # The non-workspace parallel block should appear AFTER workspace routing
-    local workspace_route_line parallel_spawn_line
+    # The non-workspace parallel block should appear AFTER workspace routing.
+    # See note on the prior test re: multi-line routing block; anchor on the
+    # run_workspace_mode call site directly.
+    local ws_call_line parallel_spawn_line
 
-    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$RALPH_SCRIPT" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    ws_call_line=$(grep -nE '^[[:space:]]*run_workspace_mode$' "$RALPH_SCRIPT" | tail -1 | cut -d: -f1)
     parallel_spawn_line=$(grep -n 'spawn_parallel_agents' "$RALPH_SCRIPT" | head -1 | cut -d: -f1)
 
-    [[ -n "$workspace_route_line" ]]
+    [[ -n "$ws_call_line" ]]
     [[ -n "$parallel_spawn_line" ]]
-    [[ "$workspace_route_line" -lt "$parallel_spawn_line" ]]
+    [[ "$ws_call_line" -lt "$parallel_spawn_line" ]]
 }
 
 @test "workspace mode forwards --workspace flag through tmux setup" {
@@ -1982,25 +1995,27 @@ DEVIN_LOOP="${BATS_TEST_DIRNAME}/../../devin/ralph_loop_devin.sh"
 }
 
 @test "devin workspace mode entry point routes before main() call" {
-    local workspace_route_line main_call_line
+    # See ralph_loop.sh equivalent for context: the routing is multi-line,
+    # so anchor on the run_workspace_mode call site directly.
+    local ws_call_line main_call_line
 
-    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$DEVIN_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
-    main_call_line=$(grep -n '^\s*main$' "$DEVIN_LOOP" | tail -1 | cut -d: -f1)
+    ws_call_line=$(grep -nE '^[[:space:]]*run_workspace_mode$' "$DEVIN_LOOP" | tail -1 | cut -d: -f1)
+    main_call_line=$(grep -nE '^[[:space:]]*main$' "$DEVIN_LOOP" | tail -1 | cut -d: -f1)
 
-    [[ -n "$workspace_route_line" ]]
+    [[ -n "$ws_call_line" ]]
     [[ -n "$main_call_line" ]]
-    [[ "$workspace_route_line" -lt "$main_call_line" ]]
+    [[ "$ws_call_line" -lt "$main_call_line" ]]
 }
 
 @test "devin workspace mode skips normal parallel spawning" {
-    local workspace_route_line parallel_spawn_line
+    local ws_call_line parallel_spawn_line
 
-    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$DEVIN_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    ws_call_line=$(grep -nE '^[[:space:]]*run_workspace_mode$' "$DEVIN_LOOP" | tail -1 | cut -d: -f1)
     parallel_spawn_line=$(grep -n 'spawn_parallel_agents' "$DEVIN_LOOP" | head -1 | cut -d: -f1)
 
-    [[ -n "$workspace_route_line" ]]
+    [[ -n "$ws_call_line" ]]
     [[ -n "$parallel_spawn_line" ]]
-    [[ "$workspace_route_line" -lt "$parallel_spawn_line" ]]
+    [[ "$ws_call_line" -lt "$parallel_spawn_line" ]]
 }
 
 @test "devin workspace mode forwards --workspace flag through tmux" {
@@ -2193,25 +2208,27 @@ CODEX_LOOP="${BATS_TEST_DIRNAME}/../../codex/ralph_loop_codex.sh"
 }
 
 @test "codex workspace mode entry point routes before main() call" {
-    local workspace_route_line main_call_line
+    # See ralph_loop.sh equivalent for context: the routing is multi-line,
+    # so anchor on the run_workspace_mode call site directly.
+    local ws_call_line main_call_line
 
-    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$CODEX_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
-    main_call_line=$(grep -n '^\s*main$' "$CODEX_LOOP" | tail -1 | cut -d: -f1)
+    ws_call_line=$(grep -nE '^[[:space:]]*run_workspace_mode$' "$CODEX_LOOP" | tail -1 | cut -d: -f1)
+    main_call_line=$(grep -nE '^[[:space:]]*main$' "$CODEX_LOOP" | tail -1 | cut -d: -f1)
 
-    [[ -n "$workspace_route_line" ]]
+    [[ -n "$ws_call_line" ]]
     [[ -n "$main_call_line" ]]
-    [[ "$workspace_route_line" -lt "$main_call_line" ]]
+    [[ "$ws_call_line" -lt "$main_call_line" ]]
 }
 
 @test "codex workspace mode skips normal parallel spawning" {
-    local workspace_route_line parallel_spawn_line
+    local ws_call_line parallel_spawn_line
 
-    workspace_route_line=$(grep -n 'WORKSPACE_MODE.*true' "$CODEX_LOOP" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+    ws_call_line=$(grep -nE '^[[:space:]]*run_workspace_mode$' "$CODEX_LOOP" | tail -1 | cut -d: -f1)
     parallel_spawn_line=$(grep -n 'spawn_parallel_agents' "$CODEX_LOOP" | head -1 | cut -d: -f1)
 
-    [[ -n "$workspace_route_line" ]]
+    [[ -n "$ws_call_line" ]]
     [[ -n "$parallel_spawn_line" ]]
-    [[ "$workspace_route_line" -lt "$parallel_spawn_line" ]]
+    [[ "$ws_call_line" -lt "$parallel_spawn_line" ]]
 }
 
 @test "codex workspace mode forwards --workspace flag through tmux" {
@@ -2293,9 +2310,11 @@ CODEX_LOOP="${BATS_TEST_DIRNAME}/../../codex/ralph_loop_codex.sh"
 }
 
 @test "all three engines route workspace before parallel spawn" {
+    # See ralph_loop.sh equivalent for context: the routing is multi-line,
+    # so anchor on the run_workspace_mode call site directly.
     for script in "$RALPH_SCRIPT" "$DEVIN_LOOP" "$CODEX_LOOP"; do
         local ws_line par_line
-        ws_line=$(grep -n 'WORKSPACE_MODE.*true' "$script" | grep 'run_workspace_mode' | head -1 | cut -d: -f1)
+        ws_line=$(grep -nE '^[[:space:]]*run_workspace_mode$' "$script" | tail -1 | cut -d: -f1)
         par_line=$(grep -n 'spawn_parallel_agents' "$script" | head -1 | cut -d: -f1)
         [[ -n "$ws_line" ]]
         [[ -n "$par_line" ]]

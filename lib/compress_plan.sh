@@ -88,7 +88,7 @@ run_compress_plan() {
     local superpowers="${3:-false}"
     local superpowers_plugin_dir="${4:-${HOME}/.claude/plugins/repos/superpowers}"
 
-    # 1. Validate engine
+    # 1. Validate engine name (cheap, platform-independent — fail fast on bad spelling)
     local cli_cmd=""
     case "$engine" in
         claude) cli_cmd="claude" ;;
@@ -100,13 +100,10 @@ run_compress_plan() {
             ;;
     esac
 
-    # 2. Verify engine CLI is installed
-    if ! command -v "$cli_cmd" &>/dev/null; then
-        echo "Error: $engine CLI ('$cli_cmd') not found. Install it first." >&2
-        return 1
-    fi
-
-    # 3. Find fix_plan.md
+    # 2. Find fix_plan.md. Done *before* the CLI installation check so
+    # the missing-plan / empty-plan errors surface even when the engine
+    # CLI is absent (the user gets the actionable "no plan to compress"
+    # message, not "claude not installed").
     local fix_plan_path=""
     local fix_plan_contents=""
     local ralph_dir=""
@@ -119,9 +116,16 @@ run_compress_plan() {
         return 1
     fi
 
-    # 4. Check if plan has content worth compressing
+    # 3. Check if plan has content worth compressing
     if [[ -z "$fix_plan_contents" ]]; then
         echo "Error: fix_plan.md is empty. Nothing to compress." >&2
+        return 1
+    fi
+
+    # 4. Verify engine CLI is installed (runtime dependency — checked after
+    # input/state validation so error messages reflect the real problem).
+    if ! command -v "$cli_cmd" &>/dev/null; then
+        echo "Error: $engine CLI ('$cli_cmd') not found. Install it first." >&2
         return 1
     fi
 

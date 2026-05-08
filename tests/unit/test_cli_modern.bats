@@ -1027,19 +1027,13 @@ EOF
     assert_success
 }
 
-@test "API limit prompt defaults to wait in unattended mode" {
-    # When the read prompt times out (empty user_choice), Ralph should
-    # auto-wait instead of exiting — supports unattended operation
-    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
-
-    # The exit condition should ONLY trigger on explicit "2", not on empty/timeout
-    run grep 'user_choice.*==.*"2"' "$script"
-    assert_success
-
-    # Should NOT have the old pattern that exits on empty choice
-    run grep 'user_choice.*==.*"2".*||.*-z.*user_choice' "$script"
-    assert_failure
-}
+# Removed: "API limit prompt defaults to wait in unattended mode"
+# Rationale: The interactive `user_choice` prompt was removed in commit cc65616
+# (single-run architecture refactor). Each ralph invocation now executes one task
+# and exits — there is no read-prompt loop to default. The structural assertion
+# (grep for `user_choice == "2"`) targeted code that no longer exists.
+# Behavioral coverage: tests 102 + 104–115 exercise the API-limit detection path
+# end-to-end against fixture data without depending on a prompt block.
 
 # --- Behavioral Tests: API Limit Detection Against Fixture Data (Issue #183) ---
 # These tests exercise the actual detection logic against fixture files,
@@ -1237,15 +1231,19 @@ EOF
 }
 
 @test "validate_claude_command is called before loop in ralph_loop.sh" {
-    # Structural test: validate_claude_command must be called in main() before the loop
+    # Structural test: validate_claude_command must be called in main() before
+    # execute_claude_code so we fail fast when the CLI is missing instead of
+    # erroring mid-run. The pre-cc65616 anchor was `while true; do`; the single-run
+    # refactor removed that loop, so we now anchor on the first execute_claude_code
+    # call site (the actual work the validation must precede).
     local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
 
-    local validate_line=$(grep -n 'validate_claude_command' "$script" | grep -v '^#' | grep -v 'function\|#' | head -1 | cut -d: -f1)
-    local loop_start_line=$(grep -n 'while true; do' "$script" | head -1 | cut -d: -f1)
+    local validate_line=$(grep -n 'if ! validate_claude_command' "$script" | head -1 | cut -d: -f1)
+    local exec_call_line=$(grep -n 'execute_claude_code 1 ' "$script" | head -1 | cut -d: -f1)
 
     [[ -n "$validate_line" ]]
-    [[ -n "$loop_start_line" ]]
-    [[ "$validate_line" -lt "$loop_start_line" ]]
+    [[ -n "$exec_call_line" ]]
+    [[ "$validate_line" -lt "$exec_call_line" ]]
 }
 
 @test "generate_ralphrc includes CLAUDE_CODE_CMD field" {
