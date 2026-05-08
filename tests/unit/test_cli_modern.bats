@@ -1027,19 +1027,13 @@ EOF
     assert_success
 }
 
-@test "API limit prompt defaults to wait in unattended mode" {
-    # When the read prompt times out (empty user_choice), Ralph should
-    # auto-wait instead of exiting — supports unattended operation
-    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
-
-    # The exit condition should ONLY trigger on explicit "2", not on empty/timeout
-    run grep 'user_choice.*==.*"2"' "$script"
-    assert_success
-
-    # Should NOT have the old pattern that exits on empty choice
-    run grep 'user_choice.*==.*"2".*||.*-z.*user_choice' "$script"
-    assert_failure
-}
+# Removed: "API limit prompt defaults to wait in unattended mode"
+# Rationale: The interactive `user_choice` prompt was removed in commit cc65616
+# (single-run architecture refactor). Each ralph invocation now executes one task
+# and exits — there is no read-prompt loop to default. The structural assertion
+# (grep for `user_choice == "2"`) targeted code that no longer exists.
+# Behavioral coverage: tests 102 + 104–115 exercise the API-limit detection path
+# end-to-end against fixture data without depending on a prompt block.
 
 # --- Behavioral Tests: API Limit Detection Against Fixture Data (Issue #183) ---
 # These tests exercise the actual detection logic against fixture files,
