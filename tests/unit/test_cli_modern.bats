@@ -1231,15 +1231,19 @@ EOF
 }
 
 @test "validate_claude_command is called before loop in ralph_loop.sh" {
-    # Structural test: validate_claude_command must be called in main() before the loop
+    # Structural test: validate_claude_command must be called in main() before
+    # execute_claude_code so we fail fast when the CLI is missing instead of
+    # erroring mid-run. The pre-cc65616 anchor was `while true; do`; the single-run
+    # refactor removed that loop, so we now anchor on the first execute_claude_code
+    # call site (the actual work the validation must precede).
     local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
 
-    local validate_line=$(grep -n 'validate_claude_command' "$script" | grep -v '^#' | grep -v 'function\|#' | head -1 | cut -d: -f1)
-    local loop_start_line=$(grep -n 'while true; do' "$script" | head -1 | cut -d: -f1)
+    local validate_line=$(grep -n 'if ! validate_claude_command' "$script" | head -1 | cut -d: -f1)
+    local exec_call_line=$(grep -n 'execute_claude_code 1 ' "$script" | head -1 | cut -d: -f1)
 
     [[ -n "$validate_line" ]]
-    [[ -n "$loop_start_line" ]]
-    [[ "$validate_line" -lt "$loop_start_line" ]]
+    [[ -n "$exec_call_line" ]]
+    [[ "$validate_line" -lt "$exec_call_line" ]]
 }
 
 @test "generate_ralphrc includes CLAUDE_CODE_CMD field" {
