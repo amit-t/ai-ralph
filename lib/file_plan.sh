@@ -70,7 +70,7 @@ run_file_plan() {
     local superpowers="${4:-false}"
     local superpowers_plugin_dir="${5:-${HOME}/.claude/plugins/repos/superpowers}"
 
-    # 1. Validate engine
+    # 1. Validate engine name (cheap, platform-independent — fail fast on bad spelling)
     local cli_cmd=""
     case "$engine" in
         claude) cli_cmd="claude" ;;
@@ -82,13 +82,8 @@ run_file_plan() {
             ;;
     esac
 
-    # 2. Verify engine CLI is installed
-    if ! command -v "$cli_cmd" &>/dev/null; then
-        echo "Error: $engine CLI ('$cli_cmd') not found. Install it first." >&2
-        return 1
-    fi
-
-    # 3. Validate file path
+    # 2. Validate file path. Done *before* the CLI installation check so
+    # invalid-input errors surface even when the engine CLI is missing.
     if [[ -z "$file_path" ]]; then
         echo "Error: No file path provided. Usage: ralph-plan --file <path>" >&2
         return 1
@@ -104,7 +99,7 @@ run_file_plan() {
         return 1
     fi
 
-    # 4. Read the input file
+    # 3. Read the input file
     local file_content=""
     file_content=$(cat "$file_path")
     if [[ -z "$file_content" ]]; then
@@ -122,7 +117,9 @@ run_file_plan() {
     local file_abs=""
     file_abs=$(cd "$(dirname "$file_path")" && pwd)/$(basename "$file_path")
 
-    # 5. Find existing fix_plan.md (optional -- we can create one if missing)
+    # 4. Find existing fix_plan.md (optional -- we can create one if missing).
+    # Also done *before* the CLI installation check so a missing CLI does not
+    # leave the user without a usable .ralph/ scaffold.
     local fix_plan_path=""
     local fix_plan_contents=""
     local ralph_dir=""
@@ -144,6 +141,13 @@ run_file_plan() {
             ralph_dir=".ralph"
             fix_plan_contents=""
         fi
+    fi
+
+    # 5. Verify engine CLI is installed (runtime dependency — checked after
+    # input/scaffold validation so error messages reflect the real problem).
+    if ! command -v "$cli_cmd" &>/dev/null; then
+        echo "Error: $engine CLI ('$cli_cmd') not found. Install it first." >&2
+        return 1
     fi
 
     # 6. Gather codebase context
