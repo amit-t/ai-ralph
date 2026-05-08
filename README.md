@@ -37,7 +37,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
 - **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
 - **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
-- **Workspace planning** (`ralph-plan --workspace`) — sequential multi-repo planning with state preservation for `[~]` / `[x]` lines, `--repos` allowlist filter, and `--dry-run` preview
+- **Workspace planning** (`ralph-plan --workspace`) — multi-repo planning with state preservation for `[~]` / `[x]` lines, `--repos` allowlist filter, optional `--parallel-plan N` for concurrent per-repo engine calls (buffer-then-merge keeps section order stable), and `--dry-run` preview
 - **Per-gate and install timeouts** (`WORKTREE_GATE_TIMEOUT`, `WORKTREE_INSTALL_TIMEOUT`, both 600s by default) wrapped around dependency installs and each quality gate with live streaming output — no more silent "Running quality gates..." hangs
 - **Quality gate fix mode aliases** (`rpc.qg`, `rpd.qg`, `rpx.qg`) for running gates and auto-fixing failures without a full loop iteration
 - **3-way merge for `fix_plan.md`** on worktree cleanup — preserves sibling agents' `[~]` / `[x]` marks in parallel runs so no two workers claim the same task
@@ -1245,7 +1245,7 @@ Uninstalling one engine does not affect the others.
 - Reads planning context from both `ai/` (workbench convention) and `.ralph/specs/` (ralph-native); concatenates when both exist
 - End-of-run summary: repos planned, new vs preserved tasks, cross-repo count, ambiguities per repo, engine, elapsed time
 - New `lib/workspace_plan.sh` + 20 new tests in `test_workspace_mode.bats`
-- Sequential execution only for now; parallel workspace planning is a follow-up
+- `--parallel-plan N` (Phase A opt-in): bounded worker pool runs up to N per-repo engine calls concurrently, buffer-then-merge keeps `fix_plan.md` section order stable, per-run token isolates concurrent ralph-plan invocations, advisory `flock` (or `mkdir` lock on macOS) on the merge step. Engine-default lookup behind `RALPH_PLAN_PARALLEL_USE_DEFAULTS=1` opt-in flag (Phase B will flip this on by default in a later release). 15 new tests in `test_parallel_plan.bats`
 
 **Parallel-Safe `fix_plan.md` 3-Way Merge** (PR #34)
 - `worktree_cleanup`'s unconditional `cp worktree/fix_plan.md -> main/fix_plan.md` was clobbering sibling parallel agents' `[~]` / `[x]` marks under `rpc.p` / `rpd.p` / `rpx.p`, causing duplicate task claims
