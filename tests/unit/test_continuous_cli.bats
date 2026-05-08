@@ -393,6 +393,35 @@ teardown() {
 }
 
 # =============================================================================
+# Engine auto-exit + continuous mode is mutually exclusive (codex / devin)
+# =============================================================================
+
+@test "codex --no-codex-auto-exit + continuous mode is rejected" {
+    run bash "$CODEX_LOOP" --no-codex-auto-exit --parallel 2 5
+    assert_failure
+    [[ "$output" == *"--no-codex-auto-exit"* ]]
+    [[ "$output" == *"continuous"* ]] || [[ "$output" == *"--parallel"* ]]
+}
+
+@test "devin --no-devin-auto-exit + continuous mode is rejected" {
+    run bash "$DEVIN_LOOP" --no-devin-auto-exit --parallel 2 5
+    assert_failure
+    [[ "$output" == *"--no-devin-auto-exit"* ]]
+    [[ "$output" == *"continuous"* ]] || [[ "$output" == *"--parallel"* ]]
+}
+
+@test "codex --no-codex-auto-exit + batch --parallel (no M) still allowed" {
+    # Batch parallel without M is the existing interactive use case.
+    run bash "$CODEX_LOOP" --no-codex-auto-exit --parallel 2 --help
+    assert_success
+}
+
+@test "devin --no-devin-auto-exit + batch --parallel (no M) still allowed" {
+    run bash "$DEVIN_LOOP" --no-devin-auto-exit --parallel 2 --help
+    assert_success
+}
+
+# =============================================================================
 # Backward compat: --parallel N alone is V1 behavior unchanged
 # =============================================================================
 

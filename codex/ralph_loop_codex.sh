@@ -2217,6 +2217,11 @@ if [[ "$CONTINUOUS_MODE" == "true" ]]; then
         echo "Error: --task and continuous mode (--parallel N M) are mutually exclusive"
         exit 1
     fi
+    if [[ "$CODEX_AUTO_EXIT" == "false" ]]; then
+        echo "Error: --no-codex-auto-exit is incompatible with continuous mode (--parallel N M)."
+        echo "       Continuous mode requires Codex to auto-exit so each worker can complete and respawn."
+        exit 1
+    fi
     if [[ "$PARALLEL_BG" == "true" ]]; then
         echo "Error: continuous mode requires a single coordinator; use --parallel N M (not --parallel-bg)"
         exit 1
