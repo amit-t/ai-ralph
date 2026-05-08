@@ -1243,14 +1243,18 @@ detect_progress_with_commits() {
 # --- Stale Exit Signals Tests (Issue #194) ---
 
 @test "startup resets stale exit signals before main loop" {
-    # Verify ralph_loop.sh resets EXIT_SIGNALS_FILE before the while-true loop
-    # This is the primary fix for #194: stale signals from a prior run
-    # must not cause immediate exit on next invocation
+    # Verify ralph_loop.sh resets EXIT_SIGNALS_FILE before doing the run's work.
+    # This is the primary fix for #194: stale signals from a prior run must not
+    # cause immediate exit on next invocation.
+    #
+    # Pre-cc65616 the anchor was the "Starting main loop" log just before
+    # `while true`. The single-run refactor renamed that to
+    # "Starting task execution" — the same anchor: last log line before the
+    # task-execution work begins.
     local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
 
-    # Find the "Starting main loop" log message (just before while true)
     local main_loop_line
-    main_loop_line=$(grep -n 'Starting main loop' "$script" | head -1 | cut -d: -f1)
+    main_loop_line=$(grep -n 'Starting task execution' "$script" | head -1 | cut -d: -f1)
     [[ -n "$main_loop_line" ]]
 
     # Find the exit signals reset that should appear BEFORE the main loop
