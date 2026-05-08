@@ -69,6 +69,12 @@ setup() {
     grep '^rpd\.ws\.p()' "$DEVIN_ALIASES" | grep -qE '\$\{?2\}?'
 }
 
+@test "rpx.p signature accepts optional M" {
+    grep -q '^rpx\.p()' "$CODEX_ALIASES"
+    grep '^rpx\.p()' "$CODEX_ALIASES" | grep -q -- '--parallel'
+    grep '^rpx\.p()' "$CODEX_ALIASES" | grep -qE '\$\{?2\}?'
+}
+
 @test "rpx.ws.p signature accepts optional M" {
     grep -q '^rpx\.ws\.p()' "$CODEX_ALIASES"
     grep '^rpx\.ws\.p()' "$CODEX_ALIASES" | grep -q -- '--parallel'
@@ -128,6 +134,24 @@ setup() {
     [[ "$output" == "argv: --workspace --parallel 3 12" ]]
 }
 
+@test "rpx.p N invokes ralph-codex with --parallel N (no M)" {
+    run -0 bash -c "
+        source '$CODEX_ALIASES'
+        ralph-codex() { printf 'argv:'; for a in \"\$@\"; do printf ' %s' \"\$a\"; done; printf '\\n'; }
+        rpx.p 4
+    "
+    [[ "$output" == "argv: --parallel 4" ]]
+}
+
+@test "rpx.p N M invokes ralph-codex with --parallel N M" {
+    run -0 bash -c "
+        source '$CODEX_ALIASES'
+        ralph-codex() { printf 'argv:'; for a in \"\$@\"; do printf ' %s' \"\$a\"; done; printf '\\n'; }
+        rpx.p 2 7
+    "
+    [[ "$output" == "argv: --parallel 2 7" ]]
+}
+
 @test "rpx.ws.p N M invokes ralph-codex with --workspace --parallel N M" {
     run -0 bash -c "
         source '$CODEX_ALIASES'
@@ -149,4 +173,9 @@ setup() {
 @test "rpd.p with no args rejects with usage hint" {
     run -127 bash -c "source '$DEVIN_ALIASES'; rpd.p 2>&1"
     [[ "$output" == *"Usage: rpd.p"* ]]
+}
+
+@test "rpx.p with no args rejects with usage hint" {
+    run -127 bash -c "source '$CODEX_ALIASES'; rpx.p 2>&1"
+    [[ "$output" == *"Usage: rpx.p"* ]]
 }

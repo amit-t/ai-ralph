@@ -52,7 +52,12 @@ alias rpx.autoexit='ralph-codex --codex-auto-exit'
 alias rpx.int='ralph-codex --no-codex-auto-exit'
 
 # Parallel mode (spawns N agents: iTerm2 tabs from iTerm, IDE terminal tabs from Windsurf/VS Code/Cursor)
-# Usage: rpx.int.p 3  -> spawns 3 parallel codex agents
+# Usage: rpx.p 3      -> spawns 3 parallel codex agents (auto-exit)
+# rpx.p N             → batch mode (spawn N parallel agents)
+# rpx.p N M           → continuous mode (keep N workers saturated until M attempts)
+rpx.p() { ralph-codex --parallel "${1:?Usage: rpx.p <N> [M]}" ${2:+"$2"}; }
+
+# Usage: rpx.int.p 3  -> spawns 3 parallel codex agents in interactive (no auto-exit) mode
 rpx.int.p() { ralph-codex --no-codex-auto-exit --parallel "${1:?Usage: rpx.int.p <number>}"; }
 
 # Parallel background mode (spawns N agents as background processes in any terminal)
