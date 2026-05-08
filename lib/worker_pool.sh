@@ -119,6 +119,24 @@ init_continuous_state() {
     local state_file
     state_file=$(_continuous_state_file)
     mkdir -p "$(dirname "$state_file")"
+
+    # Concurrent-invocation safety: if a state file already exists AND its
+    # recorded orchestrator PID is alive AND it isn't us, refuse to start.
+    # Two orchestrators in the same project would clobber each other's
+    # in-flight markers and break crash recovery.
+    # Honor RALPH_CONTINUOUS_FORCE=true to override (for tests / recovery).
+    if [[ -f "$state_file" && "${RALPH_CONTINUOUS_FORCE:-false}" != "true" ]]; then
+        local existing_pid
+        existing_pid=$(awk -F'\t' '$1 == "orchestrator_pid" { print $2; exit }' "$state_file" 2>/dev/null)
+        if [[ -n "$existing_pid" && "$existing_pid" =~ ^[0-9]+$ \
+            && "$existing_pid" != "$pid" ]] \
+            && kill -0 "$existing_pid" 2>/dev/null; then
+            echo "ERROR: another continuous-mode orchestrator is already running (pid=${existing_pid}) in this project." >&2
+            echo "       If this is incorrect (e.g., the previous run was hard-killed), remove ${state_file} or set RALPH_CONTINUOUS_FORCE=true." >&2
+            return 2
+        fi
+    fi
+
     local now
     now=$(date +%s)
     {
@@ -229,7 +247,15 @@ run_continuous_worker_pool() {
     start_epoch=$(date +%s)
 
     # State file & SIGINT handling.
-    init_continuous_state $$ || true
+    # init_continuous_state returns 2 if another live orchestrator is
+    # already running in this project; refuse to start in that case so we
+    # don't clobber its in-flight markers. Other init failures (e.g., disk
+    # full) are tolerated so we can still try to make progress.
+    local _init_rc=0
+    init_continuous_state $$ || _init_rc=$?
+    if [[ "$_init_rc" == "2" ]]; then
+        return 2
+    fi
     local _prev_int_trap _prev_term_trap
     _prev_int_trap=$(trap -p INT 2>/dev/null || true)
     _prev_term_trap=$(trap -p TERM 2>/dev/null || true)

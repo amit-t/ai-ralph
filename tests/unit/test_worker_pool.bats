@@ -506,3 +506,87 @@ EOF
     run run_continuous_worker_pool 2 20 1 0 _test_picker _test_executor _test_on_complete
     [[ "$output" == *"queue empty"* ]] || [[ "$output" == *"Queue empty"* ]]
 }
+
+# =============================================================================
+# Concurrent-invocation safety: a second orchestrator must refuse to start
+# while the first is still alive (would otherwise clobber state file).
+# =============================================================================
+
+@test "init_continuous_state refuses when another live orchestrator's state file exists" {
+    # Spawn a long-lived dummy "orchestrator" so we have a guaranteed-alive PID.
+    sleep 30 &
+    local alive_pid=$!
+
+    # Pre-write a state file as if that orchestrator owned it.
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${alive_pid}
+started_at	0
+in_flight	
+EOF
+
+    # Try to init under a different PID. Must refuse.
+    run init_continuous_state 99999  # arbitrary other PID
+    [[ "$status" == "2" ]]
+    [[ "$output" == *"already running"* ]] || [[ "$output" == *"orchestrator"* ]]
+
+    # Cleanup
+    kill "$alive_pid" 2>/dev/null || true
+    wait "$alive_pid" 2>/dev/null || true
+}
+
+@test "init_continuous_state proceeds when prior state file's PID is dead" {
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${dead_pid}
+started_at	0
+in_flight	
+EOF
+
+    # Should succeed — dead orchestrator means prior state is stale.
+    run init_continuous_state 88888
+    assert_success
+    # New PID should be in the state file now.
+    grep -q "88888" "${RALPH_DIR}/.continuous_state"
+}
+
+@test "init_continuous_state honors RALPH_CONTINUOUS_FORCE override" {
+    sleep 30 &
+    local alive_pid=$!
+
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${alive_pid}
+started_at	0
+in_flight	
+EOF
+
+    RALPH_CONTINUOUS_FORCE=true run init_continuous_state 77777
+    assert_success
+    grep -q "77777" "${RALPH_DIR}/.continuous_state"
+
+    kill "$alive_pid" 2>/dev/null || true
+    wait "$alive_pid" 2>/dev/null || true
+}
+
+@test "run_continuous_worker_pool returns 2 when init detects live orchestrator" {
+    sleep 30 &
+    local alive_pid=$!
+
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${alive_pid}
+started_at	0
+in_flight	
+EOF
+
+    cat > "${TEST_DIR}/.test_queue" << 'INNER'
+T1 rc=0
+INNER
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    [[ "$status" == "2" ]]
+
+    kill "$alive_pid" 2>/dev/null || true
+    wait "$alive_pid" 2>/dev/null || true
+}
