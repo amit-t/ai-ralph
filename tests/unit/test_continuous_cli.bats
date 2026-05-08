@@ -353,6 +353,46 @@ teardown() {
 }
 
 # =============================================================================
+# Numeric caps: --parallel N is capped at 10 to prevent fork-bombing
+# =============================================================================
+
+@test "claude --parallel 11 (over cap) errors with capped-at-10 message" {
+    run bash "$CLAUDE_LOOP" --parallel 11
+    assert_failure
+    [[ "$output" == *"capped at 10"* ]]
+}
+
+@test "claude --parallel 100 errors with capped-at-10 message" {
+    run bash "$CLAUDE_LOOP" --parallel 100
+    assert_failure
+    [[ "$output" == *"capped at 10"* ]]
+}
+
+@test "devin --parallel 11 errors" {
+    run bash "$DEVIN_LOOP" --parallel 11
+    assert_failure
+    [[ "$output" == *"capped at 10"* ]]
+}
+
+@test "codex --parallel 11 errors" {
+    run bash "$CODEX_LOOP" --parallel 11
+    assert_failure
+    [[ "$output" == *"capped at 10"* ]]
+}
+
+@test "claude --parallel 10 (at cap) is accepted" {
+    run bash "$CLAUDE_LOOP" --parallel 10 --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "claude --parallel 10 20 (continuous, N at cap) is accepted" {
+    run bash "$CLAUDE_LOOP" --parallel 10 20 --help
+    assert_success
+    [[ "$output" == *"Usage:"* ]]
+}
+
+# =============================================================================
 # Backward compat: --parallel N alone is V1 behavior unchanged
 # =============================================================================
 

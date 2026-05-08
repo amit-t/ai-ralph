@@ -3400,6 +3400,12 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --parallel requires a positive integer (number of agents)"
                 exit 1
             fi
+            # Cap N at 10 to match the batch path (lib/parallel_spawn.sh) and
+            # avoid fork-bombing the host with continuous-mode workers.
+            if [[ "$2" -gt 10 ]]; then
+                echo "Error: --parallel N is capped at 10 (got: $2). Continuous-mode workers are heavyweight; use a smaller N."
+                exit 1
+            fi
             PARALLEL_COUNT="$2"
             # Catch the common typo `--parallel N 0` (or other non-positive
             # numeric M attempts like `00`, `007`) before it falls through and
