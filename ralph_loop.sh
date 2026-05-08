@@ -3168,7 +3168,11 @@ Options:
     --circuit-status        Show circuit breaker status and exit
     --auto-reset-circuit    Auto-reset circuit breaker on startup (bypasses cooldown)
     --reset-session         Reset session state and exit (clears session continuity)
-    --parallel N            Spawn N parallel ralph agents (iTerm2 tabs or IDE terminal tabs, auto-detected)
+    --parallel N [M]        Run N parallel agents.
+                            With one arg (N): spawn N independent agents (iTerm2 tabs / IDE / bg jobs).
+                            With two args (N M): continuous mode — keep N workers saturated until M
+                            total attempts have been spent (success or failure both count). See the
+                            "Continuous Parallel Execution" section below.
     --parallel-bg N         Spawn N parallel ralph agents as background processes (any terminal)
 
 Modern CLI Options:
@@ -3197,18 +3201,17 @@ Workspace Mode:
                             Uses workspace-level .ralph/fix_plan.md with per-repo sections
 
 Continuous Parallel Execution:
-    --max-tasks M           Total attempts before stopping (engages continuous mode)
-                            Pair with --parallel N to keep N workers saturated until
-                            M total attempts (success or failure) have been spent.
-                            Without --max-tasks, --parallel N retains its V1 batch behavior.
+    --parallel N M          Continuous mode: keep N workers saturated until M total attempts.
+                            Engaged automatically by passing M as the second positional arg
+                            to --parallel. Without M, --parallel N retains V1 batch behavior.
     --max-task-attempts K   Per-task retry threshold within a run (default: 1)
                             A task that fails K times is added to the per-run skip-list.
     --respawn-delay SEC     Cooldown between worker replacements (default: 0)
                             Useful for engines that throttle session creation.
-    Env overrides: RALPH_MAX_TASKS, RALPH_MAX_TASK_ATTEMPTS, RALPH_RESPAWN_DELAY
+    Env overrides: RALPH_MAX_TASK_ATTEMPTS, RALPH_RESPAWN_DELAY
     Examples:
-        ralph --parallel 3 --max-tasks 20             # single-repo, 3 workers, 20 attempts
-        ralph --workspace --parallel 3 --max-tasks 20 # multi-repo workspace
+        ralph --parallel 3 20             # single-repo, 3 workers, 20 attempts
+        ralph --workspace --parallel 3 20 # multi-repo workspace, same shape
 
 Files created:
     - $LOG_DIR/: All execution logs
@@ -3389,12 +3392,22 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --parallel)
+            # --parallel N             → batch mode (V1, byte-identical)
+            # --parallel N M           → continuous mode (N concurrent until M attempts)
+            # M is detected as the next positional integer; if $3 is unset or
+            # starts with `-` (next flag), only N is consumed.
             if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
                 echo "Error: --parallel requires a positive integer (number of agents)"
                 exit 1
             fi
             PARALLEL_COUNT="$2"
-            shift 2
+            if [[ -n "${3:-}" && "$3" =~ ^[1-9][0-9]*$ ]]; then
+                MAX_TASKS="$3"
+                CONTINUOUS_MODE=true
+                shift 3
+            else
+                shift 2
+            fi
             ;;
         --parallel-bg)
             if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
@@ -3412,15 +3425,6 @@ while [[ $# -gt 0 ]]; do
         --workspace)
             WORKSPACE_MODE=true
             shift
-            ;;
-        --max-tasks)
-            if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
-                echo "Error: --max-tasks requires a positive integer (got: ${2:-})"
-                exit 1
-            fi
-            MAX_TASKS="$2"
-            CONTINUOUS_MODE=true
-            shift 2
             ;;
         --max-task-attempts)
             if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
@@ -3446,15 +3450,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Resolve env-var fallbacks (CLI flag wins; env is fallback).
-if [[ -z "$MAX_TASKS" && -n "${RALPH_MAX_TASKS:-}" ]]; then
-    if [[ ! "$RALPH_MAX_TASKS" =~ ^[1-9][0-9]*$ ]]; then
-        echo "Error: RALPH_MAX_TASKS must be a positive integer (got: $RALPH_MAX_TASKS)"
-        exit 1
-    fi
-    MAX_TASKS="$RALPH_MAX_TASKS"
-    CONTINUOUS_MODE=true
-fi
+# Resolve env-var fallbacks for tuning knobs (CLI flag wins; env is fallback).
+# Note: MAX_TASKS is no longer settable via env — pass `--parallel N M` to
+# engage continuous mode. RALPH_MAX_TASK_ATTEMPTS / RALPH_RESPAWN_DELAY
+# remain because they tune behavior of an already-engaged continuous run.
 if [[ "$MAX_TASK_ATTEMPTS" == "1" && -n "${RALPH_MAX_TASK_ATTEMPTS:-}" ]]; then
     if [[ ! "$RALPH_MAX_TASK_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: RALPH_MAX_TASK_ATTEMPTS must be a positive integer"
@@ -3471,21 +3470,19 @@ if [[ "$RESPAWN_DELAY" == "0" && -n "${RALPH_RESPAWN_DELAY:-}" ]]; then
 fi
 
 # Validate continuous-mode flag combinations (proposal §4).
+# Continuous mode is engaged by passing the optional second positional arg to
+# --parallel (i.e. --parallel N M). Mutually exclusive with one-shot flags.
 if [[ "$CONTINUOUS_MODE" == "true" ]]; then
-    if [[ "$PARALLEL_COUNT" -lt 1 ]]; then
-        echo "Error: --max-tasks requires --parallel N"
-        exit 1
-    fi
     if [[ -n "$SPECIFIC_TASK_NUM" ]]; then
-        echo "Error: --task and --max-tasks are mutually exclusive"
+        echo "Error: --task and continuous mode (--parallel N M) are mutually exclusive"
         exit 1
     fi
     if [[ "$QG_MODE" == "true" ]]; then
-        echo "Error: --max-tasks does not apply to --qg mode"
+        echo "Error: continuous mode (--parallel N M) does not apply to --qg mode"
         exit 1
     fi
     if [[ "$PARALLEL_BG" == "true" ]]; then
-        echo "Error: --max-tasks requires a single coordinator; use --parallel (not --parallel-bg) with --max-tasks"
+        echo "Error: continuous mode requires a single coordinator; use --parallel N M (not --parallel-bg)"
         exit 1
     fi
 fi

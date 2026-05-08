@@ -211,21 +211,29 @@ The system uses a modular architecture with reusable components in the `lib/` di
 
 ### Continuous Parallel Execution
 
-`--max-tasks M` engages a continuous worker pool: keep ≤ N concurrent until M total attempts (success or failure) are spent, then drain. Strictly opt-in — without `--max-tasks`, `--parallel N` retains its V1 batch behavior byte-identically.
+`--parallel N M` engages a continuous worker pool: keep ≤ N workers running until M total attempts (success or failure) are spent, then drain. Strictly opt-in — `--parallel N` (one positional arg) retains its V1 batch behavior byte-identically.
 
-Flags (all three engines: claude / devin / codex):
+CLI shape (all three engines: claude / devin / codex):
 
 ```
---max-tasks M             total attempts before stopping (engages continuous mode)
+--parallel N              batch mode (V1 — spawn N independent agents)
+--parallel N M            continuous mode (single coordinator, N workers, M total attempts)
 --max-task-attempts K     per-task retry threshold (default 1)
 --respawn-delay SEC       cooldown between worker replacements (default 0)
 ```
 
-Env overrides: `RALPH_MAX_TASKS`, `RALPH_MAX_TASK_ATTEMPTS`, `RALPH_RESPAWN_DELAY`. CLI flag wins over env.
+Env overrides for tuning knobs: `RALPH_MAX_TASK_ATTEMPTS`, `RALPH_RESPAWN_DELAY`. CLI flag wins over env. There is no `RALPH_MAX_TASKS` env — engagement of continuous mode is always explicit at the CLI (pass M as the second positional arg to `--parallel`).
 
-Aliases: `rpc.cont N M`, `rpc.ws.cont N M`, plus `rpd.cont` / `rpx.cont` (workspace variants `rpd.ws.cont` / `rpx.ws.cont`).
+Aliases (canonical form for both modes — the alias detects M):
 
-Mutually exclusive with `--task`, `--qg` (Claude only), and `--parallel-bg`. Requires `--parallel N`.
+```
+rpc.p N         rpd.p N         rpx.p N            # batch
+rpc.p N M       rpd.p N M       rpx.p N M          # continuous
+rpc.ws.p N      rpd.ws.p N      rpx.ws.p N         # batch workspace
+rpc.ws.p N M    rpd.ws.p N M    rpx.ws.p N M       # continuous workspace
+```
+
+Continuous mode is mutually exclusive with `--task`, `--qg` (Claude only), and `--parallel-bg`. The validator emits human-readable errors when these are combined.
 
 Stop reasons reported in the summary: `target reached (M)`, `queue empty`, `user interrupt`, `circuit breaker open`, `fatal error`. Hard-kill (SIGKILL) leaves stale `[~]` markers; the next ralph startup auto-recovers them via `sweep_stale_continuous_state`.
 

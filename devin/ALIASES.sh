@@ -51,7 +51,9 @@ alias rpd.wt.int='ralph-devin --no-devin-auto-exit --live --monitor'
 
 # Parallel non-interactive (spawns N agents: iTerm2 tabs or IDE terminal tabs)
 # Usage: rpd.p 3  -> spawns 3 parallel devin agents (auto-exit)
-rpd.p() { ralph-devin --parallel "${1:?Usage: rpd.p <number>}"; }
+# rpd.p N        → batch mode (spawn N parallel agents)
+# rpd.p N M      → continuous mode (keep N workers saturated until M attempts)
+rpd.p() { ralph-devin --parallel "${1:?Usage: rpd.p <N> [M]}" ${2:+"$2"}; }
 
 # Parallel interactive (spawns N agents in TUI mode)
 # Usage: rpd.int.p 3  -> spawns 3 parallel devin agents in interactive mode
@@ -111,10 +113,6 @@ rpd.task.int() { ralph-devin --no-devin-auto-exit --task "${1:?Usage: rpd.task.i
 # Workspace mode (multi-repo orchestration)
 alias rpd.ws='ralph-devin --workspace'
 alias rpd.ws.int='ralph-devin --workspace --live --monitor'
-rpd.ws.p() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.p <N>}"; }
-
-# Continuous parallel execution: keep N workers saturated until M attempts.
-# Usage: rpd.cont <N> <M>          → single-repo, N concurrent, M total
-#        rpd.ws.cont <N> <M>       → multi-repo workspace
-rpd.cont() { ralph-devin --parallel "${1:?Usage: rpd.cont <N> <M>}" --max-tasks "${2:?Usage: rpd.cont <N> <M>}"; }
-rpd.ws.cont() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.cont <N> <M>}" --max-tasks "${2:?Usage: rpd.ws.cont <N> <M>}"; }
+# rpd.ws.p N      → batch workspace (1 batch of N tasks)
+# rpd.ws.p N M    → continuous workspace (N concurrent until M attempts)
+rpd.ws.p() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.p <N> [M]}" ${2:+"$2"}; }

@@ -58,7 +58,9 @@ alias rpc.int='ralph --live --monitor'
 # Use rpc.live.p for streaming output in a single pane, or rpc.int.p for
 # the full tmux dashboard.
 # Usage: rpc.p 3  -> spawns 3 parallel ralph agents (auto-exit)
-rpc.p() { ralph --parallel "${1:?Usage: rpc.p <number>}"; }
+# rpc.p N        → batch mode (spawn N parallel agents)
+# rpc.p N M      → continuous mode (keep N workers saturated until M attempts)
+rpc.p() { ralph --parallel "${1:?Usage: rpc.p <N> [M]}" ${2:+"$2"}; }
 
 # Parallel live-only (streams Claude output in each tab, no tmux split / monitor)
 # Usage: rpc.live.p 3  -> spawns 3 parallel ralph agents with streaming output only
@@ -128,13 +130,9 @@ rpc.task.int() { ralph --live --monitor --task "${1:?Usage: rpc.task.int <task_n
 # Workspace mode (multi-repo orchestration)
 alias rpc.ws='ralph --workspace'
 alias rpc.ws.int='ralph --workspace --live --monitor'
-rpc.ws.p() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p <N>}"; }
-
-# Continuous parallel execution: keep N workers saturated until M attempts.
-# Usage: rpc.cont <N> <M>          → single-repo, N concurrent, M total
-#        rpc.ws.cont <N> <M>       → multi-repo workspace
-rpc.cont() { ralph --parallel "${1:?Usage: rpc.cont <N> <M>}" --max-tasks "${2:?Usage: rpc.cont <N> <M>}"; }
-rpc.ws.cont() { ralph --workspace --parallel "${1:?Usage: rpc.ws.cont <N> <M>}" --max-tasks "${2:?Usage: rpc.ws.cont <N> <M>}"; }
+# rpc.ws.p N      → batch workspace (1 batch of N tasks)
+# rpc.ws.p N M    → continuous workspace (N concurrent until M attempts)
+rpc.ws.p() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p <N> [M]}" ${2:+"$2"}; }
 
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'

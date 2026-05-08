@@ -1,9 +1,33 @@
-# Upstream ralph V2: continuous parallel execution via `--max-tasks M`
+# Upstream ralph V2: continuous parallel execution via `--parallel N M`
 
-Status: draft (design only, not implementation).
+Status: implemented. Final shape merged with `--parallel N M` instead of the originally-proposed `--max-tasks M` flag — see "Amendment, 2026-05-08" below for rationale and search-and-replace mapping.
 Audience: ai-ralph maintainers.
 Author: ai-ralph team.
-Date: 2026-05-07.
+Date: 2026-05-07 (original); amended 2026-05-08.
+
+## Amendment, 2026-05-08
+
+The original draft proposed a dedicated `--max-tasks M` flag plus a `RALPH_MAX_TASKS` env var to engage continuous mode. During implementation review the CLI surface was collapsed into a single ergonomic shape:
+
+- **`--parallel N`** → batch mode (V1, byte-identical)
+- **`--parallel N M`** → continuous mode (N concurrent until M attempts)
+
+Rationale: users already think of "N" and "M" as a pair. A single command with one or two positional integers is easier to remember than two flags that must always be paired. The aliases collapse the same way: `rpc.p 3 10` (instead of `rpc.cont 3 10`); the `*.cont` family is gone.
+
+Mapping for readers of the original draft:
+
+| Original draft | Final shape |
+|---|---|
+| `--max-tasks M` | second positional arg to `--parallel` |
+| `RALPH_MAX_TASKS` env | removed (engagement is always explicit at the CLI) |
+| `--max-task-attempts K` | unchanged (still its own flag) |
+| `--respawn-delay SEC` | unchanged |
+| `RALPH_MAX_TASK_ATTEMPTS` env | unchanged |
+| `RALPH_RESPAWN_DELAY` env | unchanged |
+| `rpc.cont N M` / `rpd.cont` / `rpx.cont` | `rpc.p N M` / `rpd.p N M` / `rpx.p N M` |
+| `rpc.ws.cont N M` etc. | `rpc.ws.p N M` etc. |
+
+The body of this proposal references the original flag name throughout. Mentally substitute `--max-tasks M` → "second positional arg to `--parallel`" when reading.
 
 ## 1. Problem statement
 
