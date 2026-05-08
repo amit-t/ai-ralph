@@ -133,6 +133,39 @@ teardown() {
     [[ "$output" == *"--parallel"* ]]
 }
 
+# =============================================================================
+# `--parallel N 0` and similar typos produce a clear error (not "Unknown option")
+# =============================================================================
+
+@test "claude --parallel N 0 errors with a clear M-must-be-positive message" {
+    run bash "$CLAUDE_LOOP" --parallel 3 0
+    assert_failure
+    [[ "$output" == *"continuous-mode M"* ]]
+    [[ "$output" == *"positive integer"* ]] || [[ "$output" == *">= 1"* ]]
+    # Must NOT bleed through to the generic "Unknown option" path.
+    [[ "$output" != *"Unknown option: 0"* ]]
+}
+
+@test "devin --parallel N 0 errors with a clear M-must-be-positive message" {
+    run bash "$DEVIN_LOOP" --parallel 3 0
+    assert_failure
+    [[ "$output" == *"continuous-mode M"* ]]
+    [[ "$output" != *"Unknown option: 0"* ]]
+}
+
+@test "codex --parallel N 0 errors with a clear M-must-be-positive message" {
+    run bash "$CODEX_LOOP" --parallel 3 0
+    assert_failure
+    [[ "$output" == *"continuous-mode M"* ]]
+    [[ "$output" != *"Unknown option: 0"* ]]
+}
+
+@test "claude --parallel N 007 (leading-zero numeric) errors clearly" {
+    run bash "$CLAUDE_LOOP" --parallel 3 007
+    assert_failure
+    [[ "$output" == *"continuous-mode M"* ]]
+}
+
 @test "claude --max-task-attempts rejects non-numeric" {
     run bash "$CLAUDE_LOOP" --max-task-attempts xyz
     assert_failure

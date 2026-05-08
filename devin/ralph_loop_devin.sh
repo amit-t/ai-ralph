@@ -2119,6 +2119,12 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             PARALLEL_COUNT="$2"
+            # Catch `--parallel N 0` typo before it falls through to a confusing
+            # "Unknown option: 0" error.
+            if [[ -n "${3:-}" && "$3" =~ ^[0-9]+$ && ! "$3" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: continuous-mode M (second --parallel argument) must be a positive integer >= 1 (got: '$3')"
+                exit 1
+            fi
             if [[ -n "${3:-}" && "$3" =~ ^[1-9][0-9]*$ ]]; then
                 MAX_TASKS="$3"
                 CONTINUOUS_MODE=true

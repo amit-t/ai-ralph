@@ -3401,6 +3401,13 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             PARALLEL_COUNT="$2"
+            # Catch the common typo `--parallel N 0` (or other non-positive
+            # numeric M attempts like `00`, `007`) before it falls through and
+            # produces the confusing "Unknown option: 0" error.
+            if [[ -n "${3:-}" && "$3" =~ ^[0-9]+$ && ! "$3" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: continuous-mode M (second --parallel argument) must be a positive integer >= 1 (got: '$3')"
+                exit 1
+            fi
             if [[ -n "${3:-}" && "$3" =~ ^[1-9][0-9]*$ ]]; then
                 MAX_TASKS="$3"
                 CONTINUOUS_MODE=true
