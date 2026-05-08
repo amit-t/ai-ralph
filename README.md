@@ -428,6 +428,34 @@ In parallel mode, steps 1-6 run concurrently across up to N repos (one task per 
 - Quality gate failures still produce a PR, tagged with `quality-gates-failed` for manual review
 - Use `ralph-plan --engine devin` (or `codex`, `claude`) from the workspace root to have AI generate the initial `fix_plan.md` from PRDs or specs
 
+### Subsetting a workspace run (`--repos` / `--exclude`)
+
+By default `ralph --workspace` walks every git repo in the workspace. Two flags
+narrow the scope without moving directories or hand-editing `fix_plan.md`:
+
+```bash
+# Allowlist: only these repos are in scope
+ralph --workspace --repos api,worker
+
+# Denylist: every repo except these
+ralph --workspace --exclude web
+
+# Combined with parallel: parallelism caps at min(N, len(filtered_set))
+ralph --workspace --parallel 4 --repos api,worker     # ⇒ effective parallel = 2
+
+# Equivalent env var form (CLI flag wins on conflict)
+RALPH_WORKSPACE_REPOS=api,worker ralph --workspace
+RALPH_WORKSPACE_EXCLUDE=web      ralph --workspace
+```
+
+Rules:
+
+- `--repos` and `--exclude` are mutually exclusive (with each other and across env vars).
+- Names are exact-match against discovered directory basenames. Unknown name fails fast and lists the available set.
+- After filtering, an empty result is a fail-fast error.
+- The `## cross-repo` section in `fix_plan.md` is always skipped under a filter (a cross-repo task may name an out-of-scope repo).
+- Without either flag, behavior is byte-identical to V1.
+
 ---
 
 ## Aliases Reference
