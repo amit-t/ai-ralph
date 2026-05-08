@@ -37,7 +37,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
 - **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
 - **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
-- **Workspace planning** (`ralph-plan --workspace`) — sequential multi-repo planning with state preservation for `[~]` / `[x]` lines, `--repos` allowlist filter, and `--dry-run` preview
+- **Workspace planning** (`ralph-plan --workspace`) — multi-repo planning with state preservation for `[~]` / `[x]` lines, `--repos` allowlist filter, optional `--parallel-plan N` for concurrent per-repo engine calls (buffer-then-merge keeps section order stable), and `--dry-run` preview
 - **Per-gate and install timeouts** (`WORKTREE_GATE_TIMEOUT`, `WORKTREE_INSTALL_TIMEOUT`, both 600s by default) wrapped around dependency installs and each quality gate with live streaming output — no more silent "Running quality gates..." hangs
 - **Quality gate fix mode aliases** (`rpc.qg`, `rpd.qg`, `rpx.qg`) for running gates and auto-fixing failures without a full loop iteration
 - **3-way merge for `fix_plan.md`** on worktree cleanup — preserves sibling agents' `[~]` / `[x]` marks in parallel runs so no two workers claim the same task
@@ -427,6 +427,34 @@ In parallel mode, steps 1-6 run concurrently across up to N repos (one task per 
 - Run `ralph --workspace --parallel 0` is not supported at the CLI level -- omit the count or use a positive integer
 - Quality gate failures still produce a PR, tagged with `quality-gates-failed` for manual review
 - Use `ralph-plan --engine devin` (or `codex`, `claude`) from the workspace root to have AI generate the initial `fix_plan.md` from PRDs or specs
+
+### Subsetting a workspace run (`--repos` / `--exclude`)
+
+By default `ralph --workspace` walks every git repo in the workspace. Two flags
+narrow the scope without moving directories or hand-editing `fix_plan.md`:
+
+```bash
+# Allowlist: only these repos are in scope
+ralph --workspace --repos api,worker
+
+# Denylist: every repo except these
+ralph --workspace --exclude web
+
+# Combined with parallel: parallelism caps at min(N, len(filtered_set))
+ralph --workspace --parallel 4 --repos api,worker     # ⇒ effective parallel = 2
+
+# Equivalent env var form (CLI flag wins on conflict)
+RALPH_WORKSPACE_REPOS=api,worker ralph --workspace
+RALPH_WORKSPACE_EXCLUDE=web      ralph --workspace
+```
+
+Rules:
+
+- `--repos` and `--exclude` are mutually exclusive (with each other and across env vars).
+- Names are exact-match against discovered directory basenames. Unknown name fails fast and lists the available set.
+- After filtering, an empty result is a fail-fast error.
+- The `## cross-repo` section in `fix_plan.md` is always skipped under a filter (a cross-repo task may name an out-of-scope repo).
+- Without either flag, behavior is byte-identical to V1.
 
 ---
 
@@ -1217,7 +1245,7 @@ Uninstalling one engine does not affect the others.
 - Reads planning context from both `ai/` (workbench convention) and `.ralph/specs/` (ralph-native); concatenates when both exist
 - End-of-run summary: repos planned, new vs preserved tasks, cross-repo count, ambiguities per repo, engine, elapsed time
 - New `lib/workspace_plan.sh` + 20 new tests in `test_workspace_mode.bats`
-- Sequential execution only for now; parallel workspace planning is a follow-up
+- `--parallel-plan N` (Phase A opt-in): bounded worker pool runs up to N per-repo engine calls concurrently, buffer-then-merge keeps `fix_plan.md` section order stable, per-run token isolates concurrent ralph-plan invocations, advisory `flock` (or `mkdir` lock on macOS) on the merge step. Engine-default lookup behind `RALPH_PLAN_PARALLEL_USE_DEFAULTS=1` opt-in flag (Phase B will flip this on by default in a later release). 15 new tests in `test_parallel_plan.bats`
 
 **Parallel-Safe `fix_plan.md` 3-Way Merge** (PR #34)
 - `worktree_cleanup`'s unconditional `cp worktree/fix_plan.md -> main/fix_plan.md` was clobbering sibling parallel agents' `[~]` / `[x]` marks under `rpc.p` / `rpd.p` / `rpx.p`, causing duplicate task claims

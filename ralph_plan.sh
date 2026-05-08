@@ -43,6 +43,8 @@ FILE_PATH=""
 WORKSPACE_MODE=false
 WORKSPACE_REPOS_FILTER=""
 WORKSPACE_DRY_RUN=false
+WORKSPACE_PARALLEL_PLAN=""    # raw user-provided value (CLI flag or env var)
+WORKSPACE_PARALLEL_PLAN_RESOLVED=""  # validated effective value (post engine-default lookup)
 
 # Engine selection: claude (default), codex, devin
 ENGINE="claude"
@@ -145,6 +147,12 @@ Options:
                        for - [~] (in-progress) and - [x] (completed) lines.
     --repos <list>     Comma-separated repo allowlist for --workspace mode.
                        Unlisted repos are untouched. Example: --repos svc-a,svc-b
+    --parallel-plan N  --workspace only: run up to N per-repo plan workers
+                       concurrently. N=1 ⇒ sequential (V1, default). N>1 fans out
+                       engine calls; section ordering in the merged fix_plan.md
+                       stays in REPO list order via buffer-then-merge.
+                       Engine defaults: claude=4, devin=2, codex=2 (opt-in via
+                       RALPH_PLAN_PARALLEL_USE_DEFAULTS=1).
     --dry-run          --workspace only: run the engine per repo but do NOT write
                        .ralph/fix_plan.md. Summary still emitted.
     -h, --help         Show this help
@@ -745,6 +753,117 @@ run_ai_planning() {
 # WORKSPACE PLANNING (--workspace)
 # =============================================================================
 
+# Resolve --parallel-plan N. Resolution order:
+#   1. CLI flag (already in $WORKSPACE_PARALLEL_PLAN if set)
+#   2. Env var RALPH_PLAN_PARALLEL
+#   3. Per-engine default (only when RALPH_PLAN_PARALLEL_USE_DEFAULTS=1)
+#   4. Hard fallback: 1 (sequential, V1)
+# Caps at $repo_count.
+# Sets WORKSPACE_PARALLEL_PLAN_RESOLVED.
+_resolve_parallel_plan() {
+    local repo_count="$1"
+    local engine="$2"
+    local n=""
+
+    if [[ -n "$WORKSPACE_PARALLEL_PLAN" ]]; then
+        n="$WORKSPACE_PARALLEL_PLAN"
+    elif [[ -n "${RALPH_PLAN_PARALLEL:-}" ]]; then
+        if ! [[ "$RALPH_PLAN_PARALLEL" =~ ^[0-9]+$ ]] || [[ "$RALPH_PLAN_PARALLEL" -lt 1 ]]; then
+            log "ERROR" "RALPH_PLAN_PARALLEL must be a positive integer (got: $RALPH_PLAN_PARALLEL)"
+            return 1
+        fi
+        n="$RALPH_PLAN_PARALLEL"
+    elif [[ "${RALPH_PLAN_PARALLEL_USE_DEFAULTS:-0}" == "1" ]]; then
+        case "$engine" in
+            claude) n=4 ;;
+            devin)  n=2 ;;
+            codex)  n=2 ;;
+            *)      n=1 ;;
+        esac
+    else
+        n=1
+    fi
+
+    # Cap at repo_count
+    if [[ "$n" -gt "$repo_count" ]]; then
+        n="$repo_count"
+    fi
+    if [[ "$n" -lt 1 ]]; then
+        n=1
+    fi
+    WORKSPACE_PARALLEL_PLAN_RESOLVED="$n"
+    return 0
+}
+
+# _workspace_plan_orphan_cleanup — sweep .plan-tmp/<token>/ dirs whose owning
+# PID is not alive. Token format: "<pid>_<epoch_ms>". Silent.
+_workspace_plan_orphan_cleanup() {
+    local tmp_root="$1"
+    [[ -d "$tmp_root" ]] || return 0
+    local entry pid_part
+    for entry in "$tmp_root"/*/; do
+        [[ -d "$entry" ]] || continue
+        pid_part="$(basename "$entry")"
+        pid_part="${pid_part%%_*}"
+        [[ "$pid_part" =~ ^[0-9]+$ ]] || continue
+        if ! kill -0 "$pid_part" 2>/dev/null; then
+            rm -rf "$entry" 2>/dev/null || true
+        fi
+    done
+}
+
+# _workspace_plan_step_a — Run Step A (context+prompt+engine+parse) for one repo.
+# Output: $work_dir/<repo>.{context,prompt,out,parsed,tasks,ambig,cross}.md/txt
+# Returns 0 on success, 1 on failure (engine error or no context). When the repo
+# has no ai/ or .ralph/specs/ context, returns 2 (skipped) so callers can
+# distinguish skip-vs-fail.
+_workspace_plan_step_a() {
+    local repo_name="$1"
+    local ws="$2"
+    local work_dir="$3"
+
+    local repo_path="$ws/$repo_name"
+    if [[ ! -d "$repo_path/.git" ]]; then
+        log "WARN" "Skipping $repo_name: not a git repo"
+        return 1
+    fi
+
+    local context_file="$work_dir/${repo_name}.context.md"
+    if ! workspace_plan_collect_repo_context "$repo_path" > "$context_file"; then
+        log "WARN" "[$repo_name] no ai/ or .ralph/specs/ context — skipping"
+        rm -f "$context_file"
+        return 2
+    fi
+    local context
+    context=$(cat "$context_file")
+
+    local prompt_file="$work_dir/${repo_name}.prompt.md"
+    local output_file
+    output_file="$(cd "$work_dir" && pwd)/${repo_name}.out.md"
+    local repo_path_abs
+    repo_path_abs="$(cd "$repo_path" && pwd)"
+
+    workspace_plan_build_prompt "$prompt_file" "$repo_name" "$repo_path_abs" "$output_file" "$THINKING_LEVEL" "$context"
+
+    log "PLAN" "[$repo_name] invoking $ENGINE..."
+    if ! workspace_plan_run_engine "$ENGINE" "$MODEL" "$THINKING_LEVEL" \
+        "$repo_name" "$repo_path_abs" "$output_file" "$prompt_file" "$YOLO_MODE"; then
+        log "ERROR" "[$repo_name] engine failed — skipping merge"
+        return 1
+    fi
+
+    local parsed_file="$work_dir/${repo_name}.parsed.txt"
+    workspace_plan_parse_output "$output_file" > "$parsed_file"
+
+    local tasks_file="$work_dir/${repo_name}.tasks.txt"
+    local ambig_file="$work_dir/${repo_name}.ambig.txt"
+    local cross_file="$work_dir/${repo_name}.cross.txt"
+    grep '^TASK|'  "$parsed_file" 2>/dev/null | sed 's/^TASK|//'  > "$tasks_file" || true
+    grep '^AMBIG|' "$parsed_file" 2>/dev/null | sed 's/^AMBIG|//' > "$ambig_file" || true
+    grep '^CROSS|' "$parsed_file" 2>/dev/null | sed 's/^CROSS|//' > "$cross_file" || true
+    return 0
+}
+
 run_workspace_plan() {
     local ws="."
 
@@ -793,6 +912,29 @@ run_workspace_plan() {
     repo_count=$(echo "$repos" | grep -c .)
     log "PLAN" "Workspace plan: $repo_count repo(s)"
 
+    # Resolve parallelism (CLI > env > engine-default-opt-in > 1)
+    if ! _resolve_parallel_plan "$repo_count" "$ENGINE"; then
+        return 1
+    fi
+    local par_n="$WORKSPACE_PARALLEL_PLAN_RESOLVED"
+
+    # Per-run isolation under .plan-tmp/<token>/. Sequential N=1 keeps the V1
+    # flat $work_dir layout (byte-identical output guarantee). Parallel N>1
+    # gets a token-scoped subdir so concurrent ralph-plan invocations cannot
+    # collide. On startup we also sweep orphans from prior crashed runs.
+    local plan_tmp_root="$ws/.ralph/.plan-tmp"
+    _workspace_plan_orphan_cleanup "$plan_tmp_root"
+    local run_token=""
+    if [[ "$par_n" -gt 1 ]]; then
+        local epoch_ms
+        epoch_ms="$(date +%s%N 2>/dev/null || date +%s)000000000"
+        epoch_ms="${epoch_ms:0:13}"
+        run_token="$$_${epoch_ms}"
+        work_dir="$plan_tmp_root/$run_token"
+        mkdir -p "$work_dir"
+        log "PLAN" "[parallel-plan N=$par_n] token=$run_token tmp=$work_dir"
+    fi
+
     local start_ts
     start_ts=$(date +%s)
 
@@ -806,60 +948,139 @@ run_workspace_plan() {
     local -a planned_repos=()
     local -a ambig_lines=()
     local -a skipped_no_context=()
+    # Tracks the result of Step A per repo as newline-separated "repo|status"
+    # pairs (bash 3.2 has no associative arrays).
+    local step_a_status=""
 
     local cross_all_file="$work_dir/_cross_all.txt"
     : > "$cross_all_file"
 
-    # Iterate repos sequentially
+    # Helper to record Step A status for one repo.
+    _record_step_a() {
+        local _r="$1"; local _rc="$2"
+        case "$_rc" in
+            0) step_a_status="${step_a_status}${_r}|ok"$'\n' ;;
+            2) step_a_status="${step_a_status}${_r}|skip"$'\n'; skipped_no_context+=("$_r") ;;
+            *) step_a_status="${step_a_status}${_r}|fail"$'\n' ;;
+        esac
+    }
+
+    # ── Step A: per-repo engine + parse ──────────────────────────────
+    if [[ "$par_n" -le 1 ]]; then
+        # Sequential path — unchanged from V1 (byte-identical when no flag).
+        while IFS= read -r repo_name; do
+            [[ -z "$repo_name" ]] && continue
+            local rc=0
+            _workspace_plan_step_a "$repo_name" "$ws" "$work_dir" || rc=$?
+            _record_step_a "$repo_name" "$rc"
+        done <<< "$repos"
+    else
+        # Parallel path — bounded worker pool of size par_n. Bash 3.2 has no
+        # associative arrays, so we use parallel index arrays for pid↔repo.
+        local -a active_pids=()
+        local -a active_repos=()
+        local repo_name rc_file
+        while IFS= read -r repo_name; do
+            [[ -z "$repo_name" ]] && continue
+            # Throttle: wait until pool has capacity
+            while [[ "${#active_pids[@]}" -ge "$par_n" ]]; do
+                local -a still_pids=()
+                local -a still_repos=()
+                local i
+                for i in "${!active_pids[@]}"; do
+                    local pid="${active_pids[$i]}"
+                    local r="${active_repos[$i]}"
+                    if kill -0 "$pid" 2>/dev/null; then
+                        still_pids+=("$pid")
+                        still_repos+=("$r")
+                    else
+                        wait "$pid" 2>/dev/null || true
+                        local st_rc
+                        st_rc=$(cat "$work_dir/${r}.rc" 2>/dev/null || echo 1)
+                        _record_step_a "$r" "$st_rc"
+                    fi
+                done
+                active_pids=("${still_pids[@]}")
+                active_repos=("${still_repos[@]}")
+                [[ "${#active_pids[@]}" -ge "$par_n" ]] && sleep 1
+            done
+            rc_file="$work_dir/${repo_name}.rc"
+            (
+                _workspace_plan_step_a "$repo_name" "$ws" "$work_dir"
+                echo "$?" > "$rc_file"
+            ) &
+            active_pids+=("$!")
+            active_repos+=("$repo_name")
+        done <<< "$repos"
+
+        # Drain remaining workers
+        local i
+        for i in "${!active_pids[@]}"; do
+            local pid="${active_pids[$i]}"
+            local r="${active_repos[$i]}"
+            wait "$pid" 2>/dev/null || true
+            local st_rc
+            st_rc=$(cat "$work_dir/${r}.rc" 2>/dev/null || echo 1)
+            _record_step_a "$r" "$st_rc"
+        done
+    fi
+
+    # ── Step B: merge in REPO list order (serial, with advisory lock when parallel) ──
+    # Use flock(1) when present (Linux), fall back to mkdir-as-lock on macOS.
+    local lock_file="$ws/.ralph/.plan.lock"
+    local lock_dir="$ws/.ralph/.plan.lock.d"
+    local lock_held=false
+    local lock_kind=""
+    if [[ "$par_n" -gt 1 && "$WORKSPACE_DRY_RUN" != true ]]; then
+        if command -v flock >/dev/null 2>&1; then
+            exec 200>"$lock_file"
+            if ! flock -w 30 200; then
+                log "ERROR" "another ralph-plan is already merging fix_plan.md, try again in a moment"
+                exec 200>&-
+                return 1
+            fi
+            lock_held=true
+            lock_kind="flock"
+        else
+            local _waited=0
+            while ! mkdir "$lock_dir" 2>/dev/null; do
+                _waited=$((_waited + 1))
+                if [[ $_waited -gt 30 ]]; then
+                    log "ERROR" "another ralph-plan is already merging fix_plan.md, try again in a moment"
+                    return 1
+                fi
+                sleep 1
+            done
+            lock_held=true
+            lock_kind="mkdir"
+        fi
+    fi
+
+    # Step A status lookup (newline-separated "repo|status" pairs).
+    _step_a_status_for() {
+        local _r="$1"
+        local line
+        line=$(echo "$step_a_status" | grep "^${_r}|" | head -1)
+        if [[ -z "$line" ]]; then
+            echo "fail"
+            return
+        fi
+        echo "${line#*|}"
+    }
+
+    local merge_failed=false
     while IFS= read -r repo_name; do
         [[ -z "$repo_name" ]] && continue
-
-        local repo_path="$ws/$repo_name"
-        if [[ ! -d "$repo_path/.git" ]]; then
-            log "WARN" "Skipping $repo_name: not a git repo"
-            continue
-        fi
-
-        # Collect planning context from ai/ + .ralph/specs/
-        local context_file="$work_dir/${repo_name}.context.md"
-        if ! workspace_plan_collect_repo_context "$repo_path" > "$context_file"; then
-            log "WARN" "[$repo_name] no ai/ or .ralph/specs/ context — skipping"
-            skipped_no_context+=("$repo_name")
-            rm -f "$context_file"
-            continue
-        fi
-        local context
-        context=$(cat "$context_file")
-
-        # Build prompt + output file paths (absolute)
-        local prompt_file="$work_dir/${repo_name}.prompt.md"
-        local output_file
-        output_file="$(cd "$work_dir" && pwd)/${repo_name}.out.md"
-        local repo_path_abs
-        repo_path_abs="$(cd "$repo_path" && pwd)"
-
-        workspace_plan_build_prompt "$prompt_file" "$repo_name" "$repo_path_abs" "$output_file" "$THINKING_LEVEL" "$context"
-
-        # Drive engine
-        log "PLAN" "[$repo_name] invoking $ENGINE..."
-        if ! workspace_plan_run_engine "$ENGINE" "$MODEL" "$THINKING_LEVEL" \
-            "$repo_name" "$repo_path_abs" "$output_file" "$prompt_file" "$YOLO_MODE"; then
-            log "ERROR" "[$repo_name] engine failed — skipping merge"
-            continue
-        fi
-
-        # Parse engine output
-        local parsed_file="$work_dir/${repo_name}.parsed.txt"
-        workspace_plan_parse_output "$output_file" > "$parsed_file"
+        local status
+        status=$(_step_a_status_for "$repo_name")
+        case "$status" in
+            skip|fail) continue ;;
+        esac
 
         local tasks_file="$work_dir/${repo_name}.tasks.txt"
         local ambig_file="$work_dir/${repo_name}.ambig.txt"
         local cross_file="$work_dir/${repo_name}.cross.txt"
-        grep '^TASK|'  "$parsed_file" 2>/dev/null | sed 's/^TASK|//'  > "$tasks_file" || true
-        grep '^AMBIG|' "$parsed_file" 2>/dev/null | sed 's/^AMBIG|//' > "$ambig_file" || true
-        grep '^CROSS|' "$parsed_file" 2>/dev/null | sed 's/^CROSS|//' > "$cross_file" || true
 
-        # Merge into fix_plan (unless dry-run)
         local merge_stats=""
         if [[ "$WORKSPACE_DRY_RUN" == true ]]; then
             local dry_new
@@ -868,6 +1089,7 @@ run_workspace_plan() {
         else
             if ! merge_stats=$(workspace_plan_merge_repo_section "$fix_plan" "$repo_name" "$tasks_file"); then
                 log "ERROR" "[$repo_name] merge failed"
+                merge_failed=true
                 continue
             fi
         fi
@@ -886,7 +1108,6 @@ run_workspace_plan() {
             total_ambig=$((total_ambig + 1))
         done < "$ambig_file"
 
-        # Collect cross-repo tasks for workspace-level merge
         if [[ -s "$cross_file" ]]; then
             cat "$cross_file" >> "$cross_all_file"
         fi
@@ -894,6 +1115,19 @@ run_workspace_plan() {
         planned_repos+=("$repo_name")
         log "SUCCESS" "[$repo_name] merged: ${r_new} new, ${r_preserved} preserved"
     done <<< "$repos"
+
+    # Release lock if acquired
+    if [[ "$lock_held" == true ]]; then
+        case "$lock_kind" in
+            flock)
+                flock -u 200 2>/dev/null || true
+                exec 200>&-
+                ;;
+            mkdir)
+                rmdir "$lock_dir" 2>/dev/null || true
+                ;;
+        esac
+    fi
 
     # Merge cross-repo tasks (unless dry-run)
     if [[ -s "$cross_all_file" ]]; then
@@ -935,8 +1169,29 @@ run_workspace_plan() {
     if [[ "$WORKSPACE_DRY_RUN" == true ]]; then
         echo "Mode:                DRY-RUN (no fix_plan.md writes)"
     fi
+    if [[ "$par_n" -gt 1 ]]; then
+        echo "Parallel-plan:       ${par_n} workers"
+    fi
     echo ""
 
+    # Cleanup parallel-mode token dir on success. On failure preserve for
+    # debugging.
+    local _worker_failed=false
+    if echo "$step_a_status" | grep -q '|fail$'; then
+        _worker_failed=true
+    fi
+    if [[ -n "$run_token" && "$merge_failed" == false ]]; then
+        if [[ "$_worker_failed" == false ]]; then
+            rm -rf "$plan_tmp_root/$run_token" 2>/dev/null || true
+        else
+            log "WARN" "[parallel-plan] tmp preserved for debug: $plan_tmp_root/$run_token"
+        fi
+    fi
+
+    # Exit non-zero if any worker failed (matches doc §4 contract).
+    if [[ "$_worker_failed" == true || "$merge_failed" == true ]]; then
+        return 1
+    fi
     return 0
 }
 
@@ -1015,6 +1270,22 @@ parse_args() {
                 WORKSPACE_REPOS_FILTER="$2"
                 shift 2
                 ;;
+            --parallel-plan)
+                if [[ -z "$2" ]]; then
+                    log "ERROR" "--parallel-plan requires a positive integer"
+                    exit 1
+                fi
+                if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                    log "ERROR" "--parallel-plan must be a positive integer"
+                    exit 1
+                fi
+                if [[ "$2" -lt 1 ]]; then
+                    log "ERROR" "--parallel-plan must be >= 1"
+                    exit 1
+                fi
+                WORKSPACE_PARALLEL_PLAN="$2"
+                shift 2
+                ;;
             --dry-run)
                 WORKSPACE_DRY_RUN=true
                 shift
@@ -1042,6 +1313,12 @@ parse_args() {
 
 main() {
     parse_args "$@"
+
+    # --parallel-plan is workspace-only; reject outside --workspace.
+    if [[ -n "$WORKSPACE_PARALLEL_PLAN" && "$WORKSPACE_MODE" != true ]]; then
+        log "ERROR" "--parallel-plan only applies to --workspace mode"
+        exit 1
+    fi
 
     # Status mode: AI-powered fix plan analysis -- exits before any planning
     # Note: ralph_plan.sh has `set -e`. Using `|| exit $?` disarms set -e for this

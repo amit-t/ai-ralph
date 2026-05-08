@@ -18,6 +18,91 @@
 #   ## cross-repo
 #   - [ ] Task spanning multiple repos
 
+# _split_csv_trimmed — Split a comma-separated string into newline-separated trimmed tokens
+# Empty tokens (between consecutive commas) are dropped.
+#
+# Args:
+#   $1 - csv string
+# Returns:
+#   0 always; one trimmed non-empty token per line on stdout
+_split_csv_trimmed() {
+    local csv="$1"
+    [[ -z "$csv" ]] && return 0
+    local IFS_saved="$IFS"
+    IFS=',' read -r -a parts <<< "$csv"
+    IFS="$IFS_saved"
+    local p trimmed
+    for p in "${parts[@]}"; do
+        trimmed=$(echo "$p" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+        [[ -z "$trimmed" ]] && continue
+        echo "$trimmed"
+    done
+    return 0
+}
+
+# resolve_workspace_filter_spec — Resolve --repos / --exclude / env vars into the
+# canonical RALPH_WORKSPACE_REPOS_RESOLVED / RALPH_WORKSPACE_EXCLUDE_RESOLVED env.
+#
+# Inputs (positional, may be empty):
+#   $1 - cli_repos    (comma-separated, from --repos)
+#   $2 - cli_exclude  (comma-separated, from --exclude)
+# Inputs (env, may be empty):
+#   RALPH_WORKSPACE_REPOS    (allowlist)
+#   RALPH_WORKSPACE_EXCLUDE  (denylist)
+# Outputs (env on success, also exported):
+#   RALPH_WORKSPACE_REPOS_RESOLVED    (newline-separated, possibly empty)
+#   RALPH_WORKSPACE_EXCLUDE_RESOLVED  (newline-separated, possibly empty)
+# Returns:
+#   0 - resolution OK (one or none of the two lists non-empty)
+#   1 - mutually exclusive sources mixed; error printed to stderr
+#
+# Resolution rules (per docs/proposals/repos-subset-filter.md §6):
+#   1. CLI flag overrides corresponding env var.
+#   2. Allowlist and denylist may not both be active across any source.
+#      The error message names both sources so the user can correct fast.
+resolve_workspace_filter_spec() {
+    local cli_repos="${1:-}"
+    local cli_exclude="${2:-}"
+    local env_repos="${RALPH_WORKSPACE_REPOS:-}"
+    local env_exclude="${RALPH_WORKSPACE_EXCLUDE:-}"
+
+    # Mutual exclusion across all sources
+    if [[ -n "$cli_repos" && -n "$cli_exclude" ]]; then
+        echo "ERROR: --repos and --exclude cannot be combined" >&2
+        return 1
+    fi
+    if [[ -n "$cli_repos" && -n "$env_exclude" ]]; then
+        echo "ERROR: --repos conflicts with RALPH_WORKSPACE_EXCLUDE; unset the env var or use --exclude on the CLI" >&2
+        return 1
+    fi
+    if [[ -n "$cli_exclude" && -n "$env_repos" ]]; then
+        echo "ERROR: --exclude conflicts with RALPH_WORKSPACE_REPOS; unset the env var or use --repos on the CLI" >&2
+        return 1
+    fi
+    if [[ -z "$cli_repos" && -z "$cli_exclude" && -n "$env_repos" && -n "$env_exclude" ]]; then
+        echo "ERROR: RALPH_WORKSPACE_REPOS and RALPH_WORKSPACE_EXCLUDE cannot both be set" >&2
+        return 1
+    fi
+
+    # CLI wins over env
+    local resolved_repos="$cli_repos"
+    local resolved_exclude="$cli_exclude"
+    [[ -z "$resolved_repos"   && -z "$resolved_exclude" ]] && resolved_repos="$env_repos"
+    [[ -z "$resolved_repos"   && -z "$resolved_exclude" ]] && resolved_exclude="$env_exclude"
+
+    RALPH_WORKSPACE_REPOS_RESOLVED=$(_split_csv_trimmed "$resolved_repos")
+    RALPH_WORKSPACE_EXCLUDE_RESOLVED=$(_split_csv_trimmed "$resolved_exclude")
+    export RALPH_WORKSPACE_REPOS_RESOLVED RALPH_WORKSPACE_EXCLUDE_RESOLVED
+    return 0
+}
+
+# is_workspace_filter_active — 0 if any filter is active, 1 otherwise.
+is_workspace_filter_active() {
+    [[ -n "${RALPH_WORKSPACE_REPOS_RESOLVED:-}" ]] && return 0
+    [[ -n "${RALPH_WORKSPACE_EXCLUDE_RESOLVED:-}" ]] && return 0
+    return 1
+}
+
 # discover_workspace_repos — Find git repositories (directories containing .git/) in a workspace
 # Outputs one repo name per line, sorted alphabetically.
 # Skips hidden directories (starting with .) and the .ralph directory itself.
@@ -61,6 +146,94 @@ discover_workspace_repos() {
 
     # Sort and output
     printf '%s\n' "${repos[@]}" | sort
+    return 0
+}
+
+# discover_workspace_repos_filtered — Like discover_workspace_repos but applies the
+# allowlist / denylist filter resolved by resolve_workspace_filter_spec().
+#
+# Reads RALPH_WORKSPACE_REPOS_RESOLVED (allowlist, newline-separated) and
+# RALPH_WORKSPACE_EXCLUDE_RESOLVED (denylist, newline-separated) from env.
+#
+# Validation:
+#   - Each name in the allowlist must match a discovered repo. Unknown name ⇒
+#     error with the available set listed.
+#   - Each name in the denylist must match a discovered repo. Unknown name ⇒
+#     error with the available set listed.
+#   - After filtering, the resulting set must be non-empty. Empty ⇒ error.
+#
+# Args:
+#   $1 - workspace_dir
+# Returns:
+#   0 - filtered repo list on stdout
+#   1 - validation failure (error on stderr) or no repos discovered
+discover_workspace_repos_filtered() {
+    local workspace_dir="${1:-.}"
+    local all
+    all=$(discover_workspace_repos "$workspace_dir") || return 1
+
+    # Fast path: no filter ⇒ return raw discovery (V1 behavior, byte-identical).
+    if ! is_workspace_filter_active; then
+        echo "$all"
+        return 0
+    fi
+
+    local available_csv
+    available_csv=$(echo "$all" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
+
+    local allow="${RALPH_WORKSPACE_REPOS_RESOLVED:-}"
+    local deny="${RALPH_WORKSPACE_EXCLUDE_RESOLVED:-}"
+
+    # Validate every requested name resolves to a discovered repo.
+    local name
+    if [[ -n "$allow" ]]; then
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            if ! echo "$all" | grep -qxF "$name"; then
+                echo "ERROR: unknown repo: $name. Available: $available_csv" >&2
+                return 1
+            fi
+        done <<< "$allow"
+    fi
+    if [[ -n "$deny" ]]; then
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            if ! echo "$all" | grep -qxF "$name"; then
+                echo "ERROR: unknown repo: $name. Available: $available_csv" >&2
+                return 1
+            fi
+        done <<< "$deny"
+    fi
+
+    # Apply filter (allowlist OR denylist; both never set together).
+    local filtered=""
+    if [[ -n "$allow" ]]; then
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            if echo "$allow" | grep -qxF "$name"; then
+                filtered="${filtered}${name}"$'\n'
+            fi
+        done <<< "$all"
+    elif [[ -n "$deny" ]]; then
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            if ! echo "$deny" | grep -qxF "$name"; then
+                filtered="${filtered}${name}"$'\n'
+            fi
+        done <<< "$all"
+    else
+        filtered="$all"$'\n'
+    fi
+
+    # Trim trailing newline
+    filtered="${filtered%$'\n'}"
+
+    if [[ -z "$filtered" ]]; then
+        echo "ERROR: --repos / --exclude filtered out every repository" >&2
+        return 1
+    fi
+
+    echo "$filtered"
     return 0
 }
 
@@ -124,11 +297,16 @@ parse_workspace_fix_plan() {
 #
 # Args:
 #   $1 - fix_plan_file: Path to workspace fix_plan.md
+#   $2 - allowed_repos (optional): newline-separated allowlist of repo section
+#        names. When non-empty, sections not in the list are skipped and the
+#        cross-repo section is also skipped. When empty, V1 behavior (any
+#        section eligible).
 # Returns:
 #   0 - Successfully picked and claimed a task
 #   1 - No unclaimed tasks or file missing
 pick_workspace_task() {
     local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local allowed_repos="${2:-}"
 
     if [[ ! -f "$fix_plan_file" ]]; then
         return 1
@@ -160,6 +338,15 @@ pick_workspace_task() {
         fi
 
         [[ -z "$current_repo" ]] && continue
+
+        # Filter: when allowed_repos is non-empty, skip cross-repo and any
+        # section not in the list. V1 fast path retained when empty.
+        if [[ -n "$allowed_repos" ]]; then
+            [[ "$current_repo" == "cross-repo" ]] && continue
+            if ! echo "$allowed_repos" | grep -qxF "$current_repo"; then
+                continue
+            fi
+        fi
 
         # Match unclaimed, top-level tasks: "- [ ] ..."
         if echo "$line" | grep -qE '^- \[ \] '; then
@@ -243,23 +430,36 @@ validate_workspace() {
         return 1
     fi
 
-    # Check for at least one git repo
+    # Check for at least one git repo. When a filter is active we use the
+    # filtered wrapper so the validation message reflects the actual scope.
+    # Stderr is preserved for the filtered path so unknown-name / empty-set
+    # errors reach the caller.
     local repos
-    repos=$(discover_workspace_repos "$workspace_dir" 2>/dev/null)
+    if is_workspace_filter_active; then
+        repos=$(discover_workspace_repos_filtered "$workspace_dir") || return 1
+    else
+        repos=$(discover_workspace_repos "$workspace_dir" 2>/dev/null)
+    fi
     if [[ -z "$repos" ]]; then
         echo "ERROR: No git repositories found in workspace: $workspace_dir" >&2
         return 1
     fi
 
-    # Warn about repos referenced in fix_plan.md but not on disk
+    # Warn about repos referenced in fix_plan.md but not on disk. When a filter
+    # is active, only warn for in-scope repos so excluded ones do not generate
+    # noise.
     local plan_repos
     plan_repos=$(grep -E '^#{2,3} [A-Za-z0-9]' "$workspace_dir/.ralph/fix_plan.md" 2>/dev/null \
         | sed 's/^#\{2,3\} *//' | sed 's/[[:space:]]*$//')
 
     while IFS= read -r plan_repo; do
         [[ -z "$plan_repo" ]] && continue
-        # Skip special sections like "cross-repo"
         [[ "$plan_repo" == "cross-repo" ]] && continue
+        if is_workspace_filter_active; then
+            if ! echo "$repos" | grep -qxF "$plan_repo"; then
+                continue
+            fi
+        fi
         if [[ ! -d "$workspace_dir/$plan_repo" ]]; then
             echo "WARN: Repository '$plan_repo' referenced in fix_plan.md but not found on disk" >&2
         fi
@@ -398,12 +598,15 @@ is_workspace_mode() {
 #   $1 - fix_plan_file: Path to workspace fix_plan.md
 #   $2 - workspace_dir: Path to the workspace directory
 #   $3 - requested: Requested parallelism (0 = auto)
+#   $4 - allowed_repos (optional): newline-separated allowlist; sections not in
+#        the list are excluded from the count.
 # Returns:
 #   0 - Limit on stdout
 get_workspace_parallel_limit() {
     local fix_plan_file="${1:-.ralph/fix_plan.md}"
     local workspace_dir="${2:-.}"
     local requested="${3:-0}"
+    local allowed_repos="${4:-}"
 
     # Collect unique repos that have at least one pending task and no in-progress task
     local repos_with_pending=()
@@ -419,7 +622,10 @@ get_workspace_parallel_limit() {
             if [[ -n "$prev_repo" ]] && $repo_has_pending && ! $repo_has_inprogress; then
                 # Skip cross-repo section
                 if [[ "$prev_repo" != "cross-repo" ]]; then
-                    repos_with_pending+=("$prev_repo")
+                    # Skip repos not in filter (when filter active)
+                    if [[ -z "$allowed_repos" ]] || echo "$allowed_repos" | grep -qxF "$prev_repo"; then
+                        repos_with_pending+=("$prev_repo")
+                    fi
                 fi
             fi
             current_repo=$(echo "$line" | sed 's/^#\{2,3\} *//' | sed 's/[[:space:]]*$//')
@@ -445,7 +651,9 @@ get_workspace_parallel_limit() {
     # Flush last repo
     if [[ -n "$prev_repo" ]] && $repo_has_pending && ! $repo_has_inprogress; then
         if [[ "$prev_repo" != "cross-repo" ]]; then
-            repos_with_pending+=("$prev_repo")
+            if [[ -z "$allowed_repos" ]] || echo "$allowed_repos" | grep -qxF "$prev_repo"; then
+                repos_with_pending+=("$prev_repo")
+            fi
         fi
     fi
 
@@ -471,12 +679,16 @@ get_workspace_parallel_limit() {
 # Args:
 #   $1 - fix_plan_file: Path to workspace fix_plan.md
 #   $2 - max_count: Maximum number of tasks to pick
+#   $3 - allowed_repos (optional): newline-separated allowlist of repo section
+#        names. When non-empty, sections not in the list are skipped (cross-repo
+#        is already skipped unconditionally below). Empty ⇒ V1 behavior.
 # Returns:
 #   0 - Picked at least one task
 #   1 - No tasks available
 pick_workspace_tasks_parallel() {
     local fix_plan_file="${1:-.ralph/fix_plan.md}"
     local max_count="${2:-1}"
+    local allowed_repos="${3:-}"
 
     if [[ ! -f "$fix_plan_file" ]]; then
         return 1
@@ -517,6 +729,12 @@ pick_workspace_tasks_parallel() {
         [[ -z "$current_repo" ]] && continue
         # Skip cross-repo section
         [[ "$current_repo" == "cross-repo" ]] && continue
+        # Skip repos not in filter (when filter active)
+        if [[ -n "$allowed_repos" ]]; then
+            if ! echo "$allowed_repos" | grep -qxF "$current_repo"; then
+                continue
+            fi
+        fi
         # Skip repos with in-progress tasks
         if echo "$repos_in_progress" | grep -qxF "$current_repo"; then
             continue
@@ -597,6 +815,7 @@ run_workspace_tasks_parallel() {
     local workspace_dir="${2:-.}"
     local max_count="${3:-1}"
     local executor_fn="${4}"
+    local allowed_repos="${5:-}"
 
     if [[ -z "$executor_fn" ]]; then
         echo "ERROR: No executor function specified" >&2
@@ -605,7 +824,7 @@ run_workspace_tasks_parallel() {
 
     # Pick tasks
     local task_output
-    task_output=$(pick_workspace_tasks_parallel "$fix_plan_file" "$max_count")
+    task_output=$(pick_workspace_tasks_parallel "$fix_plan_file" "$max_count" "$allowed_repos")
     local pick_rc=$?
     if [[ $pick_rc -ne 0 || -z "$task_output" ]]; then
         echo "No tasks available for parallel execution" >&2
@@ -904,7 +1123,11 @@ pick_workspace_task_for_pool() {
 }
 
 # Export all functions for use in subshells
+export -f _split_csv_trimmed
+export -f resolve_workspace_filter_spec
+export -f is_workspace_filter_active
 export -f discover_workspace_repos
+export -f discover_workspace_repos_filtered
 export -f parse_workspace_fix_plan
 export -f pick_workspace_task
 export -f pick_workspace_task_for_pool
