@@ -216,6 +216,96 @@ EOF
 }
 
 # =============================================================================
+# Hard-kill E2E: SIGKILL the orchestrator, then run sweeper, [~] reverts.
+# This is the full crash-recovery cycle the proposal §16 promises.
+# =============================================================================
+
+@test "SIGKILL'd orchestrator's state file is swept on next startup, [~] reverts" {
+    # Build a real fix_plan.md.
+    cat > "${TEST_DIR}/fix_plan.md" << 'EOF'
+- [ ] Task A
+- [ ] Task B
+- [ ] Task C
+EOF
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    # Spawn a real bash process to act as the "orchestrator". Using `bash
+    # script.sh &` (rather than a `(...) &` subshell) ensures `$$` inside
+    # the script equals `$!` from the parent, which is critical: the state
+    # file records `$$` and we SIGKILL `$!`. With `(...) &` on macOS bash
+    # 3.2 these can drift apart because the inner block re-forks.
+    cat > "${TEST_DIR}/orch.sh" << 'ORCH'
+#!/usr/bin/env bash
+# Args: $1 = path to worker_pool.sh
+source "$1"
+
+# Pick the first [ ] task, mark it [~], capture line number.
+plan="${WORKSPACE_FIX_PLAN}"
+ln=$(grep -n '^- \[ \]' "$plan" | head -1 | cut -d: -f1)
+desc=$(sed -n "${ln}p" "$plan" | sed 's/^- \[ \] //')
+awk -v ln="$ln" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$plan" > "${plan}.tmp" \
+    && mv "${plan}.tmp" "$plan"
+
+# Write state file with our own PID and a worker entry referencing the
+# fix_plan line number.
+init_continuous_state "$$"
+( sleep 30 ) &
+worker_pid=$!
+printf 'inflight\t%s\t%s\t%s\n' "$ln" "$desc" "$worker_pid" \
+    >> "${RALPH_DIR}/.continuous_state"
+
+# Sleep forever — parent will SIGKILL us mid-flight.
+sleep 60
+ORCH
+    chmod +x "${TEST_DIR}/orch.sh"
+
+    bash "${TEST_DIR}/orch.sh" "$WORKER_POOL_LIB" &
+    local orch_pid=$!
+
+    # Wait for the orchestrator to write state + mutate fix_plan.
+    local waited=0
+    while [[ ! -f "${RALPH_DIR}/.continuous_state" ]] && [[ $waited -lt 50 ]]; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    sleep 0.2  # let it finish writing the inflight row too
+
+    # Sanity: state file exists, fix_plan has a [~], inflight row recorded.
+    [[ -f "${RALPH_DIR}/.continuous_state" ]]
+    grep -q '\[~\]' "${TEST_DIR}/fix_plan.md"
+    grep -q '^inflight' "${RALPH_DIR}/.continuous_state"
+
+    # Verify the recorded PID matches the orchestrator we're about to kill.
+    local state_pid
+    state_pid=$(awk -F'\t' '$1=="orchestrator_pid" {print $2}' "${RALPH_DIR}/.continuous_state")
+    [[ "$state_pid" == "$orch_pid" ]]
+
+    # Hard-kill (SIGKILL bypasses any trap).
+    kill -KILL "$orch_pid" 2>/dev/null || true
+    wait "$orch_pid" 2>/dev/null || true
+
+    # Wait for the OS to reap the process so kill -0 returns false.
+    waited=0
+    while kill -0 "$orch_pid" 2>/dev/null && [[ $waited -lt 50 ]]; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+
+    # State file still present (no clean shutdown), fix_plan still has [~].
+    [[ -f "${RALPH_DIR}/.continuous_state" ]]
+    grep -q '\[~\]' "${TEST_DIR}/fix_plan.md"
+
+    # Simulate next ralph startup → sweeper runs.
+    run sweep_stale_continuous_state
+    assert_success
+
+    # [~] reverted to [ ], state file cleaned up.
+    ! grep -q '\[~\]' "${TEST_DIR}/fix_plan.md"
+    grep -q '^- \[ \] Task A' "${TEST_DIR}/fix_plan.md"
+    [[ ! -f "${RALPH_DIR}/.continuous_state" ]]
+}
+
+# =============================================================================
 # Heartbeat logged at completion
 # =============================================================================
 

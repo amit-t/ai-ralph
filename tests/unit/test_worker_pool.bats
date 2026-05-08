@@ -508,6 +508,260 @@ EOF
 }
 
 # =============================================================================
+# Signal trap installation — both INT and TERM must be wired to the same
+# drain handler. A regression that drops INT (e.g., `trap handler TERM` only)
+# would silently break Ctrl+C handling in a foreground orchestrator.
+# =============================================================================
+
+@test "run_continuous_worker_pool installs trap for both INT and TERM" {
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+T1 rc=0
+EOF
+
+    # Capture the orchestrator's trap state from the on-completion hook,
+    # which runs in the orchestrator's own shell (not a worker subshell).
+    # Worker subshells (`( ... ) &`) reset traps, so they can't see the
+    # parent's trap; on_complete is a direct function call so it can.
+    _trap_snapshot_on_complete() {
+        trap -p INT TERM > "${TEST_DIR}/.trap_snapshot" 2>&1
+    }
+    export -f _trap_snapshot_on_complete
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _trap_snapshot_on_complete
+    assert_success
+    [[ -f "${TEST_DIR}/.trap_snapshot" ]]
+    # Both INT and TERM must be wired to the same drain handler.
+    grep -q "_continuous_handle_signal" "${TEST_DIR}/.trap_snapshot"
+    grep -qE "(trap.*SIGINT|trap.*' INT$| INT$)" "${TEST_DIR}/.trap_snapshot"
+    grep -qE "(trap.*SIGTERM|trap.*' TERM$| TERM$)" "${TEST_DIR}/.trap_snapshot"
+}
+
+@test "run_continuous_worker_pool restores prior INT trap after exit" {
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+T1 rc=0
+EOF
+
+    # Install a custom INT trap before the run.
+    trap 'echo USER_TRAP_FIRED' INT
+    local before
+    before=$(trap -p INT)
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+
+    # After the run, our trap should be intact.
+    local after
+    after=$(trap -p INT)
+    [[ "$after" == "$before" ]]
+
+    # Cleanup
+    trap - INT
+}
+
+@test "run_continuous_worker_pool restores prior TERM trap after exit" {
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+T1 rc=0
+EOF
+
+    trap 'echo USER_TERM_TRAP_FIRED' TERM
+    local before
+    before=$(trap -p TERM)
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+
+    local after
+    after=$(trap -p TERM)
+    [[ "$after" == "$before" ]]
+
+    trap - TERM
+}
+
+@test "run_continuous_worker_pool restores 'no trap' state when no prior trap was set" {
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+T1 rc=0
+EOF
+
+    # Ensure no INT/TERM traps are set before the run.
+    trap - INT
+    trap - TERM
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+
+    # After the run, neither INT nor TERM should have a custom handler.
+    [[ -z "$(trap -p INT)" ]]
+    [[ -z "$(trap -p TERM)" ]]
+}
+
+# =============================================================================
+# K≥2 retry path: a task fails K-1 times then succeeds, must NOT be skipped.
+# =============================================================================
+
+@test "K=2: task fails once then succeeds → not in skip-list, attempts counted" {
+    # Queue: TFLAKY first attempt (fail), TFLAKY second attempt (succeed).
+    # K=2 means the orchestrator allows up to 2 attempts before skipping.
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+TFLAKY rc=1
+TFLAKY rc=0
+TGOOD rc=0
+EOF
+    : > "${TEST_DIR}/.test_executions"
+
+    run run_continuous_worker_pool 1 5 2 0 _test_picker _test_executor _test_on_complete
+    # K=2: TFLAKY allowed to fail once and succeed second time. Should NOT
+    # appear in the skip-list output.
+    [[ "$output" != *"skip-list += TFLAKY"* ]]
+}
+
+@test "K=3: task fails twice then succeeds → still not skipped" {
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+TFAIL rc=1
+TFAIL rc=1
+TFAIL rc=0
+EOF
+    run run_continuous_worker_pool 1 5 3 0 _test_picker _test_executor _test_on_complete
+    [[ "$output" != *"skip-list += TFAIL"* ]]
+}
+
+@test "K=2: task fails twice → IS added to skip-list on 2nd failure" {
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+TBAD rc=1
+TBAD rc=1
+TBAD rc=1
+EOF
+    run run_continuous_worker_pool 1 5 2 0 _test_picker _test_executor _test_on_complete
+    [[ "$output" == *"skip-list"* ]]
+    [[ "$output" == *"TBAD"* ]]
+}
+
+# =============================================================================
+# M=1 K=1 with a failing task — degenerate edge case
+# =============================================================================
+
+@test "M=1 K=1 with failing task: completes 1, returns nonzero, no double-spawn" {
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+TFAIL rc=1
+TEXTRA rc=0
+EOF
+    : > "${TEST_DIR}/.test_executions"
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_failure
+    # Exactly 1 execution attempted (M=1).
+    [[ "$(wc -l < "${TEST_DIR}/.test_executions" | tr -d ' ')" == "1" ]]
+    # Stop reason is target-reached (M).
+    [[ "$output" == *"target reached"* ]]
+}
+
+# =============================================================================
+# M < N (e.g., M=2 N=5): orchestrator must cap concurrency at M, not at N.
+# =============================================================================
+
+@test "M=2 N=5: never exceeds M=2 concurrent workers" {
+    : > "${TEST_DIR}/.concurrency_log"
+    : > "${TEST_DIR}/.peak"
+
+    _peak_executor() {
+        echo "+$$" >> "${TEST_DIR}/.concurrency_log"
+        local live removed current peak
+        live=$(awk '/^\+/{c++} END{print c+0}' "${TEST_DIR}/.concurrency_log")
+        removed=$(awk '/^-/{c++} END{print c+0}' "${TEST_DIR}/.concurrency_log")
+        current=$((live - removed))
+        peak=$(cat "${TEST_DIR}/.peak" 2>/dev/null)
+        peak="${peak:-0}"
+        if [[ "$current" -gt "$peak" ]]; then
+            echo "$current" > "${TEST_DIR}/.peak"
+        fi
+        sleep 0.4
+        echo "-$$" >> "${TEST_DIR}/.concurrency_log"
+        return 0
+    }
+    export -f _peak_executor
+
+    cat > "${TEST_DIR}/.test_queue" << 'EOF'
+T1 rc=0
+T2 rc=0
+T3 rc=0
+T4 rc=0
+T5 rc=0
+EOF
+
+    run run_continuous_worker_pool 5 2 1 0 _test_picker _peak_executor _test_on_complete
+    assert_success
+
+    local peak
+    peak=$(cat "${TEST_DIR}/.peak" 2>/dev/null || echo "0")
+    [[ "$peak" -le "2" ]]
+    [[ "$peak" -ge "1" ]]
+}
+
+# =============================================================================
+# Summary block / divide-by-zero safety when completed=0
+# (queue empty before any worker spawns)
+# =============================================================================
+
+@test "queue empty on first pick → summary printed without divide-by-zero" {
+    : > "${TEST_DIR}/.test_queue"  # empty queue
+
+    run run_continuous_worker_pool 2 5 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+    [[ "$output" == *"Continuous Execution Summary"* ]]
+    [[ "$output" == *"Completed:"* ]]
+    [[ "$output" == *"queue empty"* ]] || [[ "$output" == *"Queue empty"* ]]
+    # No "division by zero" / "/" arithmetic error from awk or bash.
+    [[ "$output" != *"division by zero"* ]]
+    [[ "$output" != *"/ by zero"* ]]
+}
+
+@test "summary log appended even when completed=0" {
+    : > "${TEST_DIR}/.test_queue"  # empty queue
+    run run_continuous_worker_pool 2 5 1 0 _test_picker _test_executor _test_on_complete
+    [[ -f "${RALPH_DIR}/logs/continuous-summary.log" ]]
+    grep -q "Continuous Execution Summary" "${RALPH_DIR}/logs/continuous-summary.log"
+}
+
+# =============================================================================
+# _skip_list_contains direct tests
+# =============================================================================
+
+@test "_skip_list_contains: empty skip-list returns false" {
+    run _skip_list_contains "" "5"
+    assert_failure
+}
+
+@test "_skip_list_contains: empty id returns false" {
+    run _skip_list_contains $'5\n7' ""
+    assert_failure
+}
+
+@test "_skip_list_contains: exact match returns true" {
+    run _skip_list_contains $'5\n7\n9' "7"
+    assert_success
+}
+
+@test "_skip_list_contains: non-member returns false" {
+    run _skip_list_contains $'5\n7\n9' "8"
+    assert_failure
+}
+
+@test "_skip_list_contains: substring (5 vs 55) does NOT match (uses -xF)" {
+    # Regression guard: this is the same exact-match invariant the picker
+    # relies on (covered for the picker in test_continuous_pickers.bats).
+    run _skip_list_contains $'5\n7' "55"
+    assert_failure
+}
+
+@test "_skip_list_contains: id with shell metacharacters (* [ ]) is matched literally" {
+    # `grep -F` treats input as fixed strings, so * is literal — this should match.
+    run _skip_list_contains $'task[5]\nfoo*bar' "task[5]"
+    assert_success
+    # And substring-of-metachar-id is not a match either.
+    run _skip_list_contains $'task[5]\nfoo*bar' "task"
+    assert_failure
+}
+
+# =============================================================================
 # Concurrent-invocation safety: a second orchestrator must refuse to start
 # while the first is still alive (would otherwise clobber state file).
 # =============================================================================

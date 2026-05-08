@@ -217,3 +217,163 @@ EOF
     # "log warning and skip". Either way, returns 0.
     assert_success
 }
+
+# =============================================================================
+# Corrupt / partial-write state file matrix — must never crash, never corrupt
+# fix_plan.md, never leave stale [~] markers when the orchestrator is dead.
+# =============================================================================
+
+@test "sweeper handles empty state file (zero bytes)" {
+    : > "${RALPH_DIR}/.continuous_state"
+    run sweep_stale_continuous_state
+    assert_success
+}
+
+@test "sweeper handles state file missing orchestrator_pid row" {
+    cat > "${RALPH_DIR}/.continuous_state" << 'EOF'
+started_at	0
+in_flight
+EOF
+    run sweep_stale_continuous_state
+    # No PID to check → log warning and bail gracefully.
+    assert_success
+}
+
+@test "sweeper skips inflight rows with non-numeric line_num" {
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    cat > "${TEST_DIR}/fix_plan.md" << 'EOF'
+- [~] Task A
+- [~] Task B
+EOF
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    # State file: one valid inflight row (line 2), one with garbage line_num.
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${dead_pid}
+started_at	0
+in_flight	
+inflight	notanumber	T-bad	11111
+inflight	2	T-good	22222
+EOF
+
+    run sweep_stale_continuous_state
+    assert_success
+    # Bad row ignored, good row reverted.
+    sed -n '2p' "${TEST_DIR}/fix_plan.md" | grep -q '\[ \] Task B'
+    # State file cleaned up.
+    [[ ! -f "${RALPH_DIR}/.continuous_state" ]]
+}
+
+@test "sweeper skips inflight rows with line_num past EOF of fix_plan" {
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    cat > "${TEST_DIR}/fix_plan.md" << 'EOF'
+- [~] Only task
+EOF
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    # Reference a non-existent line 99 (file shrank between crash and sweep,
+    # e.g., user hand-edited).
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${dead_pid}
+started_at	0
+in_flight	
+inflight	99	T-stale	33333
+EOF
+
+    run sweep_stale_continuous_state
+    # Must not crash, must not corrupt the file, must clean up state.
+    assert_success
+    [[ ! -f "${RALPH_DIR}/.continuous_state" ]]
+    # File content unchanged (still 1 line).
+    [[ "$(wc -l < "${TEST_DIR}/fix_plan.md" | tr -d ' ')" -le "1" ]] \
+        || [[ "$(wc -l < "${TEST_DIR}/fix_plan.md" | tr -d ' ')" == "1" ]]
+}
+
+@test "sweeper does not modify lines that are not [~] (e.g. already [x] or [ ])" {
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    cat > "${TEST_DIR}/fix_plan.md" << 'EOF'
+- [x] Already done
+- [ ] Already reverted
+- [~] Still in flight
+EOF
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    # State file lists ALL three lines, even though only line 3 is [~].
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${dead_pid}
+started_at	0
+in_flight	
+inflight	1	T-done	11111
+inflight	2	T-reverted	22222
+inflight	3	T-flight	33333
+EOF
+
+    run sweep_stale_continuous_state
+    assert_success
+    # Line 1 still [x], line 2 still [ ], line 3 reverted.
+    sed -n '1p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[x\] Already done$'
+    sed -n '2p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[ \] Already reverted$'
+    sed -n '3p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[ \] Still in flight$'
+}
+
+@test "sweeper handles inflight row with empty line_num field" {
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    cat > "${TEST_DIR}/fix_plan.md" << 'EOF'
+- [~] Task A
+EOF
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    # Empty line_num field (3 fields after `inflight` separator instead of 4).
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${dead_pid}
+started_at	0
+in_flight	
+inflight		T-empty	44444
+inflight	1	T-real	55555
+EOF
+
+    run sweep_stale_continuous_state
+    assert_success
+    # The empty-line_num row is ignored; the valid row reverts line 1.
+    grep -q '^- \[ \] Task A$' "${TEST_DIR}/fix_plan.md"
+    [[ ! -f "${RALPH_DIR}/.continuous_state" ]]
+}
+
+@test "sweeper preserves [x] markers when reverting [~] on adjacent lines" {
+    # Regression guard: an awk substitution bug could overwrite [x] with [ ].
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    cat > "${TEST_DIR}/fix_plan.md" << 'EOF'
+- [x] Completed first
+- [~] In flight
+- [x] Completed second
+EOF
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${dead_pid}
+started_at	0
+in_flight	
+inflight	2	T-mid	66666
+EOF
+
+    run sweep_stale_continuous_state
+    assert_success
+    sed -n '1p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[x\] Completed first$'
+    sed -n '2p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[ \] In flight$'
+    sed -n '3p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[x\] Completed second$'
+}
