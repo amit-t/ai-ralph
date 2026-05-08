@@ -98,7 +98,7 @@ run_adhoc_task() {
     local superpowers="${4:-false}"
     local superpowers_plugin_dir="${5:-${HOME}/.claude/plugins/repos/superpowers}"
 
-    # 1. Validate engine
+    # 1. Validate engine name (cheap, platform-independent — fail fast on bad spelling)
     local cli_cmd=""
     case "$engine" in
         claude) cli_cmd="claude" ;;
@@ -110,18 +110,14 @@ run_adhoc_task() {
             ;;
     esac
 
-    # 2. Verify engine CLI is installed
-    if ! command -v "$cli_cmd" &>/dev/null; then
-        echo "Error: $engine CLI ('$cli_cmd') not found. Install it first." >&2
-        return 1
-    fi
-
-    # 3. Prompt for task description if not provided
+    # 2. Prompt for task description if not provided
     if [[ -z "$task_description" ]]; then
         task_description=$(prompt_task_description) || return 1
     fi
 
-    # 4. Find existing fix_plan.md (optional -- we can create one if missing)
+    # 3. Find existing fix_plan.md (optional -- we can create one if missing).
+    # We do this *before* the CLI installation check so a missing CLI does not
+    # leave the user without a usable .ralph/ scaffold.
     local fix_plan_path=""
     local fix_plan_contents=""
     local ralph_dir=""
@@ -143,6 +139,13 @@ run_adhoc_task() {
             ralph_dir=".ralph"
             fix_plan_contents=""
         fi
+    fi
+
+    # 4. Verify engine CLI is installed (runtime dependency — checked after
+    # input/scaffold validation so error messages reflect the real problem).
+    if ! command -v "$cli_cmd" &>/dev/null; then
+        echo "Error: $engine CLI ('$cli_cmd') not found. Install it first." >&2
+        return 1
     fi
 
     # 5. Gather codebase context for smarter task breakdown

@@ -1243,14 +1243,18 @@ detect_progress_with_commits() {
 # --- Stale Exit Signals Tests (Issue #194) ---
 
 @test "startup resets stale exit signals before main loop" {
-    # Verify ralph_loop.sh resets EXIT_SIGNALS_FILE before the while-true loop
-    # This is the primary fix for #194: stale signals from a prior run
-    # must not cause immediate exit on next invocation
+    # Verify ralph_loop.sh resets EXIT_SIGNALS_FILE before doing the run's work.
+    # This is the primary fix for #194: stale signals from a prior run must not
+    # cause immediate exit on next invocation.
+    #
+    # Pre-cc65616 the anchor was the "Starting main loop" log just before
+    # `while true`. The single-run refactor renamed that to
+    # "Starting task execution" — the same anchor: last log line before the
+    # task-execution work begins.
     local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
 
-    # Find the "Starting main loop" log message (just before while true)
     local main_loop_line
-    main_loop_line=$(grep -n 'Starting main loop' "$script" | head -1 | cut -d: -f1)
+    main_loop_line=$(grep -n 'Starting task execution' "$script" | head -1 | cut -d: -f1)
     [[ -n "$main_loop_line" ]]
 
     # Find the exit signals reset that should appear BEFORE the main loop
@@ -1301,15 +1305,23 @@ EOF
     echo "$func_body" | grep -q 'log_status.*signal\|log_status.*exit.*check\|log_status.*DEBUG.*indicator'
 }
 
-@test "API limit user-exit path calls reset_session" {
-    # The "user chose to exit" path for API limits must call reset_session
-    # to prevent stale .exit_signals from causing premature exit on next run
-    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
-
-    # Find the API limit user exit block
-    local exit_block
-    exit_block=$(sed -n '/user_choice.*==.*"2"/,/break/p' "$script")
-
-    # Must call reset_session before break
-    echo "$exit_block" | grep -q 'reset_session'
-}
+# Removed: "API limit user-exit path calls reset_session"
+# Rationale: The interactive "user chose to exit" path for API limits was
+# removed in commit cc65616 (single-run architecture refactor). The test's
+# sed anchor (`/user_choice.*==.*"2"/,/break/`) targets a code block that
+# no longer exists.
+#
+# The behavioral concern — stale exit signals leaking from a prior run that
+# hit the 5-hour API limit — is now satisfied unconditionally at startup,
+# regardless of how the previous run ended (crash, SIGKILL, or rate-limit
+# exit). See ralph_loop.sh lines 2034–2039:
+#
+#     # Reset exit signals to prevent stale state from prior run causing
+#     # premature exit (Issue #194). Unconditional: regardless of how the
+#     # previous run ended (crash, SIGKILL, API limit exit), every new
+#     # ralph invocation starts with a clean exit-signal slate.
+#     echo '{"test_only_loops": ...}' > "$EXIT_SIGNALS_FILE"
+#     rm -f "$RESPONSE_ANALYSIS_FILE"
+#
+# The reset is now covered structurally by the "startup resets stale exit
+# signals before main loop" test above (test 343 in the full suite).
