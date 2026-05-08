@@ -1,6 +1,7 @@
 # Upstream ralph V2: parallel planning in `ralph-plan --workspace`
 
-Status: draft (design only, not implementation).
+Status: **implemented** (Phase A: explicit-flag opt-in shipped on feat/parallel-plan).
+Tests: `tests/unit/test_parallel_plan.bats` (15 tests, all green; pre-existing main suite unchanged at 961/966).
 Audience: ai-ralph maintainers. This doc lives in workbench because the workbench team is the primary requester; once accepted, the implementation PR moves to `ai-ralph`.
 Author: ai-workbench team.
 Date: 2026-04-26.
