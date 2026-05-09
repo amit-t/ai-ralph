@@ -11,3 +11,4 @@ printf '{"version":"%s","released":"2026-05-09","check_ttl_hours":12,"channel":"
 git -C "$work" -c user.email=t@t -c user.name=t add version.json
 git -C "$work" -c user.email=t@t -c user.name=t commit -q -m "init"
 git -C "$work" push -q --mirror "$out"
+git -C "$out" symbolic-ref HEAD refs/heads/main
