@@ -3,6 +3,7 @@ set -euo pipefail
 out="$1"
 ver="${2:-1.4.0}"
 mkdir -p "$out"
+git init -q --bare "$out"
 work="$(mktemp -d)"
 trap "rm -rf '$work'" EXIT
 git -C "$work" init -q -b main
