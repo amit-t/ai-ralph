@@ -291,6 +291,47 @@ install_setup() {
     fi
 }
 
+# Install versioning lib + RALPH_CLONE env + ralph.upgrade wrapper
+install_versioning() {
+    log "INFO" "Installing versioning system..."
+
+    # ── Versioning lib distribution ─────────────────────────────────────────
+    local SHARE_DIR="${HOME}/.local/share/wb-versioncheck"
+    mkdir -p "$SHARE_DIR"
+    if [[ -f "$SHARE_DIR/version-check.sh" ]]; then
+        log "INFO" "$SHARE_DIR/version-check.sh already present; leaving in place"
+    else
+        cp "$SCRIPT_DIR/lib/version-check.sh"        "$SHARE_DIR/"
+        cp "$SCRIPT_DIR/lib/bootstrap-detection.sh"  "$SHARE_DIR/"
+        chmod 0644 "$SHARE_DIR/version-check.sh" "$SHARE_DIR/bootstrap-detection.sh"
+        log "INFO" "Dropped lib: $SHARE_DIR/version-check.sh"
+    fi
+
+    # ── RALPH_CLONE in ~/.zprofile and ~/.bash_profile ──────────────────────
+    local RALPH_LINE="export RALPH_CLONE=\"$SCRIPT_DIR\""
+    local prof
+    for prof in "${HOME}/.zprofile" "${HOME}/.bash_profile"; do
+        [[ -f "$prof" ]] || continue
+        if ! grep -qF "$RALPH_LINE" "$prof"; then
+            if ! grep -q "EXTERNAL PROJECT ALIASES" "$prof"; then
+                printf "\n# === EXTERNAL PROJECT ALIASES ===\n" >> "$prof"
+            fi
+            printf "%s\n" "$RALPH_LINE" >> "$prof"
+            log "INFO" "Wrote RALPH_CLONE to $prof"
+        fi
+    done
+
+    # ── ralph.upgrade wrapper (NOT a symlink — see SCRIPT_DIR-resolution bug) ──
+    cat > "$INSTALL_DIR/ralph.upgrade" <<EOF
+#!/bin/bash
+# Ralph Upgrade - Global Command
+exec "$SCRIPT_DIR/ralph-upgrade.sh" "\$@"
+EOF
+    chmod +x "$INSTALL_DIR/ralph.upgrade"
+    chmod +x "$SCRIPT_DIR/ralph-upgrade.sh"
+    log "SUCCESS" "Installed: ralph.upgrade -> $INSTALL_DIR/ralph.upgrade"
+}
+
 # Check PATH
 check_path() {
     log "INFO" "Checking PATH configuration..."
@@ -318,6 +359,7 @@ main() {
     install_scripts
     install_ralph_loop
     install_setup
+    install_versioning
     check_path
     
     echo ""
@@ -334,6 +376,7 @@ main() {
     echo "  ralph-monitor           # Manual monitoring dashboard"
     echo "  ralph-plan              # Planning mode - build fix_plan from PRDs & beads"
     echo "  ralph-check-beads       # Verify beads integration (diagnostic)"
+    echo "  ralph.upgrade           # Pull latest ai-ralph and reinstall"
     echo ""
     echo "Quick start:"
     echo "  1. ralph-setup my-awesome-project"
@@ -354,7 +397,7 @@ case "${1:-install}" in
         ;;
     uninstall)
         log "INFO" "Uninstalling Ralph for Claude Code..."
-        rm -f "$INSTALL_DIR/ralph" "$INSTALL_DIR/ralph-monitor" "$INSTALL_DIR/ralph-setup" "$INSTALL_DIR/ralph-import" "$INSTALL_DIR/ralph-migrate" "$INSTALL_DIR/ralph-enable" "$INSTALL_DIR/ralph-enable-ci" "$INSTALL_DIR/ralph-plan" "$INSTALL_DIR/ralph-check-beads"
+        rm -f "$INSTALL_DIR/ralph" "$INSTALL_DIR/ralph-monitor" "$INSTALL_DIR/ralph-setup" "$INSTALL_DIR/ralph-import" "$INSTALL_DIR/ralph-migrate" "$INSTALL_DIR/ralph-enable" "$INSTALL_DIR/ralph-enable-ci" "$INSTALL_DIR/ralph-plan" "$INSTALL_DIR/ralph-check-beads" "$INSTALL_DIR/ralph.upgrade"
         rm -rf "$RALPH_HOME"
         log "SUCCESS" "Ralph for Claude Code uninstalled"
         ;;
