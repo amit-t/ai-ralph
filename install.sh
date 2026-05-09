@@ -130,6 +130,14 @@ install_scripts() {
 RALPH_HOME="$HOME/.ralph"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── Version-check preamble ──────────────────────────────────────────────────
+LIBVC="${HOME}/.local/share/wb-versioncheck/version-check.sh"
+if [[ -f "$LIBVC" ]]; then
+    # shellcheck disable=SC1090
+    . "$LIBVC"
+    _wb_versioncheck ralph 2>&1 || true
+fi
+
 # Source the actual ralph loop script with global paths
 exec "$RALPH_HOME/ralph_loop.sh" "$@"
 EOF
