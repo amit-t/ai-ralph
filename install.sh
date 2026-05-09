@@ -135,7 +135,7 @@ LIBVC="${HOME}/.local/share/wb-versioncheck/version-check.sh"
 if [[ -f "$LIBVC" ]]; then
     # shellcheck disable=SC1090
     . "$LIBVC"
-    _wb_versioncheck ralph 2>&1 || true
+    _wb_versioncheck ralph || true
 fi
 
 # Source the actual ralph loop script with global paths
