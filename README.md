@@ -1434,6 +1434,22 @@ Uninstalling one engine does not affect the others.
 
 ---
 
+## Versioning + upgrades
+
+ai-ralph ships under semver. `version.json` at repo root tracks the canonical version. To update:
+
+```bash
+ralph.upgrade               # prompt y/N
+ralph.upgrade --yes         # unattended
+ralph.upgrade --rollback    # revert
+```
+
+When a newer version is on `main`, the `ralph` command prints a one-line banner before running (cache-throttled to one network call per 12h).
+
+Full system documented in [ai-devkit/docs/versioning.md](https://github.com/amit-t/ai-devkit/blob/main/docs/versioning.md).
+
+---
+
 ## Acknowledgments
 
 - [Ralph technique](https://ghuntley.com/ralph/) by Geoffrey Huntley
