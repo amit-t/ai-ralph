@@ -930,3 +930,101 @@ INNER
     kill "$alive_pid" 2>/dev/null || true
     wait "$alive_pid" 2>/dev/null || true
 }
+
+
+# =============================================================================
+# status.json hook (proposal §8) — orchestrator MUST call
+# _continuous_update_status (if defined) at init, after every completion,
+# and at exit so ralph-monitor can show continuous-mode metadata.
+# =============================================================================
+
+@test "_continuous_update_status hook is called at orchestrator init" {
+    # Define a spy hook that records every invocation to a file.
+    _continuous_update_status() {
+        echo "$@" >> "${TEST_DIR}/.hook_calls"
+    }
+    export -f _continuous_update_status
+
+    cat > "${TEST_DIR}/.test_queue" << EOF
+T1 rc=0
+EOF
+    : > "${TEST_DIR}/.hook_calls"
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+
+    # First call should be the init: "continuous:starting running 0 1 1"
+    local first
+    first=$(head -1 "${TEST_DIR}/.hook_calls")
+    [[ "$first" == "continuous:starting running 0 1 1" ]]
+}
+
+@test "_continuous_update_status hook is called after each completion with attempt count" {
+    _continuous_update_status() {
+        echo "$@" >> "${TEST_DIR}/.hook_calls"
+    }
+    export -f _continuous_update_status
+
+    cat > "${TEST_DIR}/.test_queue" << EOF
+T1 rc=0
+T2 rc=0
+T3 rc=0
+EOF
+    : > "${TEST_DIR}/.hook_calls"
+
+    run run_continuous_worker_pool 1 3 1 0 _test_picker _test_executor _test_on_complete
+
+    # We expect at least one "continuous:executing running 1 3 1",
+    # one "continuous:executing running 2 3 1", and one "continuous:executing running 3 3 1".
+    grep -qF "continuous:executing running 1 3 1" "${TEST_DIR}/.hook_calls"
+    grep -qF "continuous:executing running 2 3 1" "${TEST_DIR}/.hook_calls"
+    grep -qF "continuous:executing running 3 3 1" "${TEST_DIR}/.hook_calls"
+}
+
+@test "_continuous_update_status hook is called at exit with stop_reason" {
+    _continuous_update_status() {
+        echo "$@" >> "${TEST_DIR}/.hook_calls"
+    }
+    export -f _continuous_update_status
+
+    cat > "${TEST_DIR}/.test_queue" << EOF
+T1 rc=0
+T2 rc=0
+EOF
+    : > "${TEST_DIR}/.hook_calls"
+
+    run run_continuous_worker_pool 1 2 1 0 _test_picker _test_executor _test_on_complete
+
+    # Last call should be the exit: "continuous:completed stopped 2 2 1 target reached (M)"
+    local last
+    last=$(tail -1 "${TEST_DIR}/.hook_calls")
+    [[ "$last" == "continuous:completed stopped 2 2 1 "*"target reached (M)" ]]
+}
+
+@test "queue-empty exit path also calls hook with stop_reason" {
+    _continuous_update_status() {
+        echo "$@" >> "${TEST_DIR}/.hook_calls"
+    }
+    export -f _continuous_update_status
+
+    : > "${TEST_DIR}/.test_queue"   # empty queue
+    : > "${TEST_DIR}/.hook_calls"
+
+    run run_continuous_worker_pool 1 5 1 0 _test_picker _test_executor _test_on_complete
+
+    # First (and only) call should still be the init call. Then queue-empty
+    # exit calls the hook with "stopped" and stop_reason "queue empty".
+    grep -qF "continuous:completed stopped 0 5 1 queue empty" "${TEST_DIR}/.hook_calls"
+}
+
+@test "orchestrator works without _continuous_update_status (engine-agnostic)" {
+    # If no engine has defined the hook, the worker pool must still run.
+    unset -f _continuous_update_status 2>/dev/null || true
+
+    cat > "${TEST_DIR}/.test_queue" << EOF
+T1 rc=0
+EOF
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+    [[ "$output" == *"target reached"* ]] || [[ "$output" == *"queue empty"* ]]
+}
+

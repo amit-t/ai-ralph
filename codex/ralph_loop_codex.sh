@@ -320,6 +320,45 @@ update_status() {
 STATUSEOF
 }
 
+# _continuous_update_status — Status-JSON hook for continuous mode
+# (proposal: docs/proposals/continuous-parallel-execution.md §8).
+# Mirrors ralph_loop.sh's hook with engine="codex"; see that file for full
+# rationale. Called by lib/worker_pool.sh at init, per-completion, and exit.
+_continuous_update_status() {
+    local last_action="$1"
+    local status="$2"
+    local attempts_completed="$3"
+    local target_M="$4"
+    local concurrency_N="$5"
+    local exit_reason="${6:-}"
+
+    local calls_made
+    calls_made=$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")
+
+    cat > "$STATUS_FILE" << STATUSEOF
+{
+    "timestamp": "$(get_iso_timestamp)",
+    "engine": "codex",
+    "loop_count": 1,
+    "calls_made_this_hour": $calls_made,
+    "max_calls_per_hour": $MAX_CALLS_PER_HOUR,
+    "last_action": "$last_action",
+    "status": "$status",
+    "exit_reason": "$exit_reason",
+    "codex_session_id": "${CODEX_SESSION_ID:-}",
+    "worktree_enabled": $([[ "$WORKTREE_ENABLED" == "true" ]] && echo "true" || echo "false"),
+    "worktree_branch": "$(worktree_get_branch 2>/dev/null)",
+    "worktree_path": "$(worktree_get_path 2>/dev/null)",
+    "next_reset": "$(get_next_hour_time)",
+    "mode": "continuous",
+    "target_M": $target_M,
+    "concurrency_N": $concurrency_N,
+    "attempts_completed": $attempts_completed
+}
+STATUSEOF
+}
+export -f _continuous_update_status
+
 # =============================================================================
 # RATE LIMITING
 # =============================================================================
@@ -2224,6 +2263,12 @@ if [[ "$CONTINUOUS_MODE" == "true" ]]; then
     fi
     if [[ "$PARALLEL_BG" == "true" ]]; then
         echo "Error: continuous mode requires a single coordinator; use --parallel N M (not --parallel-bg)"
+        exit 1
+    fi
+    if [[ "$USE_TMUX" == "true" ]]; then
+        echo "Error: --monitor / -m is not yet supported with continuous mode (--parallel N M)."
+        echo "       Run continuous mode in one terminal and 'ralph-monitor-codex' in another."
+        echo "       (The monitor reads .ralph/status.json which continuous mode keeps up to date.)"
         exit 1
     fi
 fi

@@ -293,6 +293,48 @@ teardown() {
     [[ "$output" == *"Usage:"* ]]
 }
 
+# --monitor + --parallel N M is rejected with a clear error message that
+# tells the user how to monitor a continuous run (run ralph-monitor in
+# another terminal, status.json IS kept up-to-date by the orchestrator).
+@test "claude --monitor + --parallel N M is rejected" {
+    run bash "$CLAUDE_LOOP" --monitor --parallel 2 5
+    assert_failure
+    [[ "$output" == *"--monitor"* ]]
+    [[ "$output" == *"continuous"* ]]
+    [[ "$output" == *"ralph-monitor"* ]]
+    [[ "$output" == *"status.json"* ]]
+}
+
+@test "claude -m + --parallel N M is rejected (short flag)" {
+    run bash "$CLAUDE_LOOP" -m --parallel 2 5
+    assert_failure
+    [[ "$output" == *"--monitor"* ]]
+}
+
+@test "devin --monitor + --parallel N M is rejected" {
+    run bash "$DEVIN_LOOP" --monitor --parallel 2 5
+    assert_failure
+    [[ "$output" == *"--monitor"* ]]
+    [[ "$output" == *"continuous"* ]]
+    [[ "$output" == *"ralph-monitor-devin"* ]]
+}
+
+@test "codex --monitor + --parallel N M is rejected" {
+    run bash "$CODEX_LOOP" --monitor --parallel 2 5
+    assert_failure
+    [[ "$output" == *"--monitor"* ]]
+    [[ "$output" == *"continuous"* ]]
+    [[ "$output" == *"ralph-monitor-codex"* ]]
+}
+
+@test "claude --monitor + --parallel N (batch only) is still allowed" {
+    # --monitor only conflicts with continuous mode (N M with two args),
+    # not with batch parallel (N alone).  This is a parse-time check —
+    # we just want it to NOT fail with the continuous-mode rejection.
+    run bash "$CLAUDE_LOOP" --monitor --parallel 2 --help
+    [[ "$output" != *"--monitor / -m is not yet supported"* ]]
+}
+
 @test "devin --parallel N M with --task errors" {
     run bash "$DEVIN_LOOP" --task 1 --parallel 2 5
     assert_failure
@@ -441,4 +483,120 @@ teardown() {
     run bash "$CODEX_LOOP" --parallel 3 --help
     assert_success
     [[ "$output" == *"Usage:"* ]]
+}
+
+# =============================================================================
+# Engine-specific _continuous_update_status writes the 4 proposal-mandated
+# fields (mode, target_M, concurrency_N, attempts_completed) on top of the
+# standard status.json shape.
+# =============================================================================
+
+@test "claude _continuous_update_status writes mode/target_M/concurrency_N/attempts_completed" {
+    local td
+    td="$(mktemp -d)"
+    export RALPH_DIR="${td}/.ralph"
+    export STATUS_FILE="${RALPH_DIR}/status.json"
+    export CALL_COUNT_FILE="${RALPH_DIR}/.call_count"
+    mkdir -p "$RALPH_DIR"
+    echo "0" > "$CALL_COUNT_FILE"
+    export MAX_CALLS_PER_HOUR=100
+    export WORKTREE_ENABLED=false
+
+    # Source just the function definition by extracting it.
+    eval "$(awk '/^_continuous_update_status\(\)/,/^export -f _continuous_update_status/' "$CLAUDE_LOOP")"
+    # Stubs for helpers the function references.
+    get_iso_timestamp() { echo "2026-05-08T12:00:00Z"; }
+    get_next_hour_time() { echo "2026-05-08T13:00:00Z"; }
+    worktree_get_branch() { echo ""; }
+    worktree_get_path() { echo ""; }
+    export -f get_iso_timestamp get_next_hour_time worktree_get_branch worktree_get_path
+
+    _continuous_update_status "continuous:executing" "running" 7 100 3
+
+    [[ -f "$STATUS_FILE" ]]
+    local content
+    content=$(cat "$STATUS_FILE")
+    # Required new fields
+    [[ "$content" == *'"mode": "continuous"'* ]]
+    [[ "$content" == *'"target_M": 100'* ]]
+    [[ "$content" == *'"concurrency_N": 3'* ]]
+    [[ "$content" == *'"attempts_completed": 7'* ]]
+    # Standard fields preserved
+    [[ "$content" == *'"engine": "claude"'* ]]
+    [[ "$content" == *'"last_action": "continuous:executing"'* ]]
+    [[ "$content" == *'"status": "running"'* ]]
+
+    # Output must be valid JSON (jq parse).
+    echo "$content" | jq . > /dev/null
+
+    rm -rf "$td"
+}
+
+@test "devin _continuous_update_status writes engine=devin + 4 mandated fields" {
+    local td
+    td="$(mktemp -d)"
+    export RALPH_DIR="${td}/.ralph"
+    export STATUS_FILE="${RALPH_DIR}/status.json"
+    export CALL_COUNT_FILE="${RALPH_DIR}/.call_count"
+    mkdir -p "$RALPH_DIR"
+    echo "0" > "$CALL_COUNT_FILE"
+    export MAX_CALLS_PER_HOUR=100
+    export WORKTREE_ENABLED=false
+    export DEVIN_SESSION_ID="dev-session-x"
+
+    eval "$(awk '/^_continuous_update_status\(\)/,/^export -f _continuous_update_status/' "$DEVIN_LOOP")"
+    get_iso_timestamp() { echo "2026-05-08T12:00:00Z"; }
+    get_next_hour_time() { echo "2026-05-08T13:00:00Z"; }
+    worktree_get_branch() { echo ""; }
+    worktree_get_path() { echo ""; }
+    export -f get_iso_timestamp get_next_hour_time worktree_get_branch worktree_get_path
+
+    _continuous_update_status "continuous:starting" "running" 0 50 2
+
+    local content
+    content=$(cat "$STATUS_FILE")
+    [[ "$content" == *'"engine": "devin"'* ]]
+    [[ "$content" == *'"mode": "continuous"'* ]]
+    [[ "$content" == *'"target_M": 50'* ]]
+    [[ "$content" == *'"concurrency_N": 2'* ]]
+    [[ "$content" == *'"attempts_completed": 0'* ]]
+    [[ "$content" == *'"devin_session_id": "dev-session-x"'* ]]
+    echo "$content" | jq . > /dev/null
+
+    rm -rf "$td"
+}
+
+@test "codex _continuous_update_status writes engine=codex + 4 mandated fields" {
+    local td
+    td="$(mktemp -d)"
+    export RALPH_DIR="${td}/.ralph"
+    export STATUS_FILE="${RALPH_DIR}/status.json"
+    export CALL_COUNT_FILE="${RALPH_DIR}/.call_count"
+    mkdir -p "$RALPH_DIR"
+    echo "0" > "$CALL_COUNT_FILE"
+    export MAX_CALLS_PER_HOUR=100
+    export WORKTREE_ENABLED=false
+    export CODEX_SESSION_ID="codex-session-y"
+
+    eval "$(awk '/^_continuous_update_status\(\)/,/^export -f _continuous_update_status/' "$CODEX_LOOP")"
+    get_iso_timestamp() { echo "2026-05-08T12:00:00Z"; }
+    get_next_hour_time() { echo "2026-05-08T13:00:00Z"; }
+    worktree_get_branch() { echo ""; }
+    worktree_get_path() { echo ""; }
+    export -f get_iso_timestamp get_next_hour_time worktree_get_branch worktree_get_path
+
+    _continuous_update_status "continuous:completed" "stopped" 50 50 2 "target reached (M)"
+
+    local content
+    content=$(cat "$STATUS_FILE")
+    [[ "$content" == *'"engine": "codex"'* ]]
+    [[ "$content" == *'"mode": "continuous"'* ]]
+    [[ "$content" == *'"target_M": 50'* ]]
+    [[ "$content" == *'"concurrency_N": 2'* ]]
+    [[ "$content" == *'"attempts_completed": 50'* ]]
+    [[ "$content" == *'"exit_reason": "target reached (M)"'* ]]
+    [[ "$content" == *'"codex_session_id": "codex-session-y"'* ]]
+    echo "$content" | jq . > /dev/null
+
+    rm -rf "$td"
 }

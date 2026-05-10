@@ -496,6 +496,56 @@ update_status() {
 STATUSEOF
 }
 
+# _continuous_update_status — Status-JSON hook for continuous mode
+# (proposal: docs/proposals/continuous-parallel-execution.md §8).
+#
+# Called by lib/worker_pool.sh at orchestrator init, after every worker
+# completion, and at exit. Writes the standard status.json fields PLUS the
+# four continuous-mode fields the proposal mandates: `mode`, `target_M`,
+# `concurrency_N`, `attempts_completed`. Existing consumers (the monitor)
+# ignore unknown fields, so this is backward-compatible.
+#
+# Args:
+#   $1 - last_action          (e.g. "continuous:starting", "continuous:executing")
+#   $2 - status               (e.g. "running", "stopped")
+#   $3 - attempts_completed   integer
+#   $4 - target_M             integer
+#   $5 - concurrency_N        integer
+#   $6 - exit_reason          (optional, e.g. "target reached (M)", "queue empty")
+_continuous_update_status() {
+    local last_action="$1"
+    local status="$2"
+    local attempts_completed="$3"
+    local target_M="$4"
+    local concurrency_N="$5"
+    local exit_reason="${6:-}"
+
+    local calls_made
+    calls_made=$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")
+
+    cat > "$STATUS_FILE" << STATUSEOF
+{
+    "timestamp": "$(get_iso_timestamp)",
+    "engine": "claude",
+    "loop_count": 1,
+    "calls_made_this_hour": $calls_made,
+    "max_calls_per_hour": $MAX_CALLS_PER_HOUR,
+    "last_action": "$last_action",
+    "status": "$status",
+    "exit_reason": "$exit_reason",
+    "worktree_enabled": $([[ "$WORKTREE_ENABLED" == "true" ]] && echo "true" || echo "false"),
+    "worktree_branch": "$(worktree_get_branch 2>/dev/null)",
+    "worktree_path": "$(worktree_get_path 2>/dev/null)",
+    "next_reset": "$(get_next_hour_time)",
+    "mode": "continuous",
+    "target_M": $target_M,
+    "concurrency_N": $concurrency_N,
+    "attempts_completed": $attempts_completed
+}
+STATUSEOF
+}
+export -f _continuous_update_status
+
 # Check if we can make another call
 can_make_call() {
     local calls_made=0
@@ -3577,6 +3627,12 @@ if [[ "$CONTINUOUS_MODE" == "true" ]]; then
     fi
     if [[ "$PARALLEL_BG" == "true" ]]; then
         echo "Error: continuous mode requires a single coordinator; use --parallel N M (not --parallel-bg)"
+        exit 1
+    fi
+    if [[ "$USE_TMUX" == "true" ]]; then
+        echo "Error: --monitor / -m is not yet supported with continuous mode (--parallel N M)."
+        echo "       Run continuous mode in one terminal and 'ralph-monitor' in another."
+        echo "       (The monitor reads .ralph/status.json which continuous mode keeps up to date.)"
         exit 1
     fi
 fi

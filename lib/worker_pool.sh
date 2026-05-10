@@ -256,6 +256,18 @@ run_continuous_worker_pool() {
     if [[ "$_init_rc" == "2" ]]; then
         return 2
     fi
+
+    # status.json hook (proposal §8). Engines define _continuous_update_status
+    # if they want continuous-mode metadata (mode, target_M, concurrency_N,
+    # attempts_completed) surfaced to ralph-monitor. We call it best-effort
+    # — undefined hook just no-ops, so worker_pool.sh stays engine-agnostic.
+    _maybe_update_status() {
+        if declare -F _continuous_update_status > /dev/null 2>&1; then
+            _continuous_update_status "$@" 2>/dev/null || true
+        fi
+    }
+    _maybe_update_status "continuous:starting" "running" 0 "$M" "$N"
+
     local _prev_int_trap _prev_term_trap
     _prev_int_trap=$(trap -p INT 2>/dev/null || true)
     _prev_term_trap=$(trap -p TERM 2>/dev/null || true)
@@ -324,6 +336,7 @@ run_continuous_worker_pool() {
     if [[ $inflight -eq 0 ]]; then
         stop_reason="queue empty"
         _continuous_emit_summary "$N" "$M" "$completed" "$succeeded" "$failed" "$skipped" "$start_epoch" "$stop_reason"
+        _maybe_update_status "continuous:completed" "stopped" "$completed" "$M" "$N" "$stop_reason"
         cleanup_continuous_state
         # Restore signal traps.
         eval "${_prev_int_trap:-trap - INT}"
@@ -356,6 +369,11 @@ run_continuous_worker_pool() {
 
         # Clear in_flight from state file.
         clear_inflight "$finished_pid" 2>/dev/null || true
+
+        # Surface progress to ralph-monitor via status.json (engine-specific
+        # hook; no-op if undefined). Fires AFTER clear_inflight so the
+        # in-flight count is accurate.
+        _maybe_update_status "continuous:executing" "running" "$completed" "$M" "$N"
 
         if [[ "$rc" == "0" ]]; then
             succeeded=$((succeeded + 1))
@@ -415,6 +433,7 @@ run_continuous_worker_pool() {
     fi
 
     _continuous_emit_summary "$N" "$M" "$completed" "$succeeded" "$failed" "$skipped" "$start_epoch" "$stop_reason"
+    _maybe_update_status "continuous:completed" "stopped" "$completed" "$M" "$N" "$stop_reason"
     cleanup_continuous_state
 
     # Restore signal traps.
