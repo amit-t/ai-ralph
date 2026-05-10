@@ -4054,6 +4054,8 @@ rpx.plan.file ./docs/spec.md               # Codex alias</pre>
       { alias: 'ralph.migrate', cmd: 'ralph-migrate', desc: 'Migrate to .ralph/ structure', engine: 'shared', cat: 'management' },
       { alias: 'ralph.import', cmd: 'ralph-import', desc: 'Import PRD/spec document', engine: 'shared', cat: 'management' },
       { alias: 'ralph.check.beads', cmd: 'ralph-check-beads', desc: 'Beads integration diagnostic', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.upgrade', cmd: 'ralph-upgrade.sh', desc: 'Pull latest Ralph and reinstall', engine: 'shared', cat: 'management' },
+      { alias: 'ralph.upgrade --rollback', cmd: 'ralph-upgrade.sh --rollback', desc: 'Roll back the last upgrade', engine: 'shared', cat: 'management' },
       { alias: 'ralph.plan', cmd: 'ralph-plan', desc: 'AI-powered planning mode', engine: 'shared', cat: 'planning' },
       { alias: 'rp.install', cmd: 'rpc.install;rpd.install;rpx.install', desc: 'Install all three engines at once', engine: 'shared', cat: 'management' },
     ];
