@@ -35,6 +35,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
 - **Workspace mode** (`ralph --workspace`) for multi-repo orchestration -- run tasks across multiple git repos from a parent directory with a single workspace-level fix_plan.md
 - **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
+- **Continuous parallel execution** (`ralph --parallel N M`) — keeps N workers saturated until M total task attempts; supports per-task retry threshold (`--max-task-attempts K`), respawn cooldown, SIGINT/SIGTERM drain, automatic crash recovery via `sweep_stale_continuous_state`, and live status surfacing to `ralph-monitor` via `.ralph/status.json`. See [Continuous Parallel Execution](#continuous-parallel-execution).
 - **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
 - **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 - **Workspace planning** (`ralph-plan --workspace`) — multi-repo planning with state preservation for `[~]` / `[x]` lines, `--repos` allowlist filter, optional `--parallel-plan N` for concurrent per-repo engine calls (buffer-then-merge keeps section order stable), and `--dry-run` preview
@@ -53,6 +54,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - [Enabling Ralph in a Project](#enabling-ralph-in-a-project)
 - [Quick Start](#quick-start)
   - [Workspace Mode (multi-repo quick start)](#workspace-mode-multi-repo-quick-start)
+- [Continuous Parallel Execution](#continuous-parallel-execution)
 - [Aliases Reference](#aliases-reference)
   - [Devin Aliases (rpd)](#devin-aliases-rpd)
   - [Claude Code Aliases (rpc)](#claude-code-aliases-rpc)
@@ -458,6 +460,88 @@ Rules:
 
 ---
 
+## Continuous Parallel Execution
+
+Standard `--parallel N` is **batch mode**: spawn N agents, each runs the loop independently, the wrapper exits when all N have stopped. That's a one-shot fan-out.
+
+**Continuous mode** keeps N workers _saturated_: when one worker finishes a task, the orchestrator immediately spawns a replacement worker on the next pending task — until M total task attempts have been spent or the queue drains. It's the right shape for long unattended runs over a deep `fix_plan.md`.
+
+The shape is `--parallel N M` (one positional arg = batch, two positional args = continuous):
+
+```bash
+# Batch: spawn 3 agents, exit when all done
+ralph --parallel 3
+rpc.p 3                              # alias
+
+# Continuous: keep 3 workers running until 30 attempts have been spent
+ralph --parallel 3 30
+rpc.p 3 30                           # alias
+
+# Continuous over a multi-repo workspace
+ralph --workspace --parallel 2 50
+rpc.ws.p 2 50                        # alias
+```
+
+All three engines support the same shape with the matching prefix:
+
+| Engine | Batch alias | Continuous alias | Workspace continuous |
+|---|---|---|---|
+| Claude | `rpc.p N`  | `rpc.p N M`  | `rpc.ws.p N M`  |
+| Devin  | `rpd.p N`  | `rpd.p N M`  | `rpd.ws.p N M`  |
+| Codex  | `rpx.p N`  | `rpx.p N M`  | `rpx.ws.p N M`  |
+
+### Tuning
+
+| Flag | Env var | Default | Description |
+|---|---|---|---|
+| `--max-task-attempts K` | `RALPH_MAX_TASK_ATTEMPTS` | 1 | Per-task retry threshold within one run. After K failures on the same task, the orchestrator skip-lists it and moves on. |
+| `--respawn-delay SEC`   | `RALPH_RESPAWN_DELAY`     | 0 | Cooldown between worker replacements. Accepts integers or floats. |
+
+CLI flags win over env vars. `N` is capped at 10 to avoid fork-bombing.
+
+### Stop reasons
+
+The orchestrator emits a final summary block to stdout and appends it to `.ralph/logs/continuous-summary.log` on every exit. The "Stop reason" line is one of:
+
+- `target reached (M)` — M attempts completed normally
+- `queue empty` — no more pending tasks
+- `user interrupt` — SIGINT / SIGTERM caught; in-flight workers were drained, no new spawns
+- `circuit breaker open` — global rate / error guards tripped
+- `fatal error` — unrecoverable orchestrator-level error
+
+### Crash recovery
+
+Hard-killed runs (`SIGKILL` or power loss) leave stale `[~]` markers in `fix_plan.md`. The next ralph startup runs `sweep_stale_continuous_state` which reverts any in-flight markers whose orchestrator PID is no longer alive. Runs cleanly on every startup; no-op when there's nothing to recover.
+
+If a previous orchestrator's `.ralph/.continuous_state` file is still around but its PID is alive, ralph refuses to start a second orchestrator (avoids two concurrent orchestrators clobbering each other). Set `RALPH_CONTINUOUS_FORCE=true` to override (or remove the state file by hand).
+
+### Mutually-exclusive flags
+
+Continuous mode (`--parallel N M`) is rejected with a clear error when combined with:
+
+- `--task` (continuous picks tasks itself; can't pin to a specific one)
+- `--qg` (quality-gate refresh mode is one-shot by design)
+- `--parallel-bg` (continuous needs a single coordinator, not detached children)
+- `--monitor` / `-m` (the embedded tmux dashboard is not yet wired through; run `ralph-monitor` in another terminal — `.ralph/status.json` IS kept up-to-date)
+- `--no-codex-auto-exit` / `--no-devin-auto-exit` (workers must auto-exit so the orchestrator can respawn replacements)
+
+### Monitoring
+
+`ralph-monitor` (or `rpc.monitor`, `rpd.monitor`, `rpx.monitor`) reads `.ralph/status.json` which the continuous orchestrator updates at:
+
+- **Init** — `mode=continuous`, `target_M`, `concurrency_N`, `attempts_completed=0`
+- **Per worker completion** — `attempts_completed` increments
+- **Exit** — `status=stopped`, `exit_reason=<stop reason>`
+
+Plus the per-completion telemetry line on stdout, e.g.:
+
+```
+[continuous] completed=12/50 succeeded=10 failed=2 skipped=0 in_flight=3 task="api-repo|...|Add token refresh" rc=0
+[continuous] skip-list += web|fix-flake|78|Make e2e tests deterministic (failed 2 ≥ K=2)
+```
+
+---
+
 ## Aliases Reference
 
 All aliases follow a consistent naming convention: `<prefix>.<category>.<variant>`
@@ -543,7 +627,8 @@ Source: `devin/ALIASES.sh`
 
 | Alias | Usage | Description |
 |---|---|---|
-| `rpd.p N` | `rpd.p 3` | Spawn N parallel agents (auto-exit) |
+| `rpd.p N` | `rpd.p 3` | Spawn N parallel agents (batch mode, auto-exit) |
+| `rpd.p N M` | `rpd.p 3 30` | Continuous mode: keep N workers saturated until M total attempts ([details](#continuous-parallel-execution)) |
 | `rpd.int.p N` | `rpd.int.p 3` | Spawn N parallel agents (interactive TUI) |
 | `rpd.p.b N` | `rpd.p.b 3` | Spawn N agents as background processes |
 | `rpd.int.p.b N` | `rpd.int.p.b 3` | Spawn N interactive agents in background |
@@ -561,7 +646,8 @@ Source: `devin/ALIASES.sh`
 |---|---|---|
 | `rpd.ws` | `ralph-devin --workspace` | Multi-repo workspace mode |
 | `rpd.ws.int` | `ralph-devin --workspace --live --monitor` | Workspace mode interactive |
-| `rpd.ws.p N` | `ralph-devin --workspace --parallel N` | Parallel workspace (N repos) |
+| `rpd.ws.p N` | `ralph-devin --workspace --parallel N` | Parallel workspace (N repos, batch mode) |
+| `rpd.ws.p N M` | `ralph-devin --workspace --parallel N M` | Continuous workspace: keep N repos saturated until M attempts ([details](#continuous-parallel-execution)) |
 
 #### Workflow Presets
 
@@ -661,7 +747,8 @@ Source: `ALIASES.sh`
 | Alias | Usage | Description |
 |---|---|---|
 | `rpc.int` | `rpc.int` | Interactive mode (live + monitor, tmux split) |
-| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (auto-exit, no live/monitor — mirrors `rpd.p`) |
+| `rpc.p N` | `rpc.p 3` | Spawn N parallel agents (batch mode, auto-exit, mirrors `rpd.p`) |
+| `rpc.p N M` | `rpc.p 3 30` | Continuous mode: keep N workers saturated until M total attempts ([details](#continuous-parallel-execution)) |
 | `rpc.live.p N` | `rpc.live.p 3` | Spawn N parallel agents streaming Claude output (single pane, no tmux split) |
 | `rpc.int.p N` | `rpc.int.p 3` | Spawn N parallel agents with full tmux 3-pane split (loop + log + monitor) |
 | `rpc.p.b N` | `rpc.p.b 3` | Spawn N agents as background processes (quiet, auto-exit) |
@@ -681,7 +768,8 @@ Source: `ALIASES.sh`
 |---|---|---|
 | `rpc.ws` | `ralph --workspace` | Multi-repo workspace mode |
 | `rpc.ws.int` | `ralph --workspace --live --monitor` | Workspace mode interactive |
-| `rpc.ws.p N` | `ralph --workspace --parallel N` | Parallel workspace (N repos) |
+| `rpc.ws.p N` | `ralph --workspace --parallel N` | Parallel workspace (N repos, batch mode) |
+| `rpc.ws.p N M` | `ralph --workspace --parallel N M` | Continuous workspace: keep N repos saturated until M attempts ([details](#continuous-parallel-execution)) |
 
 #### Workflow Presets
 
@@ -787,6 +875,13 @@ Source: `codex/ALIASES.sh`
 | `rpx.int.p N` | `rpx.int.p 3` | Spawn N parallel interactive agents |
 | `rpx.int.p.b N` | `rpx.int.p.b 3` | Spawn N interactive agents in background |
 
+#### Parallel Agents
+
+| Alias | Usage | Description |
+|---|---|---|
+| `rpx.p N` | `rpx.p 3` | Spawn N parallel agents (batch mode, auto-exit) |
+| `rpx.p N M` | `rpx.p 3 30` | Continuous mode: keep N workers saturated until M total attempts ([details](#continuous-parallel-execution)) |
+
 #### Task-Specific Execution
 
 | Alias | Usage | Description |
@@ -800,7 +895,8 @@ Source: `codex/ALIASES.sh`
 |---|---|---|
 | `rpx.ws` | `ralph-codex --workspace` | Multi-repo workspace mode |
 | `rpx.ws.int` | `ralph-codex --workspace --live --monitor` | Workspace mode interactive |
-| `rpx.ws.p N` | `ralph-codex --workspace --parallel N` | Parallel workspace (N repos) |
+| `rpx.ws.p N` | `ralph-codex --workspace --parallel N` | Parallel workspace (N repos, batch mode) |
+| `rpx.ws.p N M` | `ralph-codex --workspace --parallel N M` | Continuous workspace: keep N repos saturated until M attempts ([details](#continuous-parallel-execution)) |
 
 #### Workflow Presets
 
