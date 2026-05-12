@@ -151,15 +151,45 @@ rp.install   # runs install.sh + devin/install_devin.sh + codex/install_codex.sh
 
 ### Load aliases
 
-Add one or more of these to your `~/.bashrc` or `~/.zshrc`:
+**Recommended (source-based):** add `source` lines to your `~/.bashrc` or `~/.zshrc` pointing at the repo. New aliases (e.g. `rpd.p N M` for continuous mode) are picked up automatically on `git pull` + new shell — no zshrc edits needed.
 
 ```bash
-source ~/Projects/Tools-Utilities/ai-ralph/ALIASES.sh          # rpc.* aliases (Claude)
-source ~/Projects/Tools-Utilities/ai-ralph/devin/ALIASES.sh    # rpd.* aliases (Devin)
-source ~/Projects/Tools-Utilities/ai-ralph/codex/ALIASES.sh    # rpx.* aliases (Codex)
+# Adjust the path to match where you cloned the repo
+source /path/to/ai-ralph/ALIASES.sh          # rpc.* aliases (Claude)
+source /path/to/ai-ralph/devin/ALIASES.sh    # rpd.* aliases (Devin)
+source /path/to/ai-ralph/codex/ALIASES.sh    # rpx.* aliases (Codex)
 ```
 
 Then `source ~/.zshrc` (or restart your terminal).
+
+**One-liner for first install:**
+
+```bash
+cd /path/to/ai-ralph
+echo "source $(pwd)/devin/ALIASES.sh" >> ~/.zshrc   # or ~/.bashrc
+source ~/.zshrc
+```
+
+### Upgrading from inline aliases (older install style)
+
+Earlier versions of these instructions had you copy the alias bodies directly into your shell rc. If you did that, your inline aliases are now frozen at that version and won't pick up newer commands like `rpd.p N M` or `rpd.ws.p N M`. To migrate:
+
+```bash
+# 1. Back up your shell rc
+cp ~/.zshrc ~/.zshrc.backup-$(date +%Y%m%d)
+
+# 2. Open ~/.zshrc and delete (or comment out) the inline Ralph alias block.
+#    It usually starts with a "# Ralph for ... - Bash Aliases" comment and runs
+#    until the last `alias rp...` / `rp....()` line.
+
+# 3. Replace it with a single source line, e.g.:
+echo "source $(pwd)/devin/ALIASES.sh" >> ~/.zshrc
+
+# 4. Reload
+source ~/.zshrc
+```
+
+Verify with `type rpd.p` — the function body should read `ralph-devin --parallel "${1:?...}" ${2:+"$2"}` (accepts the optional `M` arg).
 
 ---
 
