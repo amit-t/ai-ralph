@@ -48,6 +48,7 @@ check_devin_cli() {
 
     # Check authentication status
     local auth_output
+    # shellcheck disable=SC2034 # captured for parallelism with auth_exit; reserved for future error message surface
     auth_output=$("$DEVIN_CMD" auth status 2>&1)
     local auth_exit=$?
 
@@ -483,6 +484,7 @@ beads_pre_sync() {
     fi
 
     local existing_content
+    # shellcheck disable=SC2034 # snapshot captured for future diff/audit; reserved for richer fix-plan merge logic
     existing_content=$(cat "$fix_plan_file")
 
     local added=0
