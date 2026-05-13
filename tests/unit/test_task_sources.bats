@@ -401,3 +401,71 @@ _write_fix_plan() {
     run pick_task_by_id .ralph/fix_plan.md v1.0
     assert_success
 }
+
+# =============================================================================
+# pick_task_by_id: slug-form resolution (continuous-mode worker tabs)
+# =============================================================================
+# pick_next_task_for_pool slugifies the title for lines without a bead_id,
+# capped at 50 chars. Worker tabs are spawned with `--task <slug>` and must
+# be able to round-trip that slug back to the source line.
+
+@test "pick_task_by_id resolves slug from pick_next_task_for_pool" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **M2.** Unify desktop vs mobile branding"
+    # Slug produced by pick_next_task_for_pool's slugifier on that title:
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+    # task_id in the descriptor must be the slug (lowercase), so it round-trips.
+    [[ "$output" == m2-unify-desktop-vs-mobile-branding\|1\|* ]]
+}
+
+@test "pick_task_by_id resolves slug when line is already [~] (re-entry case)" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [~] **M2.** Unify desktop vs mobile branding"
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+}
+
+@test "pick_task_by_id slug match respects 50-char cap" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **L9.** A really long title that runs well past fifty characters and keeps going"
+    # head -c 50 of the slug "l9-a-really-long-title-that-runs-well-past-fifty-characters-and-keeps-going":
+    local slug
+    slug=$(printf '%s' "L9. A really long title that runs well past fifty characters and keeps going" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' \
+        | head -c 50)
+    run pick_task_by_id .ralph/fix_plan.md "$slug"
+    assert_success
+}
+
+@test "pick_task_by_id slug match does not match unrelated lines" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **M1.** Tone down login decoration" \
+        "- [ ] **M2.** Unify desktop vs mobile branding"
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+    # Must pick line 2 (M2), not line 1 (M1).
+    [[ "$output" == *"|2|"* ]]
+}
+
+@test "pick_task_by_id slug match falls behind bold-id match in precedence" {
+    # If both a bold ID and a slug could match different lines, the bold-id
+    # match (first hit when scanning) should win. Here the slug `e1-first`
+    # would match line 1, and so would `E1` via bold-id — both pick line 1.
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E1.** First task" \
+        "- [ ] **E2.** Second task"
+    run pick_task_by_id .ralph/fix_plan.md E1
+    assert_success
+    [[ "$output" == E1\|1\|* ]]
+}
+
+@test "pick_task_by_id slug match marks line in-progress on hit" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **M2.** Unify desktop vs mobile branding"
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+    run grep -F -e '- [~] **M2.**' .ralph/fix_plan.md
+    assert_success
+}

@@ -980,10 +980,22 @@ pick_task_by_id() {
     id_re=$(printf '%s' "$task_id_query" | sed -e 's/[.\\*^$()+?{|/[]/\\&/g')
     local plain_pattern="(^|[[:space:]([])${id_re}[.:)]?([[:space:]]|$)"
 
+    # Slug form: the continuous worker-pool orchestrator
+    # (pick_next_task_for_pool) emits a task_id derived by slugifying the
+    # full task title, capped at 50 chars, for lines without a bead_id.
+    # Worker tabs then spawn with `--task <slug>` and re-enter this
+    # function. Mirror that slugifier here so the consumer can resolve a
+    # slug back to its source line. The producer always slugs from a
+    # `[ ]` line; the consumer's line may be `[~]` by now, so strip any
+    # checkbox state with `\[.\]`.
+    local slug_query
+    slug_query=$(printf '%s' "$lower_id" | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+
     # Scan fix_plan.md for a task line containing the ID
     local line_num=0
     local target_line=""
     local target_line_num=0
+    local match_kind=""
 
     while IFS= read -r line; do
         line_num=$((line_num + 1))
@@ -997,11 +1009,22 @@ pick_task_by_id() {
         for v in "${bold_variants[@]}"; do
             if echo "$line" | grep -qF -- "$v"; then
                 matched=1
+                match_kind="bold"
                 break
             fi
         done
         if (( ! matched )) && echo "$line" | grep -qiE -- "$plain_pattern"; then
             matched=1
+            match_kind="plain"
+        fi
+        # Slug fallback for continuous-mode worker tabs (see comment above).
+        if (( ! matched )) && [[ -n "$slug_query" ]]; then
+            local line_slug
+            line_slug=$(printf '%s' "$line" | sed 's/.*\[.\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+            if [[ -n "$line_slug" && "$line_slug" == "$slug_query" ]]; then
+                matched=1
+                match_kind="slug"
+            fi
         fi
         if (( matched )); then
             target_line="$line"
@@ -1026,7 +1049,12 @@ pick_task_by_id() {
     bead_id=$(echo "$target_line" | sed -n 's/.*\[[ ~]\] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
 
     # Use the queried ID (uppercased) as the task_id for branch naming etc.
+    # For slug-form queries (continuous-mode worker tabs), preserve the
+    # lowercase slug so producer (pick_next_task_for_pool) and consumer
+    # agree on the descriptor — important for in-flight tracking and
+    # branch names that match what the orchestrator already recorded.
     local task_id="$upper_id"
+    [[ "$match_kind" == "slug" ]] && task_id="$slug_query"
 
     # Mark in-progress if currently unclaimed
     if echo "$target_line" | grep -qE '^\s*- \[ \] '; then
