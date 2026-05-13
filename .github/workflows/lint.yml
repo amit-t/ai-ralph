@@ -48,3 +48,33 @@ jobs:
           fi
           # shellcheck disable=SC2086
           shellcheck -x -e SC1091 -S error $files
+
+  unit-tests:
+    # Wave 2 PR 2b: pin lib/date_utils.sh and lib/timeout_utils.sh cross-platform
+    # behaviour with bats. ubuntu-latest acts as the WSL2 proxy; macos-latest
+    # guards the existing macOS path (HARD rule: macOS must stay green).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats and coreutils (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats coreutils
+
+      - name: Install bats-core and coreutils (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bats-core coreutils
+
+      - name: Show bats version
+        run: bats --version
+
+      - name: Run lib unit tests
+        run: |
+          bats tests/unit/lib_date_utils.bats tests/unit/lib_timeout_utils.bats
