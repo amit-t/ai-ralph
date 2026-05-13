@@ -54,6 +54,7 @@ TASK_SOURCE=""
 PRD_FILE=""
 GITHUB_LABEL=""
 NON_INTERACTIVE=false
+# shellcheck disable=SC2034 # CLI flag placeholder; reserved for richer arg parsing
 SHOW_HELP=false
 VERSION="0.1.0"
 
