@@ -186,6 +186,7 @@ mock_stat() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -c|-f)
+                # shellcheck disable=SC2034 # format flag consumed but value unused; this mock ignores stat format strings
                 format=$2
                 shift 2
                 ;;
@@ -230,6 +231,7 @@ mock_gtimeout() {
 # Mock portable_timeout (cross-platform wrapper from timeout_utils.sh)
 # This mock bypasses the actual timeout detection and just executes the command
 mock_portable_timeout() {
+    # shellcheck disable=SC2034 # documented function parameter; this mock ignores timeout duration by design
     local duration=$1
     shift
 
