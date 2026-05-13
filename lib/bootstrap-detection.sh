@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # bootstrap-detection.sh — first-time-encounter nag for the versioning system.
 # Origin: ai-devkit (canonical). Mirrored copy in ai-ralph.
 

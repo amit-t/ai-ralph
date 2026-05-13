@@ -26,13 +26,13 @@ assert_eq "$(_wb_check_requires '>=1.2.0' '1.1.9')" "fail" "constraint fail"
 
 # local_version
 fixture="$(mktemp -d)"
-trap "rm -rf '$fixture'" EXIT
+trap 'rm -rf "$fixture"' EXIT
 printf '{"version":"1.2.3"}\n' > "$fixture/version.json"
 ( export RALPH_CLONE="$fixture"; assert_eq "$(_wb_local_version ralph)" "1.2.3" "local version read" )
 
 # cache TTL
 cachedir="$(mktemp -d)"
-trap "rm -rf '$fixture' '$cachedir'" EXIT
+trap 'rm -rf "$fixture" "$cachedir"' EXIT
 WB_UPDATES_CACHE_DIR="$cachedir"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cat > "$cachedir/ralph.json" <<JSON

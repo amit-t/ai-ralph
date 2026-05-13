@@ -258,6 +258,7 @@ $fix_plan_contents
             local new_counts
             new_counts=$(count_plan_items "$fix_plan_path")
             local new_total new_completed new_in_progress new_pending
+            # shellcheck disable=SC2034 # read fills four fields; only new_total is displayed, the rest are placeholders matching count_plan_items output shape
             read -r new_total new_completed new_in_progress new_pending <<< "$new_counts"
             local new_size
             new_size=$(wc -c < "$fix_plan_path" | tr -d ' ')

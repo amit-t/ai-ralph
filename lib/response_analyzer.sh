@@ -9,7 +9,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/date_utils.sh"
 # Based on expert recommendations from Martin Fowler, Michael Nygard, Sam Newman
 
 # Colors for output
+# shellcheck disable=SC2034 # RED reserved for error paths; keeps palette symmetric
 RED='\033[0;31m'
+# shellcheck disable=SC2034 # GREEN reserved for success paths; keeps palette symmetric
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
@@ -20,6 +22,7 @@ RALPH_DIR="${RALPH_DIR:-.ralph}"
 
 # Analysis configuration
 COMPLETION_KEYWORDS=("done" "complete" "finished" "all tasks complete" "project complete" "ready for review")
+# shellcheck disable=SC2034 # peer pattern set kept for parity with other classifiers; reserved for the test-only-loop heuristic
 TEST_ONLY_PATTERNS=("npm test" "bats" "pytest" "jest" "cargo test" "go test" "running tests")
 NO_WORK_PATTERNS=("nothing to do" "no changes" "already implemented" "up to date")
 QUESTION_PATTERNS=("should I" "would you" "do you want" "which approach" "which option" "how should" "what should" "shall I" "do you prefer" "can you clarify" "could you" "what do you think" "please confirm" "need clarification" "awaiting.*input" "waiting.*response" "your preference")
@@ -65,7 +68,8 @@ detect_output_format() {
     fi
 
     # Check if file starts with { or [ (JSON indicators)
-    local first_char=$(head -c 1 "$output_file" 2>/dev/null | tr -d '[:space:]')
+    local first_char
+    first_char=$(head -c 1 "$output_file" 2>/dev/null | tr -d '[:space:]')
 
     if [[ "$first_char" != "{" && "$first_char" != "[" ]]; then
         echo "text"
@@ -109,13 +113,15 @@ parse_json_response() {
 
         # Extract the "result" type message from the array (usually the last entry)
         # This contains: result, session_id, is_error, duration_ms, etc.
-        local result_obj=$(jq '[.[] | select(.type == "result")] | .[-1] // {}' "$output_file" 2>/dev/null)
+        local result_obj
+        result_obj=$(jq '[.[] | select(.type == "result")] | .[-1] // {}' "$output_file" 2>/dev/null)
 
         # Guard against empty result_obj if jq fails (review fix: Macroscope)
         [[ -z "$result_obj" ]] && result_obj="{}"
 
         # Extract session_id from init message as fallback
-        local init_session_id=$(jq -r '.[] | select(.type == "system" and .subtype == "init") | .session_id // empty' "$output_file" 2>/dev/null | head -1)
+        local init_session_id
+        init_session_id=$(jq -r '.[] | select(.type == "system" and .subtype == "init") | .session_id // empty' "$output_file" 2>/dev/null | head -1)
 
         # Prioritize result object's own session_id, then fall back to init message (review fix: CodeRabbit)
         # This prevents session ID loss when arrays lack an init message with session_id
@@ -137,27 +143,33 @@ parse_json_response() {
     fi
 
     # Detect JSON format by checking for Claude CLI fields
-    local has_result_field=$(jq -r 'has("result")' "$output_file" 2>/dev/null)
+    local has_result_field
+    has_result_field=$(jq -r 'has("result")' "$output_file" 2>/dev/null)
 
     # Extract fields - support both flat format and Claude CLI format
     # Priority: Claude CLI fields first, then flat format fields
 
     # Status: from flat format OR derived from metadata.completion_status
-    local status=$(jq -r '.status // "UNKNOWN"' "$output_file" 2>/dev/null)
-    local completion_status=$(jq -r '.metadata.completion_status // ""' "$output_file" 2>/dev/null)
+    local status
+    status=$(jq -r '.status // "UNKNOWN"' "$output_file" 2>/dev/null)
+    local completion_status
+    completion_status=$(jq -r '.metadata.completion_status // ""' "$output_file" 2>/dev/null)
     if [[ "$completion_status" == "complete" || "$completion_status" == "COMPLETE" ]]; then
         status="COMPLETE"
     fi
 
     # Exit signal: from flat format OR derived from completion_status
     # Track whether EXIT_SIGNAL was explicitly provided (vs inferred from STATUS)
-    local exit_signal=$(jq -r '.exit_signal // false' "$output_file" 2>/dev/null)
-    local explicit_exit_signal_found=$(jq -r 'has("exit_signal")' "$output_file" 2>/dev/null)
+    local exit_signal
+    exit_signal=$(jq -r '.exit_signal // false' "$output_file" 2>/dev/null)
+    local explicit_exit_signal_found
+    explicit_exit_signal_found=$(jq -r 'has("exit_signal")' "$output_file" 2>/dev/null)
 
     # Bug #1 Fix: If exit_signal is still false, check for RALPH_STATUS block in .result field
     # Claude CLI JSON format embeds the RALPH_STATUS block within the .result text field
     if [[ "$exit_signal" == "false" && "$has_result_field" == "true" ]]; then
-        local result_text=$(jq -r '.result // ""' "$output_file" 2>/dev/null)
+        local result_text
+        result_text=$(jq -r '.result // ""' "$output_file" 2>/dev/null)
         if [[ -n "$result_text" ]] && echo "$result_text" | grep -q -- "---RALPH_STATUS---"; then
             # Extract EXIT_SIGNAL value from RALPH_STATUS block within result text
             local embedded_exit_sig
@@ -186,40 +198,50 @@ parse_json_response() {
     fi
 
     # Work type: from flat format
-    local work_type=$(jq -r '.work_type // "UNKNOWN"' "$output_file" 2>/dev/null)
+    local work_type
+    work_type=$(jq -r '.work_type // "UNKNOWN"' "$output_file" 2>/dev/null)
 
     # Files modified: from flat format OR from metadata.files_changed
-    local files_modified=$(jq -r '.metadata.files_changed // .files_modified // 0' "$output_file" 2>/dev/null)
+    local files_modified
+    files_modified=$(jq -r '.metadata.files_changed // .files_modified // 0' "$output_file" 2>/dev/null)
 
     # Error count: from flat format OR derived from metadata.has_errors
     # Note: When only has_errors=true is present (without explicit error_count),
     # we set error_count=1 as a minimum. This is defensive programming since
     # the stuck detection threshold is >5 errors, so 1 error won't trigger it.
     # Actual error count may be higher, but precise count isn't critical for our logic.
-    local error_count=$(jq -r '.error_count // 0' "$output_file" 2>/dev/null)
-    local has_errors=$(jq -r '.metadata.has_errors // false' "$output_file" 2>/dev/null)
+    local error_count
+    error_count=$(jq -r '.error_count // 0' "$output_file" 2>/dev/null)
+    local has_errors
+    has_errors=$(jq -r '.metadata.has_errors // false' "$output_file" 2>/dev/null)
     if [[ "$has_errors" == "true" && "$error_count" == "0" ]]; then
         error_count=1  # At least one error if has_errors is true
     fi
 
     # Summary: from flat format OR from result field (Claude CLI format)
-    local summary=$(jq -r '.result // .summary // ""' "$output_file" 2>/dev/null)
+    local summary
+    summary=$(jq -r '.result // .summary // ""' "$output_file" 2>/dev/null)
 
     # Session ID: from Claude CLI format (sessionId) OR from metadata.session_id
-    local session_id=$(jq -r '.sessionId // .metadata.session_id // ""' "$output_file" 2>/dev/null)
+    local session_id
+    session_id=$(jq -r '.sessionId // .metadata.session_id // ""' "$output_file" 2>/dev/null)
 
     # Loop number: from metadata
-    local loop_number=$(jq -r '.metadata.loop_number // .loop_number // 0' "$output_file" 2>/dev/null)
+    local loop_number
+    loop_number=$(jq -r '.metadata.loop_number // .loop_number // 0' "$output_file" 2>/dev/null)
 
     # Confidence: from flat format
-    local confidence=$(jq -r '.confidence // 0' "$output_file" 2>/dev/null)
+    local confidence
+    confidence=$(jq -r '.confidence // 0' "$output_file" 2>/dev/null)
 
     # Progress indicators: from Claude CLI metadata (optional)
-    local progress_count=$(jq -r '.metadata.progress_indicators | if . then length else 0 end' "$output_file" 2>/dev/null)
+    local progress_count
+    progress_count=$(jq -r '.metadata.progress_indicators | if . then length else 0 end' "$output_file" 2>/dev/null)
 
     # Permission denials: from Claude Code output (Issue #101)
     # When Claude Code is denied permission to run commands, it outputs a permission_denials array
-    local permission_denial_count=$(jq -r '.permission_denials | if . then length else 0 end' "$output_file" 2>/dev/null)
+    local permission_denial_count
+    permission_denial_count=$(jq -r '.permission_denials | if . then length else 0 end' "$output_file" 2>/dev/null)
     permission_denial_count=$((permission_denial_count + 0))  # Ensure integer
 
     local has_permission_denials="false"
@@ -349,11 +371,13 @@ analyze_response() {
         return 1
     fi
 
-    local output_content=$(cat "$output_file")
+    local output_content
+    output_content=$(cat "$output_file")
     local output_length=${#output_content}
 
     # Detect output format and try JSON parsing first
-    local output_format=$(detect_output_format "$output_file")
+    local output_format
+    output_format=$(detect_output_format "$output_file")
 
     if [[ "$output_format" == "json" ]]; then
         # Try JSON parsing
@@ -365,13 +389,18 @@ analyze_response() {
             is_stuck=$(jq -r '.is_stuck' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "false")
             work_summary=$(jq -r '.summary' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "")
             files_modified=$(jq -r '.files_modified' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "0")
-            local json_confidence=$(jq -r '.confidence' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "0")
-            local session_id=$(jq -r '.session_id' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "")
+            local json_confidence
+            json_confidence=$(jq -r '.confidence' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "0")
+            local session_id
+            session_id=$(jq -r '.session_id' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "")
 
             # Extract permission denial fields (Issue #101)
-            local has_permission_denials=$(jq -r '.has_permission_denials' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "false")
-            local permission_denial_count=$(jq -r '.permission_denial_count' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "0")
-            local denied_commands_json=$(jq -r '.denied_commands' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "[]")
+            local has_permission_denials
+            has_permission_denials=$(jq -r '.has_permission_denials' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "false")
+            local permission_denial_count
+            permission_denial_count=$(jq -r '.permission_denial_count' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "0")
+            local denied_commands_json
+            denied_commands_json=$(jq -r '.denied_commands' $RALPH_DIR/.json_parse_result 2>/dev/null || echo "[]")
 
             # Persist session ID if present (for session continuity across loop iterations)
             if [[ -n "$session_id" && "$session_id" != "null" ]]; then
@@ -488,8 +517,10 @@ analyze_response() {
     # 1. Check for explicit structured output (if Claude follows schema)
     if grep -q -- "---RALPH_STATUS---" "$output_file"; then
         # Parse structured output
-        local status=$(grep "STATUS:" "$output_file" | cut -d: -f2 | xargs)
-        local exit_sig=$(grep "EXIT_SIGNAL:" "$output_file" | cut -d: -f2 | xargs)
+        local status
+        status=$(grep "STATUS:" "$output_file" | cut -d: -f2 | xargs)
+        local exit_sig
+        exit_sig=$(grep "EXIT_SIGNAL:" "$output_file" | cut -d: -f2 | xargs)
 
         # If EXIT_SIGNAL is explicitly provided, respect it
         if [[ -n "$exit_sig" ]]; then
@@ -615,7 +646,8 @@ analyze_response() {
 
     # 7. Analyze output length trends (detect declining engagement)
     if [[ -f "$RALPH_DIR/.last_output_length" ]]; then
-        local last_length=$(cat "$RALPH_DIR/.last_output_length")
+        local last_length
+        last_length=$(cat "$RALPH_DIR/.last_output_length")
         local length_ratio=$((output_length * 100 / last_length))
 
         if [[ $length_ratio -lt 50 ]]; then
@@ -700,13 +732,18 @@ update_exit_signals() {
     fi
 
     # Read analysis results
-    local is_test_only=$(jq -r '.analysis.is_test_only' "$analysis_file")
-    local has_completion_signal=$(jq -r '.analysis.has_completion_signal' "$analysis_file")
-    local loop_number=$(jq -r '.loop_number' "$analysis_file")
-    local has_progress=$(jq -r '.analysis.has_progress' "$analysis_file")
+    local is_test_only
+    is_test_only=$(jq -r '.analysis.is_test_only' "$analysis_file")
+    local has_completion_signal
+    has_completion_signal=$(jq -r '.analysis.has_completion_signal' "$analysis_file")
+    local loop_number
+    loop_number=$(jq -r '.loop_number' "$analysis_file")
+    local has_progress
+    has_progress=$(jq -r '.analysis.has_progress' "$analysis_file")
 
     # Read current exit signals
-    local signals=$(cat "$exit_signals_file" 2>/dev/null || echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}')
+    local signals
+    signals=$(cat "$exit_signals_file" 2>/dev/null || echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}')
 
     # Update test_only_loops array
     if [[ "$is_test_only" == "true" ]]; then
@@ -727,7 +764,8 @@ update_exit_signals() {
     # Note: Previously used confidence >= 60, but JSON mode always has confidence >= 70
     # due to deterministic scoring (+50 for JSON format, +20 for result field).
     # This caused premature exits after 5 loops. Now we respect Claude's explicit intent.
-    local exit_signal=$(jq -r '.analysis.exit_signal // false' "$analysis_file")
+    local exit_signal
+    exit_signal=$(jq -r '.analysis.exit_signal // false' "$analysis_file")
     if [[ "$exit_signal" == "true" ]]; then
         signals=$(echo "$signals" | jq ".completion_indicators += [$loop_number]")
     fi
@@ -751,12 +789,18 @@ log_analysis_summary() {
         return 1
     fi
 
-    local loop=$(jq -r '.loop_number' "$analysis_file")
-    local exit_sig=$(jq -r '.analysis.exit_signal' "$analysis_file")
-    local confidence=$(jq -r '.analysis.confidence_score' "$analysis_file")
-    local test_only=$(jq -r '.analysis.is_test_only' "$analysis_file")
-    local files_changed=$(jq -r '.analysis.files_modified' "$analysis_file")
-    local summary=$(jq -r '.analysis.work_summary' "$analysis_file")
+    local loop
+    loop=$(jq -r '.loop_number' "$analysis_file")
+    local exit_sig
+    exit_sig=$(jq -r '.analysis.exit_signal' "$analysis_file")
+    local confidence
+    confidence=$(jq -r '.analysis.confidence_score' "$analysis_file")
+    local test_only
+    test_only=$(jq -r '.analysis.is_test_only' "$analysis_file")
+    local files_changed
+    files_changed=$(jq -r '.analysis.files_modified' "$analysis_file")
+    local summary
+    summary=$(jq -r '.analysis.work_summary' "$analysis_file")
 
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║           Response Analysis - Loop #$loop                 ║${NC}"
@@ -775,7 +819,8 @@ detect_stuck_loop() {
     local history_dir=${2:-"$RALPH_DIR/logs"}
 
     # Get last 3 output files
-    local recent_outputs=$(ls -t "$history_dir"/claude_output_*.log 2>/dev/null | head -3)
+    local recent_outputs
+    recent_outputs=$(ls -t "$history_dir"/claude_output_*.log 2>/dev/null | head -3)
 
     if [[ -z "$recent_outputs" ]]; then
         return 1  # Not enough history
@@ -784,7 +829,8 @@ detect_stuck_loop() {
     # Extract key errors from current output using two-stage filtering
     # Stage 1: Filter out JSON field patterns to avoid false positives
     # Stage 2: Extract actual error messages
-    local current_errors=$(grep -v '"[^"]*error[^"]*":' "$current_output" 2>/dev/null | \
+    local current_errors
+    current_errors=$(grep -v '"[^"]*error[^"]*":' "$current_output" 2>/dev/null | \
                           grep -E '(^Error:|^ERROR:|^error:|\]: error|Link: error|Error occurred|failed with error|[Ee]xception|Fatal|FATAL)' 2>/dev/null | \
                           sort | uniq)
 
@@ -857,7 +903,8 @@ get_last_session_id() {
     fi
 
     # Extract session_id from JSON file
-    local session_id=$(jq -r '.session_id // ""' "$SESSION_FILE" 2>/dev/null)
+    local session_id
+    session_id=$(jq -r '.session_id // ""' "$SESSION_FILE" 2>/dev/null)
     echo "$session_id"
     return 0
 }
@@ -871,7 +918,8 @@ should_resume_session() {
     fi
 
     # Get session timestamp
-    local timestamp=$(jq -r '.timestamp // ""' "$SESSION_FILE" 2>/dev/null)
+    local timestamp
+    timestamp=$(jq -r '.timestamp // ""' "$SESSION_FILE" 2>/dev/null)
 
     if [[ -z "$timestamp" ]]; then
         echo "false"
@@ -879,7 +927,8 @@ should_resume_session() {
     fi
 
     # Calculate session age using date utilities
-    local now=$(get_epoch_seconds)
+    local now
+    now=$(get_epoch_seconds)
     local session_time
 
     # Parse ISO timestamp to epoch - try multiple formats for cross-platform compatibility

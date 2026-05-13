@@ -50,6 +50,7 @@ LIVE_OUTPUT=true
 PARALLEL_COUNT=0
 PARALLEL_BG=false
 WORKSPACE_MODE=false
+# shellcheck disable=SC2034 # documented hourly cap reserved for the periodic-sleep wrapper; consumed by future variant of the loop driver
 SLEEP_DURATION=3600
 SPECIFIC_TASK_NUM=""
 
@@ -81,6 +82,7 @@ EXIT_SIGNALS_FILE="$RALPH_DIR/.exit_signals"
 RESPONSE_ANALYSIS_FILE="$RALPH_DIR/.response_analysis"
 MAX_CONSECUTIVE_TEST_LOOPS=3
 MAX_CONSECUTIVE_DONE_SIGNALS=2
+# shellcheck disable=SC2034 # paired with TEST_ONLY_PATTERNS in response_analyzer; consumed by the test-only-loop heuristic
 TEST_PERCENTAGE_THRESHOLD=30
 
 # Quality gate mode configuration (used with --qg flag)
@@ -156,7 +158,8 @@ get_tmux_base_index() {
 }
 
 setup_tmux_session() {
-    local session_name="ralph-devin-$(date +%s)"
+    local session_name
+    session_name="ralph-devin-$(date +%s)"
     local ralph_home="${RALPH_HOME:-$HOME/.ralph}"
     local project_dir
     project_dir=$(pwd)
@@ -797,6 +800,7 @@ ${task_directive}"
                         last_displayed_line=$current_lines
                     fi
                 fi
+                # shellcheck disable=SC2034 # telemetry snapshot; reserved for richer live-progress output (see local last_line above)
                 last_line=$(tail -1 "$output_file" 2>/dev/null | head -c 80)
                 cp "$output_file" "$LIVE_LOG_FILE" 2>/dev/null
             fi
@@ -1118,6 +1122,7 @@ main() {
             local uncommitted_files=0
             uncommitted_files=$(cd "$git_dir" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
             if [[ $uncommitted_files -gt 0 ]]; then
+                # shellcheck disable=SC2034 # telemetry flag; reserved for richer per-iteration reporting
                 has_uncommitted=true
                 files_changed=$((files_changed + uncommitted_files))
                 local uc_added uc_removed

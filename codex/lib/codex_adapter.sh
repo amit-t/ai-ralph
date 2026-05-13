@@ -47,6 +47,7 @@ check_codex_cli() {
 
     # Check authentication status
     local auth_output
+    # shellcheck disable=SC2034 # captured for parallelism with auth_exit; reserved for future error message surface
     auth_output=$("$CODEX_CMD" auth status 2>&1)
     local auth_exit=$?
 
@@ -201,6 +202,7 @@ codex_save_session() {
 # Reset session state
 codex_reset_session() {
     rm -f "$CODEX_SESSION_FILE"
+    # shellcheck disable=SC2034 # documented global side effect; consumed by other codex/* files
     CODEX_SESSION_ID=""
 }
 
@@ -324,6 +326,7 @@ init_codex_session_tracking() {
 #   0 on success, 1 if beads unavailable
 beads_mark_in_progress() {
     local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    # shellcheck disable=SC2034 # documented function parameter; reserved for richer status output
     local loop_count="${2:-0}"
 
     if ! command -v bd &>/dev/null; then

@@ -391,7 +391,8 @@ worktree_fallback_branch_pr() {
     local loop_count="$3"
     local gate_passed="${4:-true}"
     local engine="${RALPH_ENGINE:-ralph}"
-    local FALLBACK_BRANCH="ralph-${engine}/${task_id:-run}-$(date +%s)"
+    local FALLBACK_BRANCH
+    FALLBACK_BRANCH="ralph-${engine}/${task_id:-run}-$(date +%s)"
 
     # Honour PR_ENABLED=false
     if [[ "${PR_ENABLED:-true}" == "false" ]]; then
