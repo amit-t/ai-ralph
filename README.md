@@ -35,7 +35,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 - **File-based planning** (`ralph-plan --file`) for generating fix_plan from any MD, JSON, or text file
 - **Workspace mode** (`ralph --workspace`) for multi-repo orchestration -- run tasks across multiple git repos from a parent directory with a single workspace-level fix_plan.md
 - **Parallel workspace** (`ralph --workspace --parallel N`) to execute tasks across N repos simultaneously with per-worker logs and automatic task lifecycle management
-- **Continuous parallel execution** (`ralph --parallel N M`) — keeps N workers saturated until M total task attempts; supports per-task retry threshold (`--max-task-attempts K`), respawn cooldown, SIGINT/SIGTERM drain, automatic crash recovery via `sweep_stale_continuous_state`, and live status surfacing to `ralph-monitor` via `.ralph/status.json`. See [Continuous Parallel Execution](#continuous-parallel-execution).
+- **Continuous parallel execution** (`ralph --parallel N M`) — keeps N workers saturated until M total task attempts; supports per-task retry threshold (`--max-task-attempts K`), respawn cooldown, SIGINT/SIGTERM drain, automatic crash recovery via `sweep_stale_continuous_state`, and live status surfacing to `ralph-monitor` via `.ralph/status.json`. **Each worker runs in its own terminal tab** (iTerm2 / VS Code / Windsurf / Cursor) by default; use `--no-tabs` to force the single-pane orchestrator. See [Continuous Parallel Execution](#continuous-parallel-execution).
 - **Planning model override** (`ralph-plan --model <name>`) — pick Opus/Sonnet/etc. for Claude or Devin planning sessions
 - **Planning thinking depth** (`ralph-plan --thinking <normal\|hard\|ultra>`) — ultrathink preamble + Claude `--effort` wiring for deep planning
 - **Workspace planning** (`ralph-plan --workspace`) — multi-repo planning with state preservation for `[~]` / `[x]` lines, `--repos` allowlist filter, optional `--parallel-plan N` for concurrent per-repo engine calls (buffer-then-merge keeps section order stable), and `--dry-run` preview
@@ -519,6 +519,23 @@ All three engines support the same shape with the matching prefix:
 | Claude | `rpc.p N`  | `rpc.p N M`  | `rpc.ws.p N M`  |
 | Devin  | `rpd.p N`  | `rpd.p N M`  | `rpd.ws.p N M`  |
 | Codex  | `rpx.p N`  | `rpx.p N M`  | `rpx.ws.p N M`  |
+
+### Per-worker terminal tabs (default)
+
+When the host terminal supports tabs (iTerm2, VS Code, Windsurf, Cursor), each worker runs in its **own terminal tab** rather than as a background subprocess in a single pane. You get one tab per active task, which makes per-worker debugging dramatically easier.
+
+```bash
+ralph --parallel 3 30            # 3 workers, 30 attempts, each in its own tab
+ralph --parallel 3 30 --no-tabs  # force the single-pane orchestrator
+```
+
+Detection is automatic via `TERM_PROGRAM` / `VSCODE_PID`. Plain terminals (Apple Terminal, raw SSH, headless CI) automatically fall back to single-pane mode. Set `RALPH_DISABLE_TABS=true` in your environment if you want to permanently opt out without typing `--no-tabs` each time.
+
+Workers communicate with the orchestrator via atomic JSON files in `.ralph/.continuous_completions/` and heartbeat files in `.ralph/.continuous_heartbeats/`. If a tab is force-closed, the orchestrator detects the stale heartbeat after ~60s and synthesizes a failure completion so the task can be retried.
+
+| Flag | Env var | Default | Description |
+|---|---|---|---|
+| `--no-tabs` | `RALPH_DISABLE_TABS=true` | (off) | Force the single-pane orchestrator even under a tab-capable terminal. |
 
 ### Tuning
 

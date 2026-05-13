@@ -1,9 +1,21 @@
 # Continuous parallel execution with per-worker terminal tabs
 
-Status: proposed (not yet implemented).
+Status: **implemented** (lib/worker_pool_tabs.sh; tabs default for `--parallel N M` when supported).
 Audience: ai-ralph maintainers.
 Author: ai-ralph team.
 Date: 2026-05-10.
+
+## Implementation note
+
+The implemented design differs from the proposal in one key way: instead of
+gating tabs behind a `--tabs` opt-in flag (Option A in the original proposal),
+**tabs is now the default for `--parallel N M`** when the terminal supports
+them (`tabs_supported_by_terminal()`). The opt-out is `--no-tabs` or
+`RALPH_DISABLE_TABS=true`. The single-pane orchestrator in
+`lib/worker_pool.sh` is the automatic fallback for plain terminals.
+
+All other design decisions (completion-file protocol, heartbeat sweep,
+SIGINT drain, status.json hook) were implemented as described below.
 
 ## Problem
 

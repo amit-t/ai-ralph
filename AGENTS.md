@@ -209,6 +209,15 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - Silent no-op when the state file is absent (the common case).
     - Falls back to `.ralph/fix_plan.md` when `WORKSPACE_FIX_PLAN` is unset; handles malformed PIDs / missing fix_plan / jq absence gracefully.
 
+17. **lib/worker_pool_tabs.sh** — Tab-based continuous parallel execution (proposal: `docs/proposals/continuous-with-tabs.md`)
+    - `run_continuous_worker_pool_tabs()`: tab-spawning variant of `run_continuous_worker_pool`. Same calling convention; each worker runs in its own terminal tab (iTerm2 / VS Code / Windsurf / Cursor) via `spawn_parallel_agents` with count=1. Workers communicate completion via atomic JSON files in `.ralph/.continuous_completions/`.
+    - **Completion protocol**: `write_completion_file()` (worker → atomic `tmp`+`mv` JSON write), `read_completion_files()` / `delete_completion_file()` / `parse_completion_file()` (orchestrator side). JSON schema matches proposal §Completion protocol exactly. Parsing uses portable sed (gawk's 3-arg `match()` is not available on macOS BSD awk).
+    - **Heartbeat protocol**: `start_heartbeat_writer()` / `stop_heartbeat_writer()` (background ticker), `write_heartbeat()` / `heartbeat_age_seconds()` / `is_heartbeat_stale()`. Workers bump their heartbeat every `WORKER_POOL_TABS_HEARTBEAT_INTERVAL` seconds (default 10s); the orchestrator declares a worker dead when its heartbeat age exceeds `WORKER_POOL_TABS_HEARTBEAT_STALE_SECONDS` (default 60s) and synthesizes a rc=124 completion so the regular path handles it.
+    - **Worker lifecycle**: `worker_init_completion_protocol()` installs an EXIT/INT/TERM trap that writes the completion JSON with the engine's `$?` as rc and cleans up the heartbeat. Called by each engine when `--continuous-worker-id WID` is passed. First heartbeat is written synchronously to avoid orchestrator false-positives during the start grace window.
+    - **GC**: `gc_stale_continuous_artifacts()` runs at startup (next to `sweep_stale_continuous_state`) and wipes orphaned completion / heartbeat files from previously crashed orchestrators. No-op when a live orchestrator owns the state file.
+    - **Tab vs. single-pane decision**: `tabs_supported_by_terminal()` returns 0 under iTerm2 / VS Code-family terminals, 1 otherwise. Each engine's `run_continuous_*` function inspects `NO_TABS` (CLI `--no-tabs`) and `RALPH_DISABLE_TABS` (env) before falling through to `tabs_supported_by_terminal`. Tabs is the default; single-pane is the automatic fallback.
+    - **Engine flags added** (all three engines): `--no-tabs`, `--continuous-worker-id WID`, `--workspace-task DESCRIPTOR`. The last two are emitted by the tabs orchestrator when spawning each tab.
+
 ### Continuous Parallel Execution
 
 `--parallel N M` engages a continuous worker pool: keep ≤ N workers running until M total attempts (success or failure) are spent, then drain. Strictly opt-in — `--parallel N` (one positional arg) retains its V1 batch behavior byte-identically.
