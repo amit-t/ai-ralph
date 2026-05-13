@@ -2,6 +2,13 @@
 
 All notable changes to ai-ralph are documented here. release-please appends entries on every merge to `main` based on Conventional Commit messages.
 
+## [2.1.0](https://github.com/amit-t/ai-ralph/compare/v2.0.0...v2.1.0) (2026-05-13)
+
+
+### Features
+
+* WSL2 Ubuntu support (Wave 2) ([692ad01](https://github.com/amit-t/ai-ralph/commit/692ad01c3e983d693d0efe5723c55bfca9362588))
+
 ## [2.0.0](https://github.com/amit-t/ai-ralph/compare/v1.0.0...v2.0.0) (2026-05-11)
 
 
