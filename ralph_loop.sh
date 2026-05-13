@@ -31,6 +31,7 @@ DOCS_DIR="$RALPH_DIR/docs/generated"
 STATUS_FILE="$RALPH_DIR/status.json"
 PROGRESS_FILE="$RALPH_DIR/progress.json"
 CLAUDE_CODE_CMD="claude"
+# shellcheck disable=SC2034 # documented hourly cap reserved for the periodic-sleep wrapper; consumed by future variant of the loop driver
 SLEEP_DURATION=3600     # 1 hour in seconds
 LIVE_OUTPUT=false       # Show Claude Code output in real-time (streaming)
 PARALLEL_COUNT=0       # Number of parallel agents to spawn (0 = disabled)
@@ -113,6 +114,7 @@ MAX_CONSECUTIVE_DONE_SIGNALS=2
 
 # Quality gate mode configuration (used with --qg flag)
 MAX_QG_RETRIES="${MAX_QG_RETRIES:-3}"
+# shellcheck disable=SC2034 # paired with TEST_ONLY_PATTERNS in response_analyzer; consumed by the test-only-loop heuristic
 TEST_PERCENTAGE_THRESHOLD=30  # If more than 30% of recent loops are test-only, flag it
 
 # .ralphrc configuration file
@@ -274,9 +276,11 @@ get_tmux_base_index() {
 
 # Setup tmux session with monitor
 setup_tmux_session() {
-    local session_name="ralph-$(date +%s)"
+    local session_name
+    session_name="ralph-$(date +%s)"
     local ralph_home="${RALPH_HOME:-$HOME/.ralph}"
-    local project_dir="$(pwd)"
+    local project_dir
+    project_dir="$(pwd)"
 
     # Get the tmux base-index to handle custom configurations (e.g., base-index 1)
     local base_win
@@ -415,7 +419,8 @@ setup_tmux_session() {
 # Initialize call tracking
 init_call_tracking() {
     # Debug logging removed for cleaner output
-    local current_hour=$(date +%Y%m%d%H)
+    local current_hour
+    current_hour=$(date +%Y%m%d%H)
     local last_reset_hour=""
 
     if [[ -f "$TIMESTAMP_FILE" ]]; then
@@ -443,7 +448,8 @@ init_call_tracking() {
 log_status() {
     local level=$1
     local message=$2
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local color=""
     
     case $level in
@@ -514,12 +520,15 @@ increment_call_counter() {
 
 # Wait for rate limit reset with countdown
 wait_for_reset() {
-    local calls_made=$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")
+    local calls_made
+    calls_made=$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo "0")
     log_status "WARN" "Rate limit reached ($calls_made/$MAX_CALLS_PER_HOUR). Waiting for reset..."
     
     # Calculate time until next hour
-    local current_minute=$(date +%M)
-    local current_second=$(date +%S)
+    local current_minute
+    current_minute=$(date +%M)
+    local current_second
+    current_second=$(date +%S)
     local wait_time=$(((60 - current_minute - 1) * 60 + (60 - current_second)))
     
     log_status "INFO" "Sleeping for $wait_time seconds until next hour..."
@@ -549,7 +558,8 @@ should_exit_gracefully() {
         return 1  # Don't exit, file doesn't exist
     fi
     
-    local signals=$(cat "$EXIT_SIGNALS_FILE")
+    local signals
+    signals=$(cat "$EXIT_SIGNALS_FILE")
     
     # Count recent signals (last 5 loops) - with error handling
     local recent_test_loops
@@ -569,10 +579,13 @@ should_exit_gracefully() {
     # When Claude Code is denied permission to run commands, halt immediately
     # to allow user to update .ralphrc ALLOWED_TOOLS configuration
     if [[ -f "$RESPONSE_ANALYSIS_FILE" ]]; then
-        local has_permission_denials=$(jq -r '.analysis.has_permission_denials // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
+        local has_permission_denials
+        has_permission_denials=$(jq -r '.analysis.has_permission_denials // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
         if [[ "$has_permission_denials" == "true" ]]; then
-            local denied_count=$(jq -r '.analysis.permission_denial_count // 0' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "0")
-            local denied_cmds=$(jq -r '.analysis.denied_commands | join(", ")' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "unknown")
+            local denied_count
+            denied_count=$(jq -r '.analysis.permission_denial_count // 0' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "0")
+            local denied_cmds
+            denied_cmds=$(jq -r '.analysis.denied_commands | join(", ")' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "unknown")
             log_status "WARN" "🚫 Permission denied for $denied_count command(s): $denied_cmds"
             log_status "WARN" "Update ALLOWED_TOOLS in .ralphrc to include the required tools"
             echo "permission_denied"
@@ -625,9 +638,11 @@ should_exit_gracefully() {
     # Fix #144: Only match valid markdown checkboxes, not date entries like [2026-01-29]
     # Valid patterns: "- [ ]" (uncompleted) and "- [x]" or "- [X]" (completed)
     if [[ -f "$RALPH_DIR/fix_plan.md" ]]; then
-        local uncompleted_items=$(grep -cE "^[[:space:]]*- \[[ ~]\]" "$RALPH_DIR/fix_plan.md" 2>/dev/null || true)
+        local uncompleted_items
+        uncompleted_items=$(grep -cE "^[[:space:]]*- \[[ ~]\]" "$RALPH_DIR/fix_plan.md" 2>/dev/null || true)
         [[ -z "$uncompleted_items" ]] && uncompleted_items=0
-        local completed_items=$(grep -cE "^[[:space:]]*- \[[xX]\]" "$RALPH_DIR/fix_plan.md" 2>/dev/null || true)
+        local completed_items
+        completed_items=$(grep -cE "^[[:space:]]*- \[[xX]\]" "$RALPH_DIR/fix_plan.md" 2>/dev/null || true)
         [[ -z "$completed_items" ]] && completed_items=0
         local total_items=$((uncompleted_items + completed_items))
 
@@ -793,14 +808,16 @@ build_loop_context() {
     # Extract incomplete tasks from fix_plan.md
     # Bug #3 Fix: Support indented markdown checkboxes with [[:space:]]* pattern
     if [[ -f "$RALPH_DIR/fix_plan.md" ]]; then
-        local incomplete_tasks=$(grep -cE "^[[:space:]]*- \[[ ~]\]" "$RALPH_DIR/fix_plan.md" 2>/dev/null || true)
+        local incomplete_tasks
+        incomplete_tasks=$(grep -cE "^[[:space:]]*- \[[ ~]\]" "$RALPH_DIR/fix_plan.md" 2>/dev/null || true)
         [[ -z "$incomplete_tasks" ]] && incomplete_tasks=0
         context+="Remaining tasks: ${incomplete_tasks}. "
     fi
 
     # Add circuit breaker state
     if [[ -f "$RALPH_DIR/.circuit_breaker_state" ]]; then
-        local cb_state=$(jq -r '.state // "UNKNOWN"' "$RALPH_DIR/.circuit_breaker_state" 2>/dev/null)
+        local cb_state
+        cb_state=$(jq -r '.state // "UNKNOWN"' "$RALPH_DIR/.circuit_breaker_state" 2>/dev/null)
         if [[ "$cb_state" != "CLOSED" && "$cb_state" != "null" && -n "$cb_state" ]]; then
             context+="Circuit breaker: ${cb_state}. "
         fi
@@ -808,7 +825,8 @@ build_loop_context() {
 
     # Add previous loop summary (truncated)
     if [[ -f "$RESPONSE_ANALYSIS_FILE" ]]; then
-        local prev_summary=$(jq -r '.analysis.work_summary // ""' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null | head -c 200)
+        local prev_summary
+        prev_summary=$(jq -r '.analysis.work_summary // ""' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null | head -c 200)
         if [[ -n "$prev_summary" && "$prev_summary" != "null" ]]; then
             context+="Previous: ${prev_summary} "
         fi
@@ -923,7 +941,8 @@ init_claude_session() {
         fi
 
         # Session is valid, try to read it
-        local session_id=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null)
+        local session_id
+        session_id=$(cat "$CLAUDE_SESSION_FILE" 2>/dev/null)
         if [[ -n "$session_id" ]]; then
             log_status "INFO" "Resuming Claude session: ${session_id:0:20}... (${age_hours}h old)"
             echo "$session_id"
@@ -956,7 +975,8 @@ save_claude_session() {
 
     # Try to extract session ID from JSON output
     if [[ -f "$output_file" ]]; then
-        local session_id=$(jq -r '.metadata.session_id // .session_id // empty' "$output_file" 2>/dev/null)
+        local session_id
+        session_id=$(jq -r '.metadata.session_id // .session_id // empty' "$output_file" 2>/dev/null)
         if [[ -n "$session_id" && "$session_id" != "null" ]]; then
             echo "$session_id" > "$CLAUDE_SESSION_FILE"
             log_status "INFO" "Saved Claude session: ${session_id:0:20}..."
@@ -1258,7 +1278,8 @@ execute_claude_code() {
     local task_name="${5:-}"
     local main_dir
     main_dir="$(pwd)"
-    local timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
     local output_file="${main_dir}/${LOG_DIR}/claude_output_${timestamp}.log"
     local calls_made
     calls_made=$(increment_call_counter)
@@ -1472,7 +1493,8 @@ ${task_directive}"
         # from corrupting the jq JSON pipeline (Issue #190)
         # When in worktree mode, cd into the worktree so Claude writes into the
         # isolated branch rather than main (parity with Devin/Codex engines).
-        local stderr_file="${LOG_DIR}/claude_stderr_$(date '+%Y%m%d_%H%M%S').log"
+        local stderr_file
+        stderr_file="${LOG_DIR}/claude_stderr_$(date '+%Y%m%d_%H%M%S').log"
         ( cd "$work_dir" && portable_timeout ${timeout_seconds}s stdbuf -oL "${LIVE_CMD_ARGS[@]}" \
             < /dev/null ) 2>"$stderr_file" | stdbuf -oL tee "$output_file" | stdbuf -oL jq --unbuffered -j "$jq_filter" 2>/dev/null | tee "$LIVE_LOG_FILE"
 
@@ -1518,7 +1540,8 @@ ${task_directive}"
             # Extract the result message and convert to standard JSON format
             # Use flexible regex to match various JSON formatting styles
             # Matches: "type":"result", "type": "result", "type" : "result"
-            local result_line=$(grep -E '"type"[[:space:]]*:[[:space:]]*"result"' "$output_file" 2>/dev/null | tail -1)
+            local result_line
+            result_line=$(grep -E '"type"[[:space:]]*:[[:space:]]*"result"' "$output_file" 2>/dev/null | tail -1)
 
             if [[ -n "$result_line" ]]; then
                 # Validate that extracted line is valid JSON before using it
@@ -1688,7 +1711,7 @@ EOF
                 echo -e "\n${RED}━━━ Claude API Error ━━━${NC}"
                 echo -e "${YELLOW}$api_error${NC}"
                 echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-                echo '{"status": "failed", "error": "is_error:true", "timestamp": "'$(date '+%Y-%m-%d %H:%M:%S')'"}' > "$PROGRESS_FILE"
+                echo '{"status": "failed", "error": "is_error:true", "timestamp": "'"$(date '+%Y-%m-%d %H:%M:%S')"'"}' > "$PROGRESS_FILE"
 
                 # Reset session to prevent infinite retry with bad session ID
                 if echo "$api_error" | grep -qi "tool.use.concurrency\|concurrency"; then
@@ -1709,7 +1732,7 @@ EOF
         set -e
 
         # Clear progress file (only after is_error check passes)
-        echo '{"status": "completed", "timestamp": "'$(date '+%Y-%m-%d %H:%M:%S')'"}' > "$PROGRESS_FILE"
+        echo '{"status": "completed", "timestamp": "'"$(date '+%Y-%m-%d %H:%M:%S')"'"}' > "$PROGRESS_FILE"
 
         log_status "SUCCESS" "✅ Claude Code execution completed successfully"
 
@@ -1792,7 +1815,8 @@ EOF
 
             log_status "WARN" "Errors detected in output, check: $output_file"
         fi
-        local output_length=$(wc -c < "$output_file" 2>/dev/null || echo 0)
+        local output_length
+        output_length=$(wc -c < "$output_file" 2>/dev/null || echo 0)
 
         # Record result in circuit breaker
         record_loop_result "$loop_count" "$files_changed" "$has_errors" "$output_length"
@@ -1806,7 +1830,7 @@ EOF
         return 0
     else
         # Clear progress file on failure
-        echo '{"status": "failed", "timestamp": "'$(date '+%Y-%m-%d %H:%M:%S')'"}' > "$PROGRESS_FILE"
+        echo '{"status": "failed", "timestamp": "'"$(date '+%Y-%m-%d %H:%M:%S')"'"}' > "$PROGRESS_FILE"
 
         # Layer 1: Timeout guard — exit code 124 is a timeout, not an API limit
         # Issue #198: Check for productive work before treating as failure
@@ -1846,7 +1870,7 @@ EOF
             if [[ $timeout_files_changed -gt 0 ]]; then
                 # Productive timeout — work was done despite the timeout
                 log_status "INFO" "⏱️ Timeout but $timeout_files_changed file(s) changed — treating iteration as productive"
-                echo '{"status": "timed_out_productive", "files_changed": '$timeout_files_changed', "timestamp": "'$(date '+%Y-%m-%d %H:%M:%S')'"}' > "$PROGRESS_FILE"
+                echo '{"status": "timed_out_productive", "files_changed": '"$timeout_files_changed"', "timestamp": "'"$(date '+%Y-%m-%d %H:%M:%S')"'"}' > "$PROGRESS_FILE"
 
                 # Save session ID (fallback already populated by Step 1 if stream was truncated)
                 if [[ "$CLAUDE_USE_CONTINUE" == "true" ]]; then
@@ -2167,6 +2191,7 @@ main() {
             local uncommitted_files=0
             uncommitted_files=$(cd "$git_dir" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
             if [[ $uncommitted_files -gt 0 ]]; then
+                # shellcheck disable=SC2034 # telemetry flag; reserved for richer per-iteration reporting (see has_uncommitted local above)
                 has_uncommitted=true
                 files_changed=$((files_changed + uncommitted_files))
                 local uc_added uc_removed
