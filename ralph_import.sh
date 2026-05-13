@@ -83,7 +83,8 @@ detect_response_format() {
 
     # Check if file starts with { or [ (JSON indicators)
     # Use grep to find first non-whitespace character (handles leading whitespace)
-    local first_char=$(grep -m1 -o '[^[:space:]]' "$output_file" 2>/dev/null)
+    local first_char
+    first_char=$(grep -m1 -o '[^[:space:]]' "$output_file" 2>/dev/null)
 
     if [[ "$first_char" != "{" && "$first_char" != "[" ]]; then
         echo "text"
@@ -543,12 +544,12 @@ PROMPTEOF
     for file in "${expected_files[@]}"; do
         if [[ -f "$file" ]]; then
             # Add to created_files if not already there
-            if [[ ! " ${created_files[*]} " =~ " ${file} " ]]; then
+            if [[ ! " ${created_files[*]} " == *" ${file} "* ]]; then
                 created_files+=("$file")
             fi
         else
             # Add to missing_files if not already there
-            if [[ ! " ${missing_files[*]} " =~ " ${file} " ]]; then
+            if [[ ! " ${missing_files[*]} " == *" ${file} "* ]]; then
                 missing_files+=("$file")
             fi
         fi

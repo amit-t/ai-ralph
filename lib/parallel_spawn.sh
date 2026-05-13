@@ -158,7 +158,8 @@ spawn_ide_terminals() {
     # Prefix with 'sleep 2' to let the IDE terminal fully initialize its PTY
     # dimensions — TUI apps (e.g. Devin CLI) panic if they query terminal size
     # before the PTY is ready and get 0 cols/rows.
-    local cmd_text="sleep 2 && cd $(printf '%q' "$cwd") && ${cmd_args[*]}"
+    local cmd_text
+    cmd_text="sleep 2 && cd $(printf '%q' "$cwd") && ${cmd_args[*]}"
     # Escape for AppleScript string literal: \ -> \\, " -> \"
     local as_cmd
     as_cmd=$(printf '%s' "$cmd_text" | sed 's/\\/\\\\/g; s/"/\\"/g')

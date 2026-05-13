@@ -9,9 +9,11 @@ set -e
 
 # Source Devin adapter
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # consumed by sourced devin_adapter.sh
 RALPH_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Minimal RALPH_DIR for adapter
+# shellcheck disable=SC2034 # consumed by sourced devin_adapter.sh
 RALPH_DIR=".ralph"
 
 source "$SCRIPT_DIR/lib/devin_adapter.sh"
@@ -82,6 +84,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --print)
+            # shellcheck disable=SC2034 # CLI flag placeholder; reserved for non-interactive print mode (see initial PRINT_MODE=false above)
             PRINT_MODE=true
             shift
             ;;

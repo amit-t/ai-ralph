@@ -21,9 +21,11 @@ TEMPLATES_DIR=""
 LIB_DIR=""
 if [[ -d "../templates" ]]; then
     TEMPLATES_DIR="../templates"
+    # shellcheck disable=SC2034 # documented install-location pair with TEMPLATES_DIR; reserved for lib install step
     LIB_DIR="../lib"
 elif [[ -d "$HOME/.ralph/templates" ]]; then
     TEMPLATES_DIR="$HOME/.ralph/templates"
+    # shellcheck disable=SC2034 # documented install-location pair with TEMPLATES_DIR; reserved for lib install step
     LIB_DIR="$HOME/.ralph/lib"
 else
     echo "❌ Error: Templates directory not found."
