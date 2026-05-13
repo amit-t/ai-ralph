@@ -1,0 +1,43 @@
+name: Smoke (install + enable)
+
+# WSL2-port Wave 2 PR 2d. Runs the install + enable workspace end-to-end on
+# ubuntu-latest as a proxy for WSL2 Ubuntu. macOS smoke is exercised locally via
+# tests/integration/smoke-ralph.bash; CI only runs the Linux proxy here.
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install prereqs
+        run: sudo apt-get update && sudo apt-get install -y jq gh git
+
+      - name: Run installer
+        run: bash install.sh
+
+      - name: Build tiny fixture target repo
+        run: |
+          mkdir -p /tmp/fixture-repo
+          cd /tmp/fixture-repo
+          git init -q -b main
+          git config user.email a@b.c
+          git config user.name a
+          : > fix_plan.md
+          git add fix_plan.md
+          git commit -q -m "init"
+
+      - name: Enable ralph workspace (non-interactive)
+        run: cd /tmp/fixture-repo && bash "$GITHUB_WORKSPACE/ralph_enable_ci.sh"
+
+      - name: Plan binary loads (smoke)
+        run: bash "$GITHUB_WORKSPACE/ralph_plan.sh" --help
+
+      - name: Assert fix_plan was created
+        run: test -f /tmp/fixture-repo/.ralph/fix_plan.md
