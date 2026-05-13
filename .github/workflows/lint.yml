@@ -38,7 +38,7 @@ jobs:
             bash -n "$f"
           done
 
-      - name: shellcheck (severity=error)
+      - name: shellcheck (severity=warning)
         run: |
           set -e
           files=$(git ls-files '*.sh' '*.bash')
@@ -47,7 +47,7 @@ jobs:
             exit 0
           fi
           # shellcheck disable=SC2086
-          shellcheck -x -e SC1091 -S error $files
+          shellcheck -x -e SC1091 -S warning $files
 
   unit-tests:
     # Wave 2 PR 2b: pin lib/date_utils.sh and lib/timeout_utils.sh cross-platform
