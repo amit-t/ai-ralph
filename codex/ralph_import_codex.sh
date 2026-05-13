@@ -215,8 +215,8 @@ if [[ -n "$output_content" ]]; then
     # Extract individual files from the output
     if echo "$output_content" | grep -q "=== FILE:"; then
         # Parse structured output
-        local current_file=""
-        local current_content=""
+        current_file=""
+        current_content=""
 
         while IFS= read -r line; do
             if [[ "$line" =~ ^"=== FILE: "(.*)" ===" ]]; then

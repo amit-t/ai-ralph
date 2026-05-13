@@ -1,0 +1,50 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shell-lint:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Install shellcheck (macOS)
+        if: runner.os == 'macOS'
+        run: brew install shellcheck
+
+      - name: Show shellcheck version
+        run: shellcheck --version
+
+      - name: bash -n syntax check
+        run: |
+          set -e
+          files=$(git ls-files '*.sh' '*.bash')
+          if [[ -z "$files" ]]; then
+            echo "No shell files to check"
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          for f in $files; do
+            bash -n "$f"
+          done
+
+      - name: shellcheck (severity=error)
+        run: |
+          set -e
+          files=$(git ls-files '*.sh' '*.bash')
+          if [[ -z "$files" ]]; then
+            echo "No shell files to check"
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          shellcheck -x -e SC1091 -S error $files
