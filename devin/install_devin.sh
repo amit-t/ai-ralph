@@ -232,6 +232,7 @@ install_shared_libs() {
         "lib/pr_manager.sh"
         "lib/workspace_manager.sh"
         "lib/worker_pool.sh"
+        "lib/worker_pool_tabs.sh"
         "lib/continuous_recovery.sh"
     )
 

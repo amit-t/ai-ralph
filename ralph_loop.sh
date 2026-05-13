@@ -21,6 +21,7 @@ source "$SCRIPT_DIR/lib/worktree_manager.sh" || { echo "FATAL: Failed to source 
 source "$SCRIPT_DIR/lib/pr_manager.sh" || { echo "FATAL: Failed to source lib/pr_manager.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/workspace_manager.sh" || { echo "FATAL: Failed to source lib/workspace_manager.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/worker_pool.sh" || { echo "FATAL: Failed to source lib/worker_pool.sh" >&2; exit 1; }
+source "$SCRIPT_DIR/lib/worker_pool_tabs.sh" || { echo "FATAL: Failed to source lib/worker_pool_tabs.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/continuous_recovery.sh" || { echo "FATAL: Failed to source lib/continuous_recovery.sh" >&2; exit 1; }
 
 # Configuration
@@ -54,6 +55,9 @@ MAX_TASKS=""           # M — total attempts before stopping (engages continuou
 MAX_TASK_ATTEMPTS=1    # K — per-task retry threshold within a single run
 RESPAWN_DELAY=0        # SEC — cooldown between worker replacements
 CONTINUOUS_MODE=false  # set true after CLI parsing if MAX_TASKS resolves to a value
+NO_TABS=false          # when true, force single-pane continuous orchestrator (proposal: docs/proposals/continuous-with-tabs.md)
+CONTINUOUS_WORKER_ID="" # non-empty engages worker-tab mode (writes completion JSON on exit)
+WORKSPACE_TASK_DESCRIPTOR="" # worker-mode workspace task descriptor (repo|task_id|line_num|desc)
 
 # Save environment variable state BEFORE setting defaults
 # These are used by load_ralphrc() to determine which values came from environment
@@ -2141,6 +2145,14 @@ main() {
         exit 0
     fi
 
+    # In worker-tab mode, surface the picked line_num to the EXIT trap so
+    # the completion JSON reports it correctly to the orchestrator.
+    if [[ -n "${CONTINUOUS_WORKER_ID:-}" ]]; then
+        CONTINUOUS_WORKER_TASK_ID="${picked_task_id:-${CONTINUOUS_WORKER_TASK_ID:-}}"
+        CONTINUOUS_WORKER_LINE_NUM="${picked_line_num:-0}"
+        export CONTINUOUS_WORKER_TASK_ID CONTINUOUS_WORKER_LINE_NUM
+    fi
+
     # Create worktree
     # NOTE: worktree_create must NOT be called inside $() — that runs a subshell
     # and the internal state variables (_WT_CURRENT_PATH, _WT_CURRENT_BRANCH)
@@ -3071,6 +3083,25 @@ run_continuous_workspace() {
     echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}' > "$EXIT_SIGNALS_FILE"
     rm -f "$RESPONSE_ANALYSIS_FILE" 2>/dev/null
 
+    # Tabs vs. single-pane decision (proposal: docs/proposals/continuous-with-tabs.md):
+    # tabs is the default when the terminal supports them and --no-tabs is not
+    # set; single-pane is the fallback for plain terminals / CI / --no-tabs.
+    if [[ "${NO_TABS:-false}" != "true" ]] && tabs_supported_by_terminal; then
+        log_status "INFO" "Tab-mode continuous orchestrator engaged (per-worker terminal tabs)"
+        export RALPH_TABS_ENGINE_CMD="ralph"
+        export RALPH_TABS_WORKSPACE_MODE="true"
+        run_continuous_worker_pool_tabs \
+            "$PARALLEL_COUNT" \
+            "$MAX_TASKS" \
+            "$MAX_TASK_ATTEMPTS" \
+            "$RESPAWN_DELAY" \
+            _continuous_workspace_picker \
+            _continuous_workspace_executor \
+            _continuous_workspace_on_complete
+        return $?
+    fi
+
+    log_status "INFO" "Single-pane continuous orchestrator engaged (NO_TABS=${NO_TABS:-false}, terminal not tab-capable)"
     run_continuous_worker_pool \
         "$PARALLEL_COUNT" \
         "$MAX_TASKS" \
@@ -3207,6 +3238,46 @@ _continuous_singlerepo_on_complete() {
 }
 export -f _continuous_singlerepo_on_complete
 
+# run_workspace_task_worker — Worker-mode entry for a single workspace task.
+# Called from a tab spawned by the tabs orchestrator. The descriptor format
+# is "repo|task_id|line_num|desc" — same as the workspace picker emits.
+# Marks the workspace fix_plan task as [x] on success, reverts to [ ] on
+# failure. The worker_init_completion_protocol trap will write the
+# completion JSON when this function returns.
+run_workspace_task_worker() {
+    local descriptor="$1"
+    if [[ -z "$descriptor" ]]; then
+        echo "ERROR: run_workspace_task_worker requires a descriptor" >&2
+        return 2
+    fi
+
+    local repo_name task_id line_num task_desc
+    repo_name=$(echo "$descriptor" | cut -d'|' -f1)
+    task_id=$(echo "$descriptor" | cut -d'|' -f2)
+    line_num=$(echo "$descriptor" | cut -d'|' -f3)
+    task_desc=$(echo "$descriptor" | cut -d'|' -f4)
+
+    # Make line_num / task_id available to the worker exit handler so the
+    # completion JSON has the right metadata.
+    CONTINUOUS_WORKER_TASK_ID="$task_id"
+    CONTINUOUS_WORKER_LINE_NUM="$line_num"
+    export CONTINUOUS_WORKER_TASK_ID CONTINUOUS_WORKER_LINE_NUM
+
+    local fix_plan="${RALPH_DIR}/fix_plan.md"
+    if [[ ! -f "$fix_plan" ]]; then
+        echo "ERROR: workspace fix_plan.md not found at $fix_plan" >&2
+        return 1
+    fi
+
+    if _workspace_execute_task "$repo_name" "$task_desc" "."; then
+        mark_workspace_task_complete "$fix_plan" "$line_num"
+        return 0
+    else
+        revert_workspace_task "$fix_plan" "$line_num"
+        return 1
+    fi
+}
+
 # run_continuous_singlerepo — Top-level dispatch for `--parallel N --max-tasks
 # M` (no --workspace). Each worker picks a task from .ralph/fix_plan.md and
 # runs it in its own worktree branch.
@@ -3240,6 +3311,23 @@ run_continuous_singlerepo() {
         worktree_init || true
     fi
 
+    # Tabs vs. single-pane decision (proposal: docs/proposals/continuous-with-tabs.md).
+    if [[ "${NO_TABS:-false}" != "true" ]] && tabs_supported_by_terminal; then
+        log_status "INFO" "Tab-mode continuous orchestrator engaged (per-worker terminal tabs)"
+        export RALPH_TABS_ENGINE_CMD="ralph"
+        export RALPH_TABS_WORKSPACE_MODE="false"
+        run_continuous_worker_pool_tabs \
+            "$PARALLEL_COUNT" \
+            "$MAX_TASKS" \
+            "$MAX_TASK_ATTEMPTS" \
+            "$RESPAWN_DELAY" \
+            _continuous_singlerepo_picker \
+            _continuous_singlerepo_executor \
+            _continuous_singlerepo_on_complete
+        return $?
+    fi
+
+    log_status "INFO" "Single-pane continuous orchestrator engaged (NO_TABS=${NO_TABS:-false}, terminal not tab-capable)"
     run_continuous_worker_pool \
         "$PARALLEL_COUNT" \
         "$MAX_TASKS" \
@@ -3319,13 +3407,20 @@ Continuous Parallel Execution:
     --parallel N M          Continuous mode: keep N workers saturated until M total attempts.
                             Engaged automatically by passing M as the second positional arg
                             to --parallel. Without M, --parallel N retains V1 batch behavior.
+                            Each worker runs in its own terminal tab (iTerm2 / VS Code /
+                            Windsurf / Cursor) when the host terminal supports it;
+                            otherwise falls back to a single-pane orchestrator.
+    --no-tabs               Force the single-pane orchestrator even under a tab-capable
+                            terminal. Useful for headless CI / plain terminals where
+                            spawning tabs is unwanted.
     --max-task-attempts K   Per-task retry threshold within a run (default: 1)
                             A task that fails K times is added to the per-run skip-list.
     --respawn-delay SEC     Cooldown between worker replacements (default: 0)
                             Useful for engines that throttle session creation.
-    Env overrides: RALPH_MAX_TASK_ATTEMPTS, RALPH_RESPAWN_DELAY
+    Env overrides: RALPH_MAX_TASK_ATTEMPTS, RALPH_RESPAWN_DELAY, RALPH_DISABLE_TABS
     Examples:
-        ralph --parallel 3 20             # single-repo, 3 workers, 20 attempts
+        ralph --parallel 3 20             # single-repo, 3 workers, 20 attempts (tabs by default)
+        ralph --parallel 3 20 --no-tabs   # same, but force single-pane
         ralph --workspace --parallel 3 20 # multi-repo workspace, same shape
 
 Files created:
@@ -3570,6 +3665,34 @@ while [[ $# -gt 0 ]]; do
             RESPAWN_DELAY="$2"
             shift 2
             ;;
+        --no-tabs)
+            # Force single-pane continuous orchestrator even when the terminal
+            # supports tabs. See docs/proposals/continuous-with-tabs.md.
+            NO_TABS=true
+            shift
+            ;;
+        --continuous-worker-id)
+            # Worker-mode flag spawned by the tab orchestrator. Engages the
+            # completion-protocol traps so the worker writes a completion JSON
+            # and a heartbeat for the orchestrator to consume.
+            if [[ -z "$2" ]]; then
+                echo "Error: --continuous-worker-id requires a worker id"
+                exit 1
+            fi
+            CONTINUOUS_WORKER_ID="$2"
+            shift 2
+            ;;
+        --workspace-task)
+            # Worker-mode flag: run this workspace task descriptor.
+            # Format: "repo|task_id|line_num|desc". Implies --workspace.
+            if [[ -z "$2" ]]; then
+                echo "Error: --workspace-task requires a descriptor (repo|task_id|line_num|desc)"
+                exit 1
+            fi
+            WORKSPACE_TASK_DESCRIPTOR="$2"
+            WORKSPACE_MODE=true
+            shift 2
+            ;;
         --repos)
             if [[ -z "$2" ]]; then
                 echo "Error: --repos requires a comma-separated list of repo names"
@@ -3637,6 +3760,28 @@ if [[ "$CONTINUOUS_MODE" == "true" ]]; then
     fi
 fi
 
+# Worker-mode validation (--continuous-worker-id). Worker mode is engaged by
+# a parent orchestrator spawning this process; it must NOT also try to be an
+# orchestrator itself.
+if [[ -n "$CONTINUOUS_WORKER_ID" ]]; then
+    if [[ "$CONTINUOUS_MODE" == "true" ]]; then
+        echo "Error: --continuous-worker-id cannot be combined with --parallel N M"
+        exit 1
+    fi
+    if [[ "$PARALLEL_COUNT" -gt 0 && "$CONTINUOUS_MODE" != "true" ]]; then
+        echo "Error: --continuous-worker-id cannot be combined with --parallel N (batch mode)"
+        exit 1
+    fi
+    if [[ "$QG_MODE" == "true" ]]; then
+        echo "Error: --continuous-worker-id cannot be combined with --qg"
+        exit 1
+    fi
+    if [[ "$USE_TMUX" == "true" ]]; then
+        echo "Error: --continuous-worker-id cannot be combined with --monitor (workers run in their own tab)"
+        exit 1
+    fi
+fi
+
 # Only execute when run directly, not when sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # --repos / --exclude only apply to workspace mode. Reject early so users
@@ -3648,6 +3793,48 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
     # Sweep stale [~] markers from prior crashed continuous-mode runs.
     sweep_stale_continuous_state 2>/dev/null || true
+    # Reap orphaned completion / heartbeat files from previously dead orchestrators.
+    gc_stale_continuous_artifacts 2>/dev/null || true
+
+    # ── Worker-mode dispatch (tab spawned by the tabs orchestrator) ──────────
+    # When --continuous-worker-id is set, this process is a worker tab and
+    # must (a) install the completion-protocol trap (heartbeat + JSON on
+    # exit) and (b) run a single task path: either workspace-task or
+    # --task. The trap will fire automatically on any exit path.
+    if [[ -n "$CONTINUOUS_WORKER_ID" ]]; then
+        worker_init_completion_protocol || exit 1
+
+        if [[ -n "$WORKSPACE_TASK_DESCRIPTOR" ]]; then
+            # Workspace-task worker — must NOT engage workspace-mode top-level
+            # orchestrator (that would re-pick tasks). Run the single
+            # descriptor directly.
+            load_ralphrc 2>/dev/null || true
+            validate_claude_command || exit 1
+            mkdir -p "$LOG_DIR" "$DOCS_DIR"
+            init_session_tracking
+            update_session_last_used
+            init_call_tracking
+            echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}' > "$EXIT_SIGNALS_FILE"
+            rm -f "$RESPONSE_ANALYSIS_FILE" 2>/dev/null
+            run_workspace_task_worker "$WORKSPACE_TASK_DESCRIPTOR"
+            exit $?
+        fi
+
+        # Single-repo worker — falls through to `main` below, which
+        # expects $SPECIFIC_TASK_NUM (set via --task <id>) and runs the
+        # full single-task path (worktree, exec, gates, PR, mark).
+        if [[ -z "$SPECIFIC_TASK_NUM" ]]; then
+            echo "Error: --continuous-worker-id without --task or --workspace-task" >&2
+            exit 1
+        fi
+        # Make the picked task id visible to the exit handler. The actual
+        # line_num is resolved inside main() after picking; we update the
+        # handler globals there too.
+        CONTINUOUS_WORKER_TASK_ID="$SPECIFIC_TASK_NUM"
+        export CONTINUOUS_WORKER_TASK_ID
+        main
+        exit $?
+    fi
 
     # If continuous mode engaged, dispatch to the worker pool BEFORE any of
     # the existing batch dispatches so we keep V1 byte-compatibility on the

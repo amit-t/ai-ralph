@@ -54,8 +54,12 @@ alias rpx.int='ralph-codex --no-codex-auto-exit'
 # Parallel mode (spawns N agents: iTerm2 tabs from iTerm, IDE terminal tabs from Windsurf/VS Code/Cursor)
 # Usage: rpx.p 3      -> spawns 3 parallel codex agents (auto-exit)
 # rpx.p N             → batch mode (spawn N parallel agents)
-# rpx.p N M           → continuous mode (keep N workers saturated until M attempts)
+# rpx.p N M           → continuous mode (keep N workers saturated until M attempts;
+#                                         per-worker terminal tabs when supported)
 rpx.p() { ralph-codex --parallel "${1:?Usage: rpx.p <N> [M]}" ${2:+"$2"}; }
+
+# Continuous mode forcing the single-pane orchestrator (no tabs)
+rpx.p.notabs() { ralph-codex --parallel "${1:?Usage: rpx.p.notabs <N> <M>}" "${2:?Usage: rpx.p.notabs <N> <M>}" --no-tabs; }
 
 # Usage: rpx.int.p 3  -> spawns 3 parallel codex agents in interactive (no auto-exit) mode
 rpx.int.p() { ralph-codex --no-codex-auto-exit --parallel "${1:?Usage: rpx.int.p <number>}"; }
@@ -105,5 +109,8 @@ rpx.task.int() { ralph-codex --no-codex-auto-exit --task "${1:?Usage: rpx.task.i
 alias rpx.ws='ralph-codex --workspace'
 alias rpx.ws.int='ralph-codex --workspace --live --monitor'
 # rpx.ws.p N      → batch workspace (1 batch of N tasks)
-# rpx.ws.p N M    → continuous workspace (N concurrent until M attempts)
+# rpx.ws.p N M    → continuous workspace (N concurrent until M attempts; per-worker tabs by default)
 rpx.ws.p() { ralph-codex --workspace --parallel "${1:?Usage: rpx.ws.p <N> [M]}" ${2:+"$2"}; }
+
+# Workspace continuous forcing single-pane (no tabs)
+rpx.ws.p.notabs() { ralph-codex --workspace --parallel "${1:?Usage: rpx.ws.p.notabs <N> <M>}" "${2:?Usage: rpx.ws.p.notabs <N> <M>}" --no-tabs; }

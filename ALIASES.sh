@@ -59,8 +59,13 @@ alias rpc.int='ralph --live --monitor'
 # the full tmux dashboard.
 # Usage: rpc.p 3  -> spawns 3 parallel ralph agents (auto-exit)
 # rpc.p N        → batch mode (spawn N parallel agents)
-# rpc.p N M      → continuous mode (keep N workers saturated until M attempts)
+# rpc.p N M      → continuous mode (keep N workers saturated until M attempts;
+#                                    per-worker terminal tabs when supported)
 rpc.p() { ralph --parallel "${1:?Usage: rpc.p <N> [M]}" ${2:+"$2"}; }
+
+# Continuous mode forcing the single-pane orchestrator (no tabs)
+# Usage: rpc.p.notabs N M  -> single-pane continuous mode, N workers, M attempts
+rpc.p.notabs() { ralph --parallel "${1:?Usage: rpc.p.notabs <N> <M>}" "${2:?Usage: rpc.p.notabs <N> <M>}" --no-tabs; }
 
 # Parallel live-only (streams Claude output in each tab, no tmux split / monitor)
 # Usage: rpc.live.p 3  -> spawns 3 parallel ralph agents with streaming output only
@@ -131,8 +136,12 @@ rpc.task.int() { ralph --live --monitor --task "${1:?Usage: rpc.task.int <task_n
 alias rpc.ws='ralph --workspace'
 alias rpc.ws.int='ralph --workspace --live --monitor'
 # rpc.ws.p N      → batch workspace (1 batch of N tasks)
-# rpc.ws.p N M    → continuous workspace (N concurrent until M attempts)
+# rpc.ws.p N M    → continuous workspace (N concurrent until M attempts; per-worker tabs by default)
 rpc.ws.p() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p <N> [M]}" ${2:+"$2"}; }
+
+# Workspace continuous forcing single-pane (no tabs)
+# Usage: rpc.ws.p.notabs N M  -> single-pane workspace continuous
+rpc.ws.p.notabs() { ralph --workspace --parallel "${1:?Usage: rpc.ws.p.notabs <N> <M>}" "${2:?Usage: rpc.ws.p.notabs <N> <M>}" --no-tabs; }
 
 # Shared commands (work for all engines)
 alias ralph.setup='ralph-setup'
