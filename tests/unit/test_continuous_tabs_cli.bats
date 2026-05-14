@@ -47,11 +47,27 @@ teardown() {
     [[ "$status" -eq 0 ]]
 }
 
-@test "claude --no-tabs alone is accepted (does not require continuous mode)" {
-    # The flag should be a no-op outside continuous mode. We pipe --help so
-    # the parser doesn't fall through to main().
+@test "claude --no-tabs parses cleanly when paired with --help (exits before validation)" {
+    # --help short-circuits the parse loop before the mutex validation runs,
+    # so this remains a clean way to assert the flag is recognised.
     run bash -c "echo '' | bash '$RALPH_BIN' --no-tabs --help"
     [[ "$status" -eq 0 ]]
+}
+
+@test "claude --no-tabs WITHOUT --parallel N M is rejected (P2 #9)" {
+    # P2 #9 (PR #21 review): --no-tabs is a continuous-mode-only knob; using
+    # it outside --parallel N M was silently a no-op, which confused users.
+    # The wrapper now rejects it with a clear, actionable error.
+    run bash -c "echo '' | bash '$RALPH_BIN' --no-tabs"
+    [[ "$status" -ne 0 ]]
+    echo "$output" | grep -q -- "--no-tabs only applies to continuous mode"
+}
+
+@test "claude --no-tabs with --parallel N (batch, no M) is rejected (P2 #9)" {
+    # Batch mode (--parallel N without M) is not continuous mode either.
+    run bash -c "echo '' | bash '$RALPH_BIN' --parallel 2 --no-tabs"
+    [[ "$status" -ne 0 ]]
+    echo "$output" | grep -q -- "--no-tabs only applies to continuous mode"
 }
 
 # =============================================================================
@@ -64,9 +80,15 @@ teardown() {
     echo "$output" | grep -q -- "--no-tabs"
 }
 
-@test "devin --no-tabs parses cleanly" {
+@test "devin --no-tabs parses cleanly when paired with --help" {
     run bash "$DEVIN_BIN" --no-tabs --help
     [[ "$status" -eq 0 ]]
+}
+
+@test "devin --no-tabs WITHOUT --parallel N M is rejected (P2 #9)" {
+    run bash -c "echo '' | bash '$DEVIN_BIN' --no-tabs"
+    [[ "$status" -ne 0 ]]
+    echo "$output" | grep -q -- "--no-tabs only applies to continuous mode"
 }
 
 # =============================================================================
@@ -79,9 +101,15 @@ teardown() {
     echo "$output" | grep -q -- "--no-tabs"
 }
 
-@test "codex --no-tabs parses cleanly" {
+@test "codex --no-tabs parses cleanly when paired with --help" {
     run bash "$CODEX_BIN" --no-tabs --help
     [[ "$status" -eq 0 ]]
+}
+
+@test "codex --no-tabs WITHOUT --parallel N M is rejected (P2 #9)" {
+    run bash -c "echo '' | bash '$CODEX_BIN' --no-tabs"
+    [[ "$status" -ne 0 ]]
+    echo "$output" | grep -q -- "--no-tabs only applies to continuous mode"
 }
 
 # =============================================================================

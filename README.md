@@ -465,19 +465,23 @@ In parallel mode, steps 1-6 run concurrently across up to N repos (one task per 
 By default `ralph --workspace` walks every git repo in the workspace. Two flags
 narrow the scope without moving directories or hand-editing `fix_plan.md`:
 
+> **Engine scope (today):** The `--repos` / `--exclude` CLI flags are parsed by the **Claude** wrapper (`ralph`) only. The Devin and Codex wrappers (`ralph-devin` / `ralph-codex`) honor the **env-var** equivalents (`RALPH_WORKSPACE_REPOS` / `RALPH_WORKSPACE_EXCLUDE`), and their continuous-mode pickers forward the resolved allowlist to `pick_workspace_task_for_pool`. CLI-flag parity for `ralph-devin` / `ralph-codex` is tracked as a follow-up.
+
 ```bash
-# Allowlist: only these repos are in scope
+# Allowlist: only these repos are in scope (Claude CLI)
 ralph --workspace --repos api,worker
 
-# Denylist: every repo except these
+# Denylist: every repo except these (Claude CLI)
 ralph --workspace --exclude web
 
 # Combined with parallel: parallelism caps at min(N, len(filtered_set))
 ralph --workspace --parallel 4 --repos api,worker     # ⇒ effective parallel = 2
 
-# Equivalent env var form (CLI flag wins on conflict)
+# Equivalent env var form (CLI flag wins on conflict; env-form works for all engines)
 RALPH_WORKSPACE_REPOS=api,worker ralph --workspace
 RALPH_WORKSPACE_EXCLUDE=web      ralph --workspace
+RALPH_WORKSPACE_REPOS=api,worker ralph-devin --workspace          # Devin (env-only today)
+RALPH_WORKSPACE_REPOS=api,worker ralph-codex --workspace          # Codex (env-only today)
 ```
 
 Rules:

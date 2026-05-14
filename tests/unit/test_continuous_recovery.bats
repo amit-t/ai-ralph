@@ -377,3 +377,78 @@ EOF
     sed -n '2p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[ \] In flight$'
     sed -n '3p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[x\] Completed second$'
 }
+
+@test "P2 #18: sweeper recovers indented and non-dash-prefixed [~] markers" {
+    # The picker only writes `- [~]` but a hand-edited fix_plan may use
+    # indented bullets (`  - [~]`), star bullets (`* [~]`), or a tab prefix.
+    # The relaxed regex must revert all of them.
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    printf '  - [~] indented dash\n* [~] star bullet\n\t- [~] tabbed dash\n- [~] standard\n' > "${TEST_DIR}/fix_plan.md"
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    cat > "${RALPH_DIR}/.continuous_state" << EOF
+orchestrator_pid	${dead_pid}
+started_at	0
+in_flight	
+inflight	1	T-indent	11111
+inflight	2	T-star	22222
+inflight	3	T-tab	33333
+inflight	4	T-std	44444
+EOF
+
+    run sweep_stale_continuous_state
+    assert_success
+    # All four variants reverted; no [~] left anywhere.
+    ! grep -q '\[~\]' "${TEST_DIR}/fix_plan.md"
+    # Prefix preserved on each line (only the marker flipped). Use $'…' for
+    # the tab variant since macOS BSD grep lacks -P (Perl regex).
+    sed -n '1p' "${TEST_DIR}/fix_plan.md" | grep -q '^  - \[ \] indented dash$'
+    sed -n '2p' "${TEST_DIR}/fix_plan.md" | grep -q '^\* \[ \] star bullet$'
+    [[ "$(sed -n '3p' "${TEST_DIR}/fix_plan.md")" == $'\t- [ ] tabbed dash' ]]
+    sed -n '4p' "${TEST_DIR}/fix_plan.md" | grep -q '^- \[ \] standard$'
+}
+
+@test "P2 #17: sweeper performs a single awk pass over fix_plan (no O(N·R) rewrites)" {
+    # Regression guard for the per-row sed+awk+mv pattern. We can't directly
+    # observe the awk invocation, but we can confirm correctness on a state
+    # file with many in-flight rows. The key property: an N-line fix_plan
+    # with R in-flight markers should produce the same final state as the
+    # old loop, atomically.
+    sh -c 'exit 0' &
+    local dead_pid=$!
+    wait "$dead_pid" 2>/dev/null || true
+
+    # Build a 20-line fix_plan with 10 [~] markers on even lines.
+    : > "${TEST_DIR}/fix_plan.md"
+    local i
+    for ((i = 1; i <= 20; i++)); do
+        if (( i % 2 == 0 )); then
+            echo "- [~] task ${i}" >> "${TEST_DIR}/fix_plan.md"
+        else
+            echo "- [ ] task ${i}" >> "${TEST_DIR}/fix_plan.md"
+        fi
+    done
+    export WORKSPACE_FIX_PLAN="${TEST_DIR}/fix_plan.md"
+
+    # Record all 10 even-numbered lines as inflight.
+    {
+        echo "orchestrator_pid	${dead_pid}"
+        echo "started_at	0"
+        printf 'in_flight\t\n'
+        for ((i = 2; i <= 20; i += 2)); do
+            printf 'inflight\t%d\tT-%d\t%d\n' "$i" "$i" "$((10000 + i))"
+        done
+    } > "${RALPH_DIR}/.continuous_state"
+
+    run sweep_stale_continuous_state
+    assert_success
+    # No [~] left, all 10 even lines reverted to [ ].
+    ! grep -q '\[~\]' "${TEST_DIR}/fix_plan.md"
+    # Odd lines (which started [ ]) are untouched.
+    [[ "$(grep -c '^- \[ \] task ' "${TEST_DIR}/fix_plan.md")" == "20" ]]
+    # File size sanity: 20 lines still.
+    [[ "$(wc -l < "${TEST_DIR}/fix_plan.md" | tr -d ' ')" == "20" ]]
+}

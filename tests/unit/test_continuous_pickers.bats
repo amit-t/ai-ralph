@@ -877,3 +877,87 @@ EOF
     # The failure path must call it (not the legacy `${finished_descriptor%% *}`).
     awk '/^run_continuous_worker_pool\(\)/,/^}/' "$pool_lib" | grep -q '_continuous_skip_key'
 }
+
+# =============================================================================
+# P2 #20 — on_complete telemetry hooks.
+# The previous no-op hooks were a missed opportunity: the orchestrator only
+# logged a single `[continuous] completed=...` stdout line, leaving the file
+# log (.ralph/logs/ralph.log) silent on per-task results. The new hooks emit
+# a structured SUCCESS / WARN line via log_status so users can tail the run
+# log without grepping for `[continuous]`.
+# =============================================================================
+
+@test "P2 #20: claude _continuous_workspace_on_complete emits SUCCESS on rc=0" {
+    # Capture log_status output into a temp file.
+    LOG_DIR="${TEST_DIR}/logs"
+    mkdir -p "$LOG_DIR"
+    log_status() { echo "[$1] $2" >> "${LOG_DIR}/ralph.log"; }
+    export -f log_status
+    export LOG_DIR
+
+    eval "$(sed -n '/^_continuous_workspace_on_complete()/,/^}/p' "${BATS_TEST_DIRNAME}/../../ralph_loop.sh")"
+    _continuous_workspace_on_complete "api|fix-login|42|Fix login bug" "0"
+    grep -q '^\[SUCCESS\] \[continuous\] task complete (rc=0) api/fix-login: Fix login bug$' "${LOG_DIR}/ralph.log"
+}
+
+@test "P2 #20: claude _continuous_workspace_on_complete emits WARN on rc!=0" {
+    LOG_DIR="${TEST_DIR}/logs"
+    mkdir -p "$LOG_DIR"
+    log_status() { echo "[$1] $2" >> "${LOG_DIR}/ralph.log"; }
+    export -f log_status
+    export LOG_DIR
+
+    eval "$(sed -n '/^_continuous_workspace_on_complete()/,/^}/p' "${BATS_TEST_DIRNAME}/../../ralph_loop.sh")"
+    _continuous_workspace_on_complete "api|fix-login|42|Fix login bug" "1"
+    grep -q '^\[WARN\] \[continuous\] task failed (rc=1) api/fix-login: Fix login bug$' "${LOG_DIR}/ralph.log"
+}
+
+@test "P2 #20: claude _continuous_singlerepo_on_complete emits per-completion line" {
+    LOG_DIR="${TEST_DIR}/logs"
+    mkdir -p "$LOG_DIR"
+    log_status() { echo "[$1] $2" >> "${LOG_DIR}/ralph.log"; }
+    export -f log_status
+    export LOG_DIR
+
+    eval "$(sed -n '/^_continuous_singlerepo_on_complete()/,/^}/p' "${BATS_TEST_DIRNAME}/../../ralph_loop.sh")"
+    _continuous_singlerepo_on_complete "fix-login|7|bead-1" "0"
+    grep -q '^\[SUCCESS\] \[continuous\] task complete (rc=0) fix-login (line 7)$' "${LOG_DIR}/ralph.log"
+
+    _continuous_singlerepo_on_complete "fix-login|7|bead-1" "1"
+    grep -q '^\[WARN\] \[continuous\] task failed (rc=1) fix-login (line 7)$' "${LOG_DIR}/ralph.log"
+}
+
+@test "P2 #20: hook is a silent no-op when log_status is unavailable" {
+    # The hook must not crash or print anything when run in an environment
+    # without log_status (e.g. a sourced library context with no wrapper).
+    unset -f log_status 2>/dev/null || true
+
+    eval "$(sed -n '/^_continuous_workspace_on_complete()/,/^}/p' "${BATS_TEST_DIRNAME}/../../ralph_loop.sh")"
+    run _continuous_workspace_on_complete "api|fix-login|42|desc" "0"
+    [[ "$status" -eq 0 ]]
+    [[ -z "$output" ]]
+}
+
+@test "P2 #20: devin _continuous_workspace_on_complete emits per-completion line" {
+    LOG_DIR="${TEST_DIR}/logs"
+    mkdir -p "$LOG_DIR"
+    log_status() { echo "[$1] $2" >> "${LOG_DIR}/ralph.log"; }
+    export -f log_status
+    export LOG_DIR
+
+    eval "$(sed -n '/^_continuous_workspace_on_complete()/,/^}/p' "${BATS_TEST_DIRNAME}/../../devin/ralph_loop_devin.sh")"
+    _continuous_workspace_on_complete "api|fix-login|42|Fix login bug" "0"
+    grep -q '^\[SUCCESS\] \[continuous\] task complete (rc=0) api/fix-login: Fix login bug$' "${LOG_DIR}/ralph.log"
+}
+
+@test "P2 #20: codex _continuous_workspace_on_complete emits per-completion line" {
+    LOG_DIR="${TEST_DIR}/logs"
+    mkdir -p "$LOG_DIR"
+    log_status() { echo "[$1] $2" >> "${LOG_DIR}/ralph.log"; }
+    export -f log_status
+    export LOG_DIR
+
+    eval "$(sed -n '/^_continuous_workspace_on_complete()/,/^}/p' "${BATS_TEST_DIRNAME}/../../codex/ralph_loop_codex.sh")"
+    _continuous_workspace_on_complete "api|fix-login|42|Fix login bug" "1"
+    grep -q '^\[WARN\] \[continuous\] task failed (rc=1) api/fix-login: Fix login bug$' "${LOG_DIR}/ralph.log"
+}

@@ -46,29 +46,60 @@ sweep_stale_continuous_state() {
         return 0
     fi
 
-    # Iterate inflight rows, revert each [~] to [ ].
+    # P2 #17: collect all reverted (line_num, task_id) pairs in one pass over
+    # the state file, then mutate fix_plan.md exactly once via a single awk
+    # call. The previous implementation forked sed + awk + mv per in-flight
+    # row, which was O(N·R) file IO for R inflight rows of an N-line plan;
+    # the new path is O(N + R). Behavior is otherwise unchanged: only lines
+    # currently containing `[~]` are reverted, hand-edited rows are left
+    # alone, and the same per-row log line is emitted.
+    #
+    # P2 #18: relax the substitution regex from `- \[~\]` to `\[~\]` so
+    # indented or non-dash-prefixed `[~]` markers are recovered too. The
+    # picker only ever writes `- [~]`, so this is purely defensive against
+    # hand-edited fix_plan formats (e.g. `* [~]`, `\t- [~]`, `  - [~]`).
     local reverted=0
+    local revert_lines=""   # space-separated line numbers, set form via awk
+    local -a revert_log_msgs=()
     while IFS=$'\t' read -r tag line_num task_id worker_pid; do
         [[ "$tag" == "inflight" ]] || continue
         [[ -z "$line_num" || ! "$line_num" =~ ^[0-9]+$ ]] && continue
-        # Only act on lines that are actually [~]; if a human already cleaned
-        # up the marker we leave their edit alone.
+        # Pre-check the line is still [~]; skip rows where a human already
+        # cleaned up the marker (we leave their edit alone).
         local current_line
         current_line=$(sed -n "${line_num}p" "$fix_plan" 2>/dev/null)
         if [[ "$current_line" == *"[~]"* ]]; then
-            local tmp_file="${fix_plan}.tmp.$$"
-            awk -v ln="$line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "$fix_plan" > "$tmp_file" \
-                && mv "$tmp_file" "$fix_plan"
+            revert_lines="${revert_lines}${line_num} "
+            revert_log_msgs+=("Reverted stale [~] at line ${line_num} (task ${task_id}) from dead orchestrator ${orch_pid}")
             reverted=$((reverted + 1))
-            if command -v log_info &>/dev/null; then
-                log_info "Reverted stale [~] at line ${line_num} (task ${task_id}) from dead orchestrator ${orch_pid}"
-            elif command -v log_status &>/dev/null; then
-                log_status "INFO" "Reverted stale [~] at line ${line_num} (task ${task_id}) from dead orchestrator ${orch_pid}"
-            else
-                echo "[continuous-recovery] Reverted stale [~] at line ${line_num} (task ${task_id}) from dead orchestrator ${orch_pid}"
-            fi
         fi
     done < "$state_file"
+
+    if [[ "$reverted" -gt 0 ]]; then
+        local tmp_file="${fix_plan}.tmp.$$"
+        # Single awk pass: build a set of target line numbers, then substitute
+        # `[~]` → `[ ]` on those lines only. `gsub` over `\[~\]` survives
+        # leading whitespace, alternate list-item prefixes (`* [~]`, indented
+        # `  - [~]`), or any other harmless variation around the marker.
+        awk -v lines="$revert_lines" 'BEGIN {
+            n = split(lines, parts, " ")
+            for (i = 1; i <= n; i++) if (parts[i] != "") target[parts[i]] = 1
+        }
+        (NR in target) { gsub(/\[~\]/, "[ ]") }
+        1' "$fix_plan" > "$tmp_file" \
+            && mv "$tmp_file" "$fix_plan"
+
+        local msg
+        for msg in "${revert_log_msgs[@]}"; do
+            if command -v log_info &>/dev/null; then
+                log_info "$msg"
+            elif command -v log_status &>/dev/null; then
+                log_status "INFO" "$msg"
+            else
+                echo "[continuous-recovery] ${msg}"
+            fi
+        done
+    fi
 
     rm -f "$state_file"
     return 0

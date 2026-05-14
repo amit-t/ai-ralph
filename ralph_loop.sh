@@ -54,6 +54,12 @@ WORKSPACE_EXCLUDE_FLAG=""  # comma-separated denylist from --exclude
 MAX_TASKS=""           # M — total attempts before stopping (engages continuous mode when set)
 MAX_TASK_ATTEMPTS=1    # K — per-task retry threshold within a single run
 RESPAWN_DELAY=0        # SEC — cooldown between worker replacements
+# P2 #10: sentinel flags toggled when the corresponding CLI flag is parsed.
+# Prevents env-var fallbacks from overriding an explicit `--max-task-attempts 1`
+# (the previous logic used default-value sniffing: "value == default && env set"
+# → env wins, which collapsed an explicit `1` into the env override).
+_MAX_TASK_ATTEMPTS_FROM_CLI=false
+_RESPAWN_DELAY_FROM_CLI=false
 CONTINUOUS_MODE=false  # set true after CLI parsing if MAX_TASKS resolves to a value
 NO_TABS=false          # when true, force single-pane continuous orchestrator (proposal: docs/proposals/continuous-with-tabs.md)
 CONTINUOUS_WORKER_ID="" # non-empty engages worker-tab mode (writes completion JSON on exit)
@@ -3040,10 +3046,26 @@ _continuous_workspace_executor() {
 }
 export -f _continuous_workspace_executor
 
-# _continuous_workspace_on_complete — Per-completion hook (currently a no-op;
-# the executor already handles task marking). Reserved for future telemetry.
+# _continuous_workspace_on_complete — Per-completion hook. The executor
+# already handles task marking; this hook emits one line of telemetry to the
+# run log so users can `tail -f .ralph/logs/ralph.log` without grepping for
+# the orchestrator's `[continuous]` stdout. (P2 #20: PR #21 review)
+#
+# Args:
+#   $1 - task descriptor: "repo|task_id|line|description"
+#   $2 - rc: integer exit code from the executor
 _continuous_workspace_on_complete() {
-    : # no-op
+    local descriptor="${1:-}"
+    local rc="${2:-1}"
+    command -v log_status &>/dev/null || return 0
+    local repo task_id desc _rest
+    IFS='|' read -r repo task_id _rest desc <<< "$descriptor"
+    desc="${desc:-$task_id}"
+    if [[ "$rc" == "0" ]]; then
+        log_status "SUCCESS" "[continuous] task complete (rc=0) ${repo}/${task_id}: ${desc}"
+    else
+        log_status "WARN" "[continuous] task failed (rc=${rc}) ${repo}/${task_id}: ${desc}"
+    fi
 }
 export -f _continuous_workspace_on_complete
 
@@ -3247,8 +3269,24 @@ _continuous_singlerepo_executor() {
 }
 export -f _continuous_singlerepo_executor
 
+# _continuous_singlerepo_on_complete — Per-completion hook for single-repo
+# continuous mode. Same shape as the workspace hook: one line of telemetry
+# to the run log (P2 #20).
+#
+# Args:
+#   $1 - task descriptor: "task_id|line_num|bead_id"
+#   $2 - rc: integer exit code from the executor
 _continuous_singlerepo_on_complete() {
-    : # no-op
+    local descriptor="${1:-}"
+    local rc="${2:-1}"
+    command -v log_status &>/dev/null || return 0
+    local task_id line_num _bead
+    IFS='|' read -r task_id line_num _bead <<< "$descriptor"
+    if [[ "$rc" == "0" ]]; then
+        log_status "SUCCESS" "[continuous] task complete (rc=0) ${task_id} (line ${line_num})"
+    else
+        log_status "WARN" "[continuous] task failed (rc=${rc}) ${task_id} (line ${line_num})"
+    fi
 }
 export -f _continuous_singlerepo_on_complete
 
@@ -3669,6 +3707,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             MAX_TASK_ATTEMPTS="$2"
+            _MAX_TASK_ATTEMPTS_FROM_CLI=true
             shift 2
             ;;
         --respawn-delay)
@@ -3677,6 +3716,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             RESPAWN_DELAY="$2"
+            _RESPAWN_DELAY_FROM_CLI=true
             shift 2
             ;;
         --no-tabs)
@@ -3735,14 +3775,20 @@ done
 # Note: MAX_TASKS is no longer settable via env — pass `--parallel N M` to
 # engage continuous mode. RALPH_MAX_TASK_ATTEMPTS / RALPH_RESPAWN_DELAY
 # remain because they tune behavior of an already-engaged continuous run.
-if [[ "$MAX_TASK_ATTEMPTS" == "1" && -n "${RALPH_MAX_TASK_ATTEMPTS:-}" ]]; then
+#
+# P2 #10: gate the env-merge on the CLI sentinel (`_*_FROM_CLI`), not on the
+# default-value sniff (`MAX_TASK_ATTEMPTS == "1"`). The old check let env
+# win when the user explicitly passed the default — e.g.,
+#   RALPH_MAX_TASK_ATTEMPTS=5 ralph --parallel 3 10 --max-task-attempts 1
+# would silently run with K=5. The CLI flag must always win.
+if [[ "$_MAX_TASK_ATTEMPTS_FROM_CLI" != "true" && -n "${RALPH_MAX_TASK_ATTEMPTS:-}" ]]; then
     if [[ ! "$RALPH_MAX_TASK_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: RALPH_MAX_TASK_ATTEMPTS must be a positive integer"
         exit 1
     fi
     MAX_TASK_ATTEMPTS="$RALPH_MAX_TASK_ATTEMPTS"
 fi
-if [[ "$RESPAWN_DELAY" == "0" && -n "${RALPH_RESPAWN_DELAY:-}" ]]; then
+if [[ "$_RESPAWN_DELAY_FROM_CLI" != "true" && -n "${RALPH_RESPAWN_DELAY:-}" ]]; then
     if [[ ! "$RALPH_RESPAWN_DELAY" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
         echo "Error: RALPH_RESPAWN_DELAY must be a non-negative number"
         exit 1
@@ -3772,6 +3818,17 @@ if [[ "$CONTINUOUS_MODE" == "true" ]]; then
         echo "       (The monitor reads .ralph/status.json which continuous mode keeps up to date.)"
         exit 1
     fi
+fi
+
+# P2 #9: --no-tabs is a continuous-mode-only knob; it has no effect on V1
+# batch / single-shot / workspace-batch paths. Reject the silent no-op
+# explicitly so users get a clear error instead of a mystery (it was
+# previously parsed AND silently ignored unless --parallel N M was also
+# present).
+if [[ "${NO_TABS:-false}" == "true" && "$CONTINUOUS_MODE" != "true" && -z "${CONTINUOUS_WORKER_ID:-}" ]]; then
+    echo "Error: --no-tabs only applies to continuous mode (--parallel N M)."
+    echo "       Either drop --no-tabs or add the M argument to --parallel to engage continuous mode."
+    exit 1
 fi
 
 # Worker-mode validation (--continuous-worker-id). Worker mode is engaged by

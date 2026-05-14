@@ -617,14 +617,19 @@ run_continuous_worker_pool_tabs() {
     #   Workspace descriptor format:   "repo_name|task_id|line_num|desc"
     # The orchestrator decides which is which via RALPH_TABS_WORKSPACE_MODE,
     # so we don't have to guess by field count here — just slice accordingly.
+    #
+    # P2 #16: replaced the 4 `cut -d'|'` subshell invocations per call with a
+    # single `IFS='|' read` (no subshells, no forks). Identical output.
     _tabs_default_parse() {
         local descriptor="$1"
+        local f1 f2 f3 _rest
+        IFS='|' read -r f1 f2 f3 _rest <<< "$descriptor"
         if [[ "${RALPH_TABS_WORKSPACE_MODE:-false}" == "true" ]]; then
-            # workspace: skip $1 (repo), take $2 / $3
-            echo "$(echo "$descriptor" | cut -d'|' -f2)|$(echo "$descriptor" | cut -d'|' -f3)"
+            # workspace: skip f1 (repo), echo task_id|line_num.
+            echo "${f2}|${f3}"
         else
-            # single-repo: $1|$2
-            echo "$(echo "$descriptor" | cut -d'|' -f1)|$(echo "$descriptor" | cut -d'|' -f2)"
+            # single-repo: f1=task_id, f2=line_num.
+            echo "${f1}|${f2}"
         fi
     }
 
@@ -781,6 +786,15 @@ run_continuous_worker_pool_tabs() {
     fi
 
     # ── Main loop ─────────────────────────────────────────────────────────────
+    # P2 #11: track last stale-heartbeat sweep time so the cadence is
+    # decoupled from completion traffic. The previous logic only ran the
+    # sweep on cycles where no completion was processed; a steady stream of
+    # completions would starve stale-detection indefinitely. We now run the
+    # sweep on its own clock (every $WORKER_POOL_TABS_HEARTBEAT_INTERVAL
+    # seconds), independent of completion volume.
+    local last_stale_sweep_epoch
+    last_stale_sweep_epoch=$(date +%s)
+    local _stale_sweep_interval="${WORKER_POOL_TABS_HEARTBEAT_INTERVAL:-10}"
     while [[ $inflight -gt 0 ]]; do
         # Poll the completion dir.
         local pending
@@ -813,10 +827,24 @@ run_continuous_worker_pool_tabs() {
             done <<< "$pending"
         fi
 
-        # Stale heartbeat sweep — only if we didn't already process a
-        # completion this cycle (avoids racing the orchestrator's own work).
-        if [[ "$processed_any" == "false" ]]; then
+        # P2 #11: stale heartbeat sweep on its own clock — runs whenever
+        # $_stale_sweep_interval seconds have elapsed since the last sweep,
+        # independent of completion traffic. The previous logic gated the
+        # sweep on "no completion processed this cycle", so a steady stream
+        # of completions could starve stale-detection indefinitely.
+        # Safe to run after completion processing because
+        # _tabs_process_completion clears worker_ids[$slot] and sets
+        # worker_alive[$slot]="false" for the completed slot — the sweep's
+        # per-slot guards skip those entries by design.
+        local now_epoch
+        now_epoch=$(date +%s)
+        if [[ $((now_epoch - last_stale_sweep_epoch)) -ge $_stale_sweep_interval ]]; then
             _tabs_check_stale_workers
+            last_stale_sweep_epoch="$now_epoch"
+        fi
+        # Backoff sleep only when no completion was processed (avoid
+        # spinning when the queue is empty), as before.
+        if [[ "$processed_any" == "false" ]]; then
             sleep "$WORKER_POOL_TABS_POLL_INTERVAL" 2>/dev/null || true
         fi
 
