@@ -433,10 +433,57 @@ _write_fix_plan() {
     local slug
     slug=$(printf '%s' "L9. A really long title that runs well past fifty characters and keeps going" \
         | tr '[:upper:]' '[:lower:]' \
-        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' \
-        | head -c 50)
+        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' \
+        | head -c 50 \
+        | sed 's/-$//')
     run pick_task_by_id .ralph/fix_plan.md "$slug"
     assert_success
+}
+
+@test "pick_task_by_id resolves slug whose 50-char truncation ends in a hyphen" {
+    # Regression: when the slugified title is >50 chars and the 50th char of
+    # the slug is a hyphen (word boundary), the producer's emitted slug and
+    # the consumer's re-derived slug must agree. Earlier pipelines applied
+    # `s/-$//` *before* `head -c 50`, so re-feeding the 50-char slug into the
+    # consumer caused asymmetric trimming (consumer stripped the trailing
+    # hyphen, producer's line-derived slug kept it) and the consumer failed
+    # to match. Pipeline must strip trailing hyphen *after* truncation.
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **L1.** Re-evaluate the magnifying-glass icon for Site Details nav"
+
+    # Compute the producer's slug the way pick_next_task_for_pool does:
+    local slug
+    slug=$(printf '%s' "L1. Re-evaluate the magnifying-glass icon for Site Details nav" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' \
+        | head -c 50 \
+        | sed 's/-$//')
+
+    # The raw 50-char head lands on a hyphen for this title; the
+    # post-truncation strip must trim it, leaving a 49-char slug that
+    # does NOT end in a hyphen.
+    [[ "${#slug}" -eq 49 ]] || { echo "Expected slug length 49, got ${#slug}: '$slug'"; false; }
+    [[ "${slug: -1}" != "-" ]] || { echo "Slug must not end in hyphen: '$slug'"; false; }
+
+    # Round-trip: feeding the producer's slug back into pick_task_by_id
+    # must resolve to the same line, and the descriptor's task_id must be
+    # the clean (post-truncate-strip) slug so producer/consumer agree.
+    run pick_task_by_id .ralph/fix_plan.md "$slug"
+    assert_success
+    [[ "$output" == "$slug|1|"* ]]
+}
+
+@test "pick_task_by_id resolves the legacy 50-char slug with trailing hyphen" {
+    # Backward-compat: a worker tab spawned by an older orchestrator build
+    # passes the 50-char slug that still has its trailing hyphen. The
+    # patched consumer must resolve it to the canonical 49-char slug.
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **L1.** Re-evaluate the magnifying-glass icon for Site Details nav"
+    local legacy_slug="l1-re-evaluate-the-magnifying-glass-icon-for-site-"
+    run pick_task_by_id .ralph/fix_plan.md "$legacy_slug"
+    assert_success
+    # Consumer must emit the clean (no trailing hyphen) form of the slug.
+    [[ "$output" == "l1-re-evaluate-the-magnifying-glass-icon-for-site|1|"* ]]
 }
 
 @test "pick_task_by_id slug match does not match unrelated lines" {

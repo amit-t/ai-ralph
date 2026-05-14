@@ -778,7 +778,7 @@ pick_next_task() {
             if [[ -n "$bead_id" ]]; then
                 task_id="$bead_id"
             else
-                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
             fi
 
             # Atomically mark in-progress WHILE holding the lock
@@ -916,7 +916,7 @@ pick_task_by_number() {
     if [[ -n "$bead_id" ]]; then
         task_id="$bead_id"
     else
-        task_id=$(echo "$target_line" | sed 's/.*\[[ ~]\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+        task_id=$(echo "$target_line" | sed 's/.*\[[ ~]\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
     fi
 
     # Mark in-progress if currently unclaimed
@@ -989,7 +989,7 @@ pick_task_by_id() {
     # `[ ]` line; the consumer's line may be `[~]` by now, so strip any
     # checkbox state with `\[.\]`.
     local slug_query
-    slug_query=$(printf '%s' "$lower_id" | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+    slug_query=$(printf '%s' "$lower_id" | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
 
     # Scan fix_plan.md for a task line containing the ID
     local line_num=0
@@ -1020,7 +1020,7 @@ pick_task_by_id() {
         # Slug fallback for continuous-mode worker tabs (see comment above).
         if (( ! matched )) && [[ -n "$slug_query" ]]; then
             local line_slug
-            line_slug=$(printf '%s' "$line" | sed 's/.*\[.\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+            line_slug=$(printf '%s' "$line" | sed 's/.*\[.\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
             if [[ -n "$line_slug" && "$line_slug" == "$slug_query" ]]; then
                 matched=1
                 match_kind="slug"
@@ -1132,7 +1132,7 @@ pick_next_task_for_pool() {
             if [[ -n "$bead_id" ]]; then
                 task_id="$bead_id"
             else
-                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
             fi
 
             # Skip-list check (P1 #8): compute the same `task_id` slug the
