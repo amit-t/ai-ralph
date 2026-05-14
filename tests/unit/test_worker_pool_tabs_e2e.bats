@@ -217,6 +217,105 @@ _make_picker() {
 # Stale heartbeat detection
 # =============================================================================
 
+# =============================================================================
+# P0 #4 — Orphan-completion path must NOT collide with slot 0.
+#
+# Before this fix, _tabs_process_completion returned 0 on the
+# unknown-worker_id (orphan) branch, which the caller's `local freed_slot=$?`
+# interpreted as "slot 0 freed" — and would spawn a replacement into slot 0
+# even though the real worker there was still alive. The fix uses the
+# _TABS_LAST_SLOT global instead of the return value, so freed_slot is -1
+# on the orphan path and the caller's `freed_slot -ge 0` guard rejects it.
+# =============================================================================
+
+@test "P0 #4: _tabs_process_completion uses _TABS_LAST_SLOT global, not return value (source contract)" {
+    local lib="${BATS_TEST_DIRNAME}/../../lib/worker_pool_tabs.sh"
+    # Default sentinel set at the top of the function.
+    grep -q '_TABS_LAST_SLOT=-1' "$lib"
+    # Success path stores the resolved slot index.
+    grep -q '_TABS_LAST_SLOT="\$slot"' "$lib"
+    # Caller reads the global instead of $? from the function call.
+    grep -q 'freed_slot="\${_TABS_LAST_SLOT' "$lib"
+}
+
+@test "P0 #4: orphan completion does NOT cause a spurious spawn (behavioral)" {
+    # Mock engine: writes BOTH (a) a completion with a junk worker_id
+    # (orphan, processed first) AND (b) the legitimate completion with
+    # the assigned worker_id. The orchestrator must:
+    #   - Process the orphan as a no-op (no slot freed, no respawn).
+    #   - Process the legitimate completion as slot 0 freed → respawn ok-2.
+    #   - Total succeeded == 2, total executions == 2 (no extra spawn from
+    #     the orphan being mis-credited as slot 0).
+    cat > "${TEST_DIR}/dual-engine.sh" << 'EOF'
+#!/usr/bin/env bash
+WID=""
+TID=""
+DESC=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --continuous-worker-id) WID="$2"; shift 2 ;;
+        --task)                 TID="$2"; shift 2 ;;
+        --workspace-task)       DESC="$2"; shift 2 ;;
+        *)                                  shift   ;;
+    esac
+done
+DIR="${RALPH_DIR}/.continuous_completions"
+mkdir -p "$DIR"
+
+# Orphan completion FIRST so ls -tr emits it before the legitimate one.
+ORPHAN_WID="orphan-junk-${RANDOM}"
+NOW=$(date +%s)
+cat > "${DIR}/${ORPHAN_WID}-${NOW}.json.tmp" << JSON
+{
+  "worker_id": "${ORPHAN_WID}",
+  "task_id": "junk",
+  "line_num": 0,
+  "rc": 0,
+  "started_at": ${NOW},
+  "ended_at": ${NOW},
+  "tab_pid": $$,
+  "changes_detected": false
+}
+JSON
+mv "${DIR}/${ORPHAN_WID}-${NOW}.json.tmp" "${DIR}/${ORPHAN_WID}-${NOW}.json"
+
+# Small mtime gap so the legitimate completion sorts AFTER the orphan.
+sleep 0.1
+
+NOW2=$(date +%s)
+TASK="${TID:-${DESC%%|*}}"
+case "$TASK" in
+    fail*)    RC=1 ;;
+    *)        RC=0 ;;
+esac
+cat > "${DIR}/${WID}-${NOW2}.json.tmp" << JSON
+{
+  "worker_id": "${WID}",
+  "task_id": "${TASK}",
+  "line_num": 0,
+  "rc": ${RC},
+  "started_at": ${NOW},
+  "ended_at": ${NOW2},
+  "tab_pid": $$,
+  "changes_detected": false
+}
+JSON
+mv "${DIR}/${WID}-${NOW2}.json.tmp" "${DIR}/${WID}-${NOW2}.json"
+exit "$RC"
+EOF
+    chmod +x "${TEST_DIR}/dual-engine.sh"
+    export RALPH_TABS_ENGINE_CMD="${TEST_DIR}/dual-engine.sh"
+
+    _make_picker "ok-1|10|" "ok-2|20|"
+    export RALPH_TABS_WORKSPACE_MODE="false"
+
+    run run_continuous_worker_pool_tabs 1 2 1 0 _test_picker "" _test_on_complete
+    [[ "$status" -eq 0 ]]
+    # M=2 expected: exactly 2 successes, no extra spurious spawn from the orphan.
+    echo "$output" | grep -q "Succeeded:       2"
+    echo "$output" | grep -q "Failed:          0"
+}
+
 @test "stale heartbeat declares worker dead and synthesizes a completion" {
     # We pre-populate the in-flight slot via a real worker that NEVER writes
     # a completion. The orchestrator should detect the stale heartbeat and

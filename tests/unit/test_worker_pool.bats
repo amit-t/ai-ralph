@@ -231,6 +231,72 @@ teardown() {
 }
 
 # =============================================================================
+# REGRESSION: _spawn_worker (nested closure inside run_continuous_worker_pool)
+# must parse the descriptor's line_num and forward it to record_inflight so
+# the stale-state sweeper in lib/continuous_recovery.sh can revert [~]
+# markers after a SIGKILL'd single-pane run. Previously the call was
+# `record_inflight "0" "$first_token" "$pid"` — every in-flight row had
+# line_num=0 and the sweeper could never recover anything.
+# =============================================================================
+
+@test "_spawn_worker forwards line_num=42 for single-repo descriptor (P0 #1)" {
+    # Mock record_inflight to capture its args. Must be exported so the
+    # orchestrator's child shells see the override.
+    record_inflight() {
+        echo "line_num=$1 task_id=$2 worker_pid=$3" >> "${TEST_DIR}/.ri_calls"
+    }
+    export -f record_inflight
+    : > "${TEST_DIR}/.ri_calls"
+
+    # Single-repo descriptor: task_id|line_num|bead_id (3 fields, field 2 numeric).
+    echo "mytask|42|" > "${TEST_DIR}/.test_queue"
+    : > "${TEST_DIR}/.test_executions"
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+
+    grep -qE "line_num=42 task_id=mytask\|42\| worker_pid=[0-9]+" "${TEST_DIR}/.ri_calls"
+}
+
+@test "_spawn_worker forwards line_num=57 for workspace descriptor (P0 #1)" {
+    record_inflight() {
+        echo "line_num=$1 task_id=$2 worker_pid=$3" >> "${TEST_DIR}/.ri_calls"
+    }
+    export -f record_inflight
+    : > "${TEST_DIR}/.ri_calls"
+
+    # Workspace descriptor: repo|task_id|line_num|desc (4+ fields, field 3 numeric).
+    echo "myrepo|mytask|57|Fix the login bug" > "${TEST_DIR}/.test_queue"
+    : > "${TEST_DIR}/.test_executions"
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+
+    # task_id is the first-space-prefix of the descriptor (skip-list key),
+    # not parts[1]. We assert it stays unchanged for backward compat.
+    grep -qE "line_num=57 task_id=myrepo\|mytask\|57\|Fix worker_pid=[0-9]+" "${TEST_DIR}/.ri_calls"
+}
+
+@test "_spawn_worker leaves line_num=0 for pipe-less test descriptors (P0 #1)" {
+    # Test/mock descriptors (e.g. "T1 rc=0") have no pipes; the prior
+    # hard-coded "0" behavior must be preserved so existing tests don't
+    # regress.
+    record_inflight() {
+        echo "line_num=$1 task_id=$2 worker_pid=$3" >> "${TEST_DIR}/.ri_calls"
+    }
+    export -f record_inflight
+    : > "${TEST_DIR}/.ri_calls"
+
+    echo "T1 rc=0" > "${TEST_DIR}/.test_queue"
+    : > "${TEST_DIR}/.test_executions"
+
+    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
+    assert_success
+
+    grep -qE "line_num=0 task_id=T1 worker_pid=[0-9]+" "${TEST_DIR}/.ri_calls"
+}
+
+# =============================================================================
 # run_continuous_worker_pool — orchestrator integration tests with mock
 # executor / picker. These are unit-scoped: no real engine, no real worktree.
 # =============================================================================

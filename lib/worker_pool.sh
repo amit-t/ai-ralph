@@ -311,10 +311,29 @@ run_continuous_worker_pool() {
         pids[$slot]="$pid"
         tasks[$slot]="$descriptor"
         inflight=$((inflight + 1))
-        # Record into state file. We don't have line / task_id here in a
-        # generic way; we record the whole descriptor in place of task_id.
+        # Parse descriptor for line_num so the stale-state sweeper in
+        # lib/continuous_recovery.sh can revert the [~] marker after a
+        # SIGKILL'd run. Two production descriptor formats are supported:
+        #   - single-repo: task_id|line_num|bead_id      (line_num at field 2)
+        #   - workspace:   repo|task_id|line_num|desc    (line_num at field 3)
+        # Detection is by field count: workspace descriptors always have
+        # ≥ 4 parts (description is always non-empty), single-repo
+        # descriptors have 2 or 3 (bead_id may be empty — `read -a`
+        # strips trailing empties). Workspace is checked first because a
+        # workspace task_id can legitimately be all-digit (slug from
+        # numeric task title), which would otherwise mis-route to the
+        # single-repo branch. Test/mock descriptors without pipes leave
+        # line_num=0 (matches the prior hard-coded value).
         local first_token="${descriptor%% *}"
-        record_inflight "0" "$first_token" "$pid" 2>/dev/null || true
+        local line_num=0
+        local -a _parts=()
+        IFS='|' read -ra _parts <<< "$descriptor"
+        if [[ ${#_parts[@]} -ge 4 && "${_parts[2]}" =~ ^[0-9]+$ ]]; then
+            line_num="${_parts[2]}"
+        elif [[ ${#_parts[@]} -ge 2 && "${_parts[1]}" =~ ^[0-9]+$ ]]; then
+            line_num="${_parts[1]}"
+        fi
+        record_inflight "$line_num" "$first_token" "$pid" 2>/dev/null || true
     }
 
     # ── Initial fill ──────────────────────────────────────────────────────────

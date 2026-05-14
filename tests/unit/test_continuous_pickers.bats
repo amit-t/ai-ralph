@@ -627,3 +627,54 @@ EOF
     [[ "$spy" == *"skip=skipped-token"* ]]
     [[ "$spy" == *$'allowed=apirepo\nworkerrepo' ]]
 }
+
+# =============================================================================
+# P0 #2 — engine-parity for the filter-spec forwarding.
+# devin and codex previously omitted the 3rd arg, so --repos / --exclude were
+# silently ignored in continuous workspace mode for those engines.
+# These tests lock down the fix.
+# =============================================================================
+
+@test "devin _continuous_workspace_picker forwards RALPH_WORKSPACE_ALLOWED_REPOS (P0 #2)" {
+    pick_workspace_task_for_pool() {
+        echo "ARGS:fix_plan=$1|skip=$2|allowed=$3" > "${TEST_DIR}/.spy"
+        return 0
+    }
+    export -f pick_workspace_task_for_pool
+
+    eval "$(sed -n '/^_continuous_workspace_picker()/,/^}/p' "${BATS_TEST_DIRNAME}/../../devin/ralph_loop_devin.sh")"
+
+    export RALPH_DIR="${TEST_DIR}/.ralph"
+    mkdir -p "${RALPH_DIR}"
+    : > "${RALPH_DIR}/fix_plan.md"
+
+    export RALPH_WORKSPACE_ALLOWED_REPOS=$'apirepo\nworkerrepo'
+    _continuous_workspace_picker "skipped-token"
+
+    local spy
+    spy=$(cat "${TEST_DIR}/.spy")
+    [[ "$spy" == *"skip=skipped-token"* ]]
+    [[ "$spy" == *$'allowed=apirepo\nworkerrepo' ]]
+}
+
+@test "codex _continuous_workspace_picker forwards RALPH_WORKSPACE_ALLOWED_REPOS (P0 #2)" {
+    pick_workspace_task_for_pool() {
+        echo "ARGS:fix_plan=$1|skip=$2|allowed=$3" > "${TEST_DIR}/.spy"
+        return 0
+    }
+    export -f pick_workspace_task_for_pool
+
+    eval "$(sed -n '/^_continuous_workspace_picker()/,/^}/p' "${BATS_TEST_DIRNAME}/../../codex/ralph_loop_codex.sh")"
+
+    export RALPH_DIR="${TEST_DIR}/.ralph"
+    mkdir -p "${RALPH_DIR}"
+    : > "${RALPH_DIR}/fix_plan.md"
+
+    export RALPH_WORKSPACE_ALLOWED_REPOS=$'apirepo\nworkerrepo'
+    _continuous_workspace_picker "skipped-token"
+
+    local spy
+    spy=$(cat "${TEST_DIR}/.spy")
+    [[ "$spy" == *"skip=skipped-token"* ]]
+    [[ "$spy" == *$'allowed=apirepo\nworkerrepo' ]]
+}

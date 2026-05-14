@@ -627,8 +627,17 @@ run_continuous_worker_pool_tabs() {
     #   the on-complete hook, and deletes the file. Identifies the slot
     #   by worker_id (we don't track tab PID since spawn_parallel_agents
     #   in tab mode doesn't expose it reliably).
+    #
+    #   Returns the freed slot index in the global $_TABS_LAST_SLOT
+    #   (range 0..N-1 on success, -1 on the orphan / no-op path). Using a
+    #   global instead of $? avoids the slot-0 vs return-code-0 collision
+    #   the caller previously had on the orphan-completion path, where
+    #   `return 0` was indistinguishable from "slot 0 freed" and would
+    #   cause a worker to be spawned into an already-occupied slot.
     _tabs_process_completion() {
         local comp_name="$1"
+        _TABS_LAST_SLOT=-1   # default: no slot freed; caller must NOT respawn
+
         local comp_path
         comp_path="$(_tabs_completions_dir)/${comp_name}"
         [[ -f "$comp_path" ]] || return 1
@@ -662,6 +671,8 @@ run_continuous_worker_pool_tabs() {
 
         if [[ "$slot" == "-1" ]]; then
             # Unknown worker_id — orphaned completion. GC and move on.
+            # _TABS_LAST_SLOT stays -1 so the caller's freed_slot check
+            # rejects this iteration (no respawn).
             delete_completion_file "$comp_name"
             return 0
         fi
@@ -701,7 +712,8 @@ run_continuous_worker_pool_tabs() {
                 echo "[continuous-tabs] skip-list += ${task_key} (failed ${_ATTEMPTS_LAST} ≥ K=${K})"
             fi
         fi
-        return "$slot"
+        _TABS_LAST_SLOT="$slot"
+        return 0
     }
 
     # _tabs_check_stale_workers — declare any worker with a stale heartbeat
@@ -759,8 +771,11 @@ run_continuous_worker_pool_tabs() {
         if [[ -n "$pending" ]]; then
             while IFS= read -r comp_name; do
                 [[ -z "$comp_name" ]] && continue
+                _TABS_LAST_SLOT=-1
                 _tabs_process_completion "$comp_name"
-                local freed_slot=$?
+                # Read freed slot from the global; $? is no longer the slot
+                # index (see _tabs_process_completion's docstring for why).
+                local freed_slot="${_TABS_LAST_SLOT:--1}"
                 processed_any=true
                 # Maybe spawn replacement.
                 if [[ "$_interrupted" != "true" \

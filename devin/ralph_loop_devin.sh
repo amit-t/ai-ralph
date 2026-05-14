@@ -381,6 +381,20 @@ can_make_call() {
 }
 
 increment_call_counter() {
+    # In continuous mode the orchestrator forks N worker subshells (and tab
+    # mode spawns N separate engine processes) that all race on
+    # $CALL_COUNT_FILE. The legacy cat→echo path below has a TOCTOU window
+    # that loses increments under concurrency, so delegate to the mkdir-
+    # based atomic helper from lib/worker_pool.sh whenever CONTINUOUS_MODE
+    # is engaged OR we are a tab-mode worker (CONTINUOUS_WORKER_ID set).
+    # Non-continuous callers keep the non-locked path so single-iteration
+    # latency is unchanged.
+    if { [[ "${CONTINUOUS_MODE:-false}" == "true" ]] || [[ -n "${CONTINUOUS_WORKER_ID:-}" ]]; } \
+        && declare -F _atomic_inc_call_count >/dev/null 2>&1; then
+        _atomic_inc_call_count
+        return
+    fi
+
     local calls_made=0
     if [[ -f "$CALL_COUNT_FILE" ]]; then
         calls_made=$(cat "$CALL_COUNT_FILE")
@@ -1744,7 +1758,11 @@ export -f _workspace_execute_task
 
 _continuous_workspace_picker() {
     local skip_list="${1:-}"
-    pick_workspace_task_for_pool "${RALPH_DIR}/fix_plan.md" "$skip_list"
+    # Forward RALPH_WORKSPACE_ALLOWED_REPOS so --repos / --exclude filters
+    # apply in continuous mode too (matches ralph_loop.sh; previously the
+    # 3rd arg was silently dropped and continuous workspace mode ignored
+    # the filter spec, executing tasks in excluded repos).
+    pick_workspace_task_for_pool "${RALPH_DIR}/fix_plan.md" "$skip_list" "${RALPH_WORKSPACE_ALLOWED_REPOS:-}"
 }
 export -f _continuous_workspace_picker
 
