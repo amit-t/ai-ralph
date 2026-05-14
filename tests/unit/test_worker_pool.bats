@@ -231,6 +231,161 @@ teardown() {
 }
 
 # =============================================================================
+# P1 #5 — clear_inflight must key on the worker's unique handle (PID for
+# single-pane, wid string for tabs), NOT on a shared "0". The tabs
+# orchestrator previously passed "0" to record_inflight for every worker, so
+# any subsequent clear_inflight "0" deleted every in-flight row at once.
+# These tests pin down the unique-key contract via the public API.
+# =============================================================================
+
+@test "P1 #5: clear_inflight with wid string only removes that worker's row" {
+    init_continuous_state $$
+    # Three tab-style workers, all with worker_pid=0 in the legacy bug —
+    # but now keyed by their unique wid strings.
+    record_inflight 42 "T-101" "ws-0-1715080000-1234"
+    record_inflight 57 "T-105" "ws-1-1715080000-5678"
+    record_inflight 88 "T-200" "ws-2-1715080000-9012"
+
+    # Clear ONLY the middle worker.
+    clear_inflight "ws-1-1715080000-5678"
+    local content
+    content=$(cat "${RALPH_DIR}/.continuous_state")
+
+    # The other two rows must survive — this is the regression: previously
+    # clearing one wid (or "0") would have removed every inflight row.
+    [[ "$content" == *"ws-0-1715080000-1234"* ]]
+    [[ "$content" != *"ws-1-1715080000-5678"* ]]
+    [[ "$content" == *"ws-2-1715080000-9012"* ]]
+    # And the line_num / task_id fields for the surviving rows are intact.
+    [[ "$content" == *"T-101"* ]]
+    [[ "$content" == *"T-200"* ]]
+    [[ "$content" != *"T-105"* ]]
+}
+
+@test "P1 #5: clear_inflight with a non-matching key leaves all rows intact" {
+    init_continuous_state $$
+    record_inflight 10 "T-A" "ws-0-aaaaa-1111"
+    record_inflight 20 "T-B" "ws-1-bbbbb-2222"
+
+    clear_inflight "nonexistent-wid"
+    local content
+    content=$(cat "${RALPH_DIR}/.continuous_state")
+
+    [[ "$content" == *"ws-0-aaaaa-1111"* ]]
+    [[ "$content" == *"ws-1-bbbbb-2222"* ]]
+}
+
+# =============================================================================
+# P1 #7 — record_inflight / clear_inflight must serialize state-file
+# mutations under a lock. Concurrent appends + read-modify-writes could
+# otherwise interleave and lose rows. We exercise the lock with concurrent
+# callers and assert no rows are dropped.
+# =============================================================================
+
+@test "P1 #7: concurrent record_inflight calls do not drop rows" {
+    init_continuous_state $$
+    local -a pids=()
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        ( record_inflight "$i" "T-${i}" "ws-${i}-pid-${i}" ) & pids+=($!)
+    done
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+
+    local count
+    count=$(grep -c '^inflight' "${RALPH_DIR}/.continuous_state" || echo "0")
+    [[ "$count" == "10" ]]
+}
+
+@test "P1 #7: concurrent clear_inflight + record_inflight calls do not corrupt state" {
+    init_continuous_state $$
+    # Pre-populate 5 inflight rows.
+    local i
+    for i in 1 2 3 4 5; do
+        record_inflight "$i" "T-${i}" "ws-${i}"
+    done
+
+    # 5 clears (removing rows 1..5) racing with 5 appends (rows 11..15).
+    local -a pids=()
+    for i in 1 2 3 4 5; do
+        ( clear_inflight "ws-${i}" )                            & pids+=($!)
+        ( record_inflight "$((10 + i))" "T-NEW-${i}" "ws-new-${i}" ) & pids+=($!)
+    done
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+
+    local content
+    content=$(cat "${RALPH_DIR}/.continuous_state")
+    # None of the originals should remain.
+    [[ "$content" != *"ws-1"$'\n'* && "$content" != *"	ws-1"* ]] || {
+        # Allow "ws-1" as substring of "ws-10", "ws-11", etc. — exact key
+        # match required.
+        ! awk -F'\t' '$1=="inflight" && $4=="ws-1"' "${RALPH_DIR}/.continuous_state" | grep -q .
+    }
+    # All 5 new rows should be present.
+    for i in 1 2 3 4 5; do
+        awk -F'\t' -v k="ws-new-${i}" '$1=="inflight" && $4==k' \
+            "${RALPH_DIR}/.continuous_state" | grep -q .
+    done
+}
+
+@test "P1 #7: _with_continuous_state_lock acquires and releases the lock dir" {
+    local lock_dir="${RALPH_DIR}/.continuous_state_lock"
+    [[ ! -d "$lock_dir" ]]
+
+    # Stand-in body that asserts the lock dir exists while it runs.
+    local mid_run_dir=""
+    _probe_body() {
+        if [[ -d "$lock_dir" ]]; then
+            mid_run_dir="present"
+        fi
+    }
+    _with_continuous_state_lock _probe_body
+    [[ "$mid_run_dir" == "present" ]]
+    [[ ! -d "$lock_dir" ]]
+}
+
+# =============================================================================
+# P1 #6 — _atomic_inc_call_count's failsafe rmdir must reset the wait
+# counter so two callers past the timeout don't both rmdir each other's
+# freshly-acquired locks.
+#
+# This is a source-contract test (the race itself is too timing-sensitive
+# to reproduce reliably). The fix is one line: reset `waited=0` after the
+# failsafe rmdir.
+# =============================================================================
+
+@test "P1 #6: _atomic_inc_call_count resets waited counter after failsafe rmdir" {
+    # Extract the _atomic_inc_call_count body and look for `waited=0`
+    # AFTER the `rmdir "$lock_dir"` failsafe line. The initial declaration
+    # `local waited=0` doesn't count — we need the reset inside the
+    # `>= 200` block. Use awk to slice the function body and check that
+    # the rmdir line is followed (within a few lines) by a waited=0 reset.
+    local body
+    body=$(awk '
+        /^_atomic_inc_call_count\(\)/ { f=1 }
+        f { print }
+        f && /^}/ { exit }
+    ' "${WORKER_POOL_LIB}")
+
+    # Slice from the failsafe rmdir to the closing `fi` of the failsafe
+    # block; assert `waited=0` appears in that slice.
+    echo "$body" | awk '
+        /rmdir "\$lock_dir"/ && /failsafe|2>\/dev\/null/ { capture=1 }
+        capture { print; if (/^[[:space:]]*fi$/) exit }
+    ' | grep -qE '^[[:space:]]*waited=0[[:space:]]*$' || {
+        # Fallback: looser proximity check (any waited=0 within 5 lines
+        # after the failsafe rmdir line).
+        grep -n 'waited -ge 200' "${WORKER_POOL_LIB}" | head -1 | cut -d: -f1 | {
+            read -r start
+            sed -n "${start},$(( start + 12 ))p" "${WORKER_POOL_LIB}" | grep -qE '^[[:space:]]*waited=0[[:space:]]*$'
+        }
+    }
+}
+
+# =============================================================================
 # REGRESSION: _spawn_worker (nested closure inside run_continuous_worker_pool)
 # must parse the descriptor's line_num and forward it to record_inflight so
 # the stale-state sweeper in lib/continuous_recovery.sh can revert [~]

@@ -81,7 +81,15 @@ _atomic_inc_call_count() {
         waited=$((waited + 1))
         if [[ $waited -ge 200 ]]; then
             # 10s of contention → break the lock as a last-resort failsafe.
+            #
+            # P1 #6: reset $waited after rmdir so the next iteration goes
+            # through another full timeout window before another failsafe
+            # rmdir. Without the reset, the very next iteration (waited=201)
+            # also clears `>= 200` and would rmdir a lock that a concurrent
+            # caller may have just acquired, allowing two callers to both
+            # think they hold it.
             rmdir "$lock_dir" 2>/dev/null || true
+            waited=0
         fi
     done
     local n
@@ -107,8 +115,12 @@ _atomic_inc_call_count() {
 #   inflight<TAB>42<TAB>T-101<TAB>12346
 #   inflight<TAB>57<TAB>T-105<TAB>12347
 #
-# Each `inflight` row carries (line_num, task_id, worker_pid). Tabs are used
-# rather than commas/colons so task IDs may contain those characters safely.
+# Each `inflight` row carries (line_num, task_id, worker_key). The 4th field
+# is a UNIQUE identifier for the worker — in single-pane mode this is the
+# worker subshell's PID, in tab mode it's the wid string (e.g.
+# `ws-0-1715080000-1234`). The sweeper doesn't read this field; the
+# orchestrator uses it only as a key for `clear_inflight`. Tabs (rather than
+# commas/colons) are used so task IDs may contain those characters safely.
 
 _continuous_state_file() {
     echo "${RALPH_DIR:-.ralph}/.continuous_state"
@@ -147,31 +159,85 @@ init_continuous_state() {
     } > "$state_file"
 }
 
-# Append an in-flight task entry. Args: line_num, task_id, worker_pid
+# Append an in-flight task entry. Args: line_num, task_id, worker_key
+# (worker_key is the orchestrator's per-worker handle — PID for single-pane,
+# wid string for tab mode. P1 #5 / P1 #7.)
 record_inflight() {
     local line_num="$1"
     local task_id="$2"
-    local worker_pid="$3"
+    local worker_key="$3"
     local state_file
     state_file=$(_continuous_state_file)
 
     [[ -f "$state_file" ]] || return 1
-    printf 'inflight\t%s\t%s\t%s\n' "$line_num" "$task_id" "$worker_pid" >> "$state_file"
+
+    # P1 #7: serialize state-file mutations under an mkdir lock. Concurrent
+    # workers in the same orchestrator can otherwise interleave appends with
+    # the read-modify-write of `clear_inflight`, losing rows. Lock dir lives
+    # next to the state file. Best-effort with a short timeout so we never
+    # block forever on a stuck lock.
+    _with_continuous_state_lock _record_inflight_locked \
+        "$state_file" "$line_num" "$task_id" "$worker_key"
 }
 
-# Remove the in-flight entry for a finished worker. Arg: worker_pid
+# Locked body of record_inflight — called under _with_continuous_state_lock.
+_record_inflight_locked() {
+    local state_file="$1" line_num="$2" task_id="$3" worker_key="$4"
+    printf 'inflight\t%s\t%s\t%s\n' "$line_num" "$task_id" "$worker_key" >> "$state_file"
+}
+
+# Remove the in-flight entry for a finished worker. Arg: worker_key
 clear_inflight() {
-    local worker_pid="$1"
+    local worker_key="$1"
     local state_file
     state_file=$(_continuous_state_file)
     [[ -f "$state_file" ]] || return 1
 
+    # P1 #7: serialize state-file mutations under an mkdir lock.
+    _with_continuous_state_lock _clear_inflight_locked "$state_file" "$worker_key"
+}
+
+# Locked body of clear_inflight — called under _with_continuous_state_lock.
+_clear_inflight_locked() {
+    local state_file="$1" worker_key="$2"
     local tmp="${state_file}.tmp.$$"
-    # Drop only the inflight line whose 4th field matches worker_pid.
-    awk -v wp="$worker_pid" -F'\t' '
-        $1 == "inflight" && $4 == wp { next }
+    # Drop only the inflight line whose 4th field matches worker_key.
+    awk -v wk="$worker_key" -F'\t' '
+        $1 == "inflight" && $4 == wk { next }
         { print }
     ' "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+}
+
+# _with_continuous_state_lock <fn> <args...>
+#   Run <fn> "<args...>" under .continuous_state_lock. mkdir-based, with a
+#   bounded polling wait so callers never block forever on a stuck lock.
+#   Falls back to running unlocked after WORKER_POOL_STATE_LOCK_TIMEOUT
+#   (default ~5s) — the alternative is dropping the call entirely, and we'd
+#   rather risk a rare race than silently lose state-file updates.
+_with_continuous_state_lock() {
+    local fn="$1"; shift
+    local lock_dir
+    lock_dir="${RALPH_DIR:-.ralph}/.continuous_state_lock"
+    local waited=0
+    local max="${WORKER_POOL_STATE_LOCK_TIMEOUT:-100}"   # 100 * 0.05s = ~5s
+    while ! mkdir "$lock_dir" 2>/dev/null; do
+        sleep 0.05
+        waited=$((waited + 1))
+        if [[ $waited -ge $max ]]; then
+            # Lock stuck — log to stderr (best-effort), break it, then
+            # reset the counter so we don't immediately re-break a lock
+            # that a concurrent caller just acquired (mirrors the P1 #6
+            # fix in _atomic_inc_call_count).
+            echo "[continuous] _with_continuous_state_lock: timeout waiting for ${lock_dir}; breaking" >&2
+            rmdir "$lock_dir" 2>/dev/null || true
+            waited=0
+        fi
+    done
+    # Run the body, capturing rc so a non-zero return doesn't strand the lock.
+    local rc=0
+    "$fn" "$@" || rc=$?
+    rmdir "$lock_dir" 2>/dev/null || true
+    return "$rc"
 }
 
 cleanup_continuous_state() {
@@ -194,6 +260,52 @@ _skip_list_contains() {
     [[ -z "$id" ]] && return 1
     [[ -z "$skip_list" ]] && return 1
     echo "$skip_list" | grep -qxF "$id"
+}
+
+# _continuous_skip_key <descriptor> — canonical skip-list key for a task
+# descriptor. Both orchestrators (lib/worker_pool.sh and
+# lib/worker_pool_tabs.sh) use this AND both pickers
+# (pick_workspace_task_for_pool, pick_next_task_for_pool) must compute the
+# same key so K=max-task-attempts skip semantics survive a round-trip.
+#
+# The earlier implementation used `${descriptor%% *}` (first-space-prefix),
+# which had two problems (P1 #8):
+#   1. Workspace descriptor: `repo|task_id|line|description` — if the user
+#      edited the task description between picks, the first-word changed and
+#      the skip-list match silently broke.
+#   2. Workspace task_id slug collisions across repos: two repos with a task
+#      slugged "update-deps" would share the same key, so failing one would
+#      mask the other.
+#
+# New format:
+#   - Workspace (≥4 pipe-separated fields, e.g. `repo|task_id|line|desc`):
+#       key = `repo|task_id|line`  (drop the description)
+#   - Single-repo (2–3 pipe-separated fields, e.g. `task_id|line|bead_id`):
+#       key = `task_id`  (drop line + bead_id so re-slugging is robust)
+#   - Pipe-less / test mock (e.g. `T1 rc=0`):
+#       key = `${descriptor%% *}`  (preserves existing test mocks)
+#
+# Detection is by `|` field count: workspace descriptors always have ≥4
+# parts (description is non-empty), and workspace is checked first so an
+# all-digit slug task_id in a single-repo descriptor doesn't mis-route.
+_continuous_skip_key() {
+    local descriptor="$1"
+    if [[ "$descriptor" != *"|"* ]]; then
+        echo "${descriptor%% *}"
+        return 0
+    fi
+    local -a _parts=()
+    IFS='|' read -ra _parts <<< "$descriptor"
+    if [[ ${#_parts[@]} -ge 4 && "${_parts[2]}" =~ ^[0-9]+$ ]]; then
+        # Workspace: repo|task_id|line|...
+        printf '%s|%s|%s\n' "${_parts[0]}" "${_parts[1]}" "${_parts[2]}"
+    elif [[ ${#_parts[@]} -ge 2 ]]; then
+        # Single-repo: task_id|line|bead_id (line may be numeric).
+        printf '%s\n' "${_parts[0]}"
+    else
+        # Single-pipe edge case — fall back to first-space-prefix.
+        echo "${descriptor%% *}"
+    fi
 }
 
 # =============================================================================
@@ -398,7 +510,11 @@ run_continuous_worker_pool() {
             succeeded=$((succeeded + 1))
         else
             failed=$((failed + 1))
-            local task_key="${finished_descriptor%% *}"
+            # P1 #8: canonical skip-key (workspace → repo|task_id|line;
+            # single-repo → task_id; pipe-less → first-space-prefix). Both
+            # pickers compute the same key so K-limit round-trips reliably.
+            local task_key
+            task_key=$(_continuous_skip_key "$finished_descriptor")
             # Direct call (not $(_attempts_increment …)) so the function's
             # array mutations persist in our shell. See the helper's docstring.
             _ATTEMPTS_LAST=""
@@ -520,8 +636,12 @@ export -f _atomic_inc_call_count
 export -f _continuous_state_file
 export -f init_continuous_state
 export -f record_inflight
+export -f _record_inflight_locked
 export -f clear_inflight
+export -f _clear_inflight_locked
+export -f _with_continuous_state_lock
 export -f cleanup_continuous_state
 export -f _skip_list_contains
+export -f _continuous_skip_key
 export -f run_continuous_worker_pool
 export -f _continuous_emit_summary

@@ -600,7 +600,13 @@ run_continuous_worker_pool_tabs() {
         worker_started_at[$slot]=$(date +%s)
         worker_alive[$slot]="true"
 
-        record_inflight "${line_num:-0}" "${task_id:-${descriptor%% *}}" "0" 2>/dev/null || true
+        # P1 #5: pass the unique worker_id (wid) as the 4th field rather than
+        # the hard-coded "0". With "0" every tab worker shared the same key,
+        # so any clear_inflight "0" call deleted every in-flight row at once.
+        # Now the row is keyed on wid; clear_inflight "$wid" only removes
+        # this worker's entry. (The state-file column is called "worker_pid"
+        # for historical reasons; in tab mode it holds a wid string.)
+        record_inflight "${line_num:-0}" "${task_id:-${descriptor%% *}}" "$wid" 2>/dev/null || true
 
         _spawn_worker_tab "$wid" "$task_id" "$line_num" "$descriptor"
         inflight=$((inflight + 1))
@@ -692,7 +698,9 @@ run_continuous_worker_pool_tabs() {
         worker_line_nums[$slot]=""
         worker_started_at[$slot]=""
         worker_alive[$slot]="false"
-        clear_inflight "0" 2>/dev/null || true
+        # P1 #5: clear by the unique worker_id, not the hard-coded "0"
+        # that previously matched every in-flight tab row at once.
+        clear_inflight "$wid" 2>/dev/null || true
         delete_heartbeat "$wid"
         delete_completion_file "$comp_name"
 
@@ -702,8 +710,18 @@ run_continuous_worker_pool_tabs() {
             succeeded=$((succeeded + 1))
         else
             failed=$((failed + 1))
+            # P1 #8: route through _continuous_skip_key (from
+            # lib/worker_pool.sh) so tabs and single-pane orchestrators use
+            # the same skip-key shape AND match what the pickers check.
+            # Workspace → repo|task_id|line; single-repo → task_id;
+            # pipe-less / test-mock descriptors → first-space-prefix.
+            #
+            # Previously tabs orchestrator used `${task_id:-${descriptor%% *}}`
+            # which (a) collided across repos for workspace tasks sharing a
+            # slug and (b) silently mis-matched the picker's check when the
+            # task description changed between picks.
             local task_key
-            task_key="${task_id:-${descriptor%% *}}"
+            task_key=$(_continuous_skip_key "$descriptor")
             _ATTEMPTS_LAST=""
             _tabs_attempts_increment "$task_key"
             if [[ "$_ATTEMPTS_LAST" -ge "$K" ]]; then

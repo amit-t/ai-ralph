@@ -8,6 +8,7 @@ load '../helpers/test_helper'
 
 WORKSPACE_LIB="${BATS_TEST_DIRNAME}/../../lib/workspace_manager.sh"
 TASK_SOURCES_LIB="${BATS_TEST_DIRNAME}/../../lib/task_sources.sh"
+WORKER_POOL_LIB="${BATS_TEST_DIRNAME}/../../lib/worker_pool.sh"
 
 setup() {
     TEST_DIR="$(mktemp -d)"
@@ -18,6 +19,13 @@ setup() {
     fi
     if [[ -f "$TASK_SOURCES_LIB" ]]; then
         source "$TASK_SOURCES_LIB"
+    fi
+    # Source worker_pool.sh so tests can use _continuous_skip_key — the
+    # canonical skip-list key generator (P1 #8). Tests that build a
+    # skip-list entry MUST go through this helper so they stay in sync
+    # with the production orchestrators.
+    if [[ -f "$WORKER_POOL_LIB" ]]; then
+        source "$WORKER_POOL_LIB"
     fi
 }
 
@@ -66,17 +74,17 @@ EOF
 - [ ] Second task
 EOF
 
-    # Skip-list entries are the descriptor's first-space-prefix —
-    # the same key the worker pool inserts via `${descriptor%% *}`
-    # (see lib/worker_pool.sh). Capture the first descriptor to
-    # build the matching skip key.
+    # P1 #8: skip-list entries are the canonical key produced by
+    # _continuous_skip_key — `repo|task_id|line` for workspace, dropping
+    # the description. Build the matching key from the first descriptor.
     local first
     first=$(pick_workspace_task "${TEST_DIR}/.ralph/fix_plan.md")
     local first_line
     first_line=$(echo "$first" | cut -d'|' -f3)
     revert_workspace_task "${TEST_DIR}/.ralph/fix_plan.md" "$first_line"
 
-    local skip_token="${first%% *}"   # e.g. "repo-alpha|first-task|4|First"
+    local skip_token
+    skip_token=$(_continuous_skip_key "$first")   # e.g. "repo-alpha|first-task|4"
     run pick_workspace_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_success
     [[ "$output" != "$first" ]]
@@ -91,15 +99,16 @@ EOF
 ## repo-alpha
 - [ ] Only task
 EOF
-    # Build the descriptor-prefix that the picker would produce for the
-    # only task, then skip it and assert the picker drains.
+    # P1 #8: build the canonical `repo|task_id|line` key the orchestrator
+    # would insert; skip it and assert the picker drains.
     local first
     first=$(pick_workspace_task "${TEST_DIR}/.ralph/fix_plan.md")
     local first_line
     first_line=$(echo "$first" | cut -d'|' -f3)
     revert_workspace_task "${TEST_DIR}/.ralph/fix_plan.md" "$first_line"
 
-    local skip_token="${first%% *}"
+    local skip_token
+    skip_token=$(_continuous_skip_key "$first")
     run pick_workspace_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_failure
 }
@@ -164,9 +173,10 @@ EOF
 - [ ] Task three
 EOF
 
-    # Skip-list entries are the descriptor's first-space-prefix — same key
-    # the worker pool stores. For the single-repo descriptor `task_id|line|bead_id`
-    # there are no spaces, so the prefix equals the whole descriptor.
+    # P1 #8: skip-list entries are the canonical key produced by
+    # _continuous_skip_key — for single-repo descriptors this is just the
+    # task_id slug (no line, no bead_id), so the key is stable across
+    # fix_plan.md edits.
     local first
     first=$(pick_next_task "${TEST_DIR}/.ralph/fix_plan.md")
     local first_line
@@ -175,7 +185,8 @@ EOF
         "${TEST_DIR}/.ralph/fix_plan.md" > "${TEST_DIR}/.ralph/fix_plan.md.tmp" \
         && mv "${TEST_DIR}/.ralph/fix_plan.md.tmp" "${TEST_DIR}/.ralph/fix_plan.md"
 
-    local skip_token="${first%% *}"
+    local skip_token
+    skip_token=$(_continuous_skip_key "$first")
     run pick_next_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_success
     [[ "$output" != "$first" ]]
@@ -190,8 +201,8 @@ EOF
 # Fix Plan
 - [ ] Lone task
 EOF
-    # Build the descriptor-prefix the picker would produce for the only
-    # task, then skip it and assert the picker drains.
+    # P1 #8: build the canonical task_id-slug key; skip it and assert
+    # the picker drains.
     local first
     first=$(pick_next_task "${TEST_DIR}/.ralph/fix_plan.md")
     local first_line
@@ -200,7 +211,8 @@ EOF
         "${TEST_DIR}/.ralph/fix_plan.md" > "${TEST_DIR}/.ralph/fix_plan.md.tmp" \
         && mv "${TEST_DIR}/.ralph/fix_plan.md.tmp" "${TEST_DIR}/.ralph/fix_plan.md"
 
-    local skip_token="${first%% *}"
+    local skip_token
+    skip_token=$(_continuous_skip_key "$first")
     run pick_next_task_for_pool ".ralph/fix_plan.md" "$skip_token"
     assert_failure
 }
@@ -385,10 +397,10 @@ EOF
 # =============================================================================
 
 @test "pick_next_task_for_pool skip-list does NOT match descriptor-prefix substrings" {
-    # Regression guard for `grep -F` (substring) vs `grep -xF` (exact-match)
-    # in skip-list filtering. The skip-list now contains descriptor-prefix
-    # tokens (e.g. `task-5|2|`); substring matching would mis-skip a task
-    # whose descriptor token was a superset (e.g. `task-55|2|`).
+    # P1 #8 + grep -F regression guard: skip-list now contains just the
+    # task_id slug (e.g. `task-5`); substring matching would mis-skip a
+    # task whose slug was a superset (e.g. `task-55`). The `-xF` (exact
+    # fixed-string match) check in the picker must reject the substring.
     mkdir -p .ralph
     {
         echo "# Fix Plan"
@@ -396,14 +408,13 @@ EOF
         echo "- [ ] task 55"
     } > .ralph/fix_plan.md
 
-    # Skip-list contains the FULL descriptor prefix for the line-2 task —
-    # `task-5|2|`. Substring check would also match `task-55|3|`; -xF must
-    # not.
-    run pick_next_task_for_pool ".ralph/fix_plan.md" "task-5|2|"
+    # Skip-list contains the slug for the line-2 task. Substring match would
+    # also catch `task-55` (line 3); -xF must not.
+    run pick_next_task_for_pool ".ralph/fix_plan.md" "task-5"
     assert_success
     local picked_line
     picked_line=$(echo "$output" | cut -d'|' -f2)
-    # Line 2 is skipped via descriptor match; line 3 (`task-55|3|`) wins.
+    # Line 2 is skipped via slug match; line 3 (`task-55`) wins.
     [[ "$picked_line" == "3" ]]
 }
 
@@ -414,9 +425,9 @@ EOF
 - [ ] Task one
 - [ ] Task two
 EOF
-    # Skip-list with trailing newline; entry is the descriptor-prefix for
-    # line 2 (`task-one|2|`), not the bare line number.
-    run pick_next_task_for_pool ".ralph/fix_plan.md" $'task-one|2|\n'
+    # P1 #8: skip-list with trailing newline; entry is the slug for
+    # line 2 (`task-one`).
+    run pick_next_task_for_pool ".ralph/fix_plan.md" $'task-one\n'
     assert_success
     local picked_line
     picked_line=$(echo "$output" | cut -d'|' -f2)
@@ -677,4 +688,192 @@ EOF
     spy=$(cat "${TEST_DIR}/.spy")
     [[ "$spy" == *"skip=skipped-token"* ]]
     [[ "$spy" == *$'allowed=apirepo\nworkerrepo' ]]
+}
+
+# =============================================================================
+# P1 #8 — Canonical skip-key (lib/worker_pool.sh::_continuous_skip_key).
+#
+# These tests pin down the new key shape:
+#   - Workspace descriptor (≥4 pipe fields): `repo|task_id|line`
+#   - Single-repo descriptor (2–3 pipe fields): `task_id` (slug only)
+#   - Pipe-less / test-mock descriptor: first-space-prefix
+#
+# AND they prove that changes to the task description between picks no
+# longer break the skip-list match (the regression that P1 #8 fixes).
+# =============================================================================
+
+@test "P1 #8: _continuous_skip_key — workspace descriptor → repo|task_id|line" {
+    local key
+    key=$(_continuous_skip_key "api|fix-login|42|Fix login bug on mobile")
+    [[ "$key" == "api|fix-login|42" ]]
+}
+
+@test "P1 #8: _continuous_skip_key — single-repo descriptor → task_id slug only" {
+    local key
+    key=$(_continuous_skip_key "fix-login|42|bead-1")
+    [[ "$key" == "fix-login" ]]
+    # Trailing empty bead_id is also fine.
+    key=$(_continuous_skip_key "fix-login|42|")
+    [[ "$key" == "fix-login" ]]
+    # Two-field variant (bead_id absent entirely).
+    key=$(_continuous_skip_key "fix-login|42")
+    [[ "$key" == "fix-login" ]]
+}
+
+@test "P1 #8: _continuous_skip_key — pipe-less mock descriptor → first-space-prefix" {
+    local key
+    key=$(_continuous_skip_key "T1 rc=0")
+    [[ "$key" == "T1" ]]
+    # Descriptor with only a leading token (no rc).
+    key=$(_continuous_skip_key "MYTASK")
+    [[ "$key" == "MYTASK" ]]
+}
+
+@test "P1 #8: _continuous_skip_key — workspace key strips description (key stable across edits)" {
+    # Same task, two different descriptions (user edited fix_plan.md between
+    # picks). The canonical key must NOT change.
+    local k1 k2
+    k1=$(_continuous_skip_key "api|fix-login|42|Fix login bug on mobile")
+    k2=$(_continuous_skip_key "api|fix-login|42|Login flow broken in iOS app")
+    [[ "$k1" == "$k2" ]]
+    [[ "$k1" == "api|fix-login|42" ]]
+}
+
+@test "P1 #8: _continuous_skip_key — different repos same slug do NOT collide" {
+    # Two repos can legitimately have a task with the same slug
+    # (e.g. "update-deps"). The canonical key must DIFFER.
+    local k1 k2
+    k1=$(_continuous_skip_key "api|update-deps|10|Bump axios")
+    k2=$(_continuous_skip_key "web|update-deps|22|Bump react")
+    [[ "$k1" != "$k2" ]]
+    [[ "$k1" == "api|update-deps|10" ]]
+    [[ "$k2" == "web|update-deps|22" ]]
+}
+
+@test "P1 #8: workspace skip-list survives description edits between picks (round-trip)" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worker_pool.sh"
+
+    mkdir -p .ralph
+    # Use a [bead-id] prefix so the picker's task_id is anchored to the
+    # bead, not auto-slugged from the (mutable) description text. This is
+    # the realistic scenario where the user can edit the description in
+    # fix_plan.md mid-run and the orchestrator still recognizes "same task".
+    cat > .ralph/fix_plan.md << 'EOF'
+# Workspace Fix Plan
+
+## api-repo
+
+- [ ] [bug-101] Initial description of the bug
+EOF
+
+    # Production-shape executor: revert [~] → [ ] AND edit the description
+    # text on the same line. The bead_id `bug-101` stays, so the next pick
+    # gets the same task_id slug and the skip-list match holds.
+    _editing_exec() {
+        local descriptor="$1"
+        local line_num
+        line_num=$(echo "$descriptor" | cut -d'|' -f3)
+        local tmp="${PWD}/.ralph/fix_plan.md.tmp.$$"
+        awk -v ln="$line_num" 'NR==ln {
+            sub(/- \[~\]/, "- [ ]");
+            sub(/Initial description of the bug/, "Edited mid-run by a user")
+        } 1' "${PWD}/.ralph/fix_plan.md" > "$tmp" \
+            && mv "$tmp" "${PWD}/.ralph/fix_plan.md"
+        return 1
+    }
+    export -f _editing_exec
+    _editing_pick() { pick_workspace_task_for_pool "${PWD}/.ralph/fix_plan.md" "$1"; }
+    export -f _editing_pick
+    _editing_oc() { :; }
+    export -f _editing_oc
+
+    export RALPH_DIR="${PWD}/.ralph"
+    # K=1, M=10: should fail once, add `api-repo|bug-101|5` to skip-list,
+    # then drain because the picker recognises the same `repo|task_id|line`
+    # on the next pick even though the description text changed.
+    run run_continuous_worker_pool 1 10 1 0 _editing_pick _editing_exec _editing_oc
+
+    [[ "$output" == *"skip-list +="* ]]
+    local last_completed
+    last_completed=$(echo "$output" | grep -oE 'completed=[0-9]+/10' | tail -1 | grep -oE '[0-9]+' | head -1)
+    # K=1 → exactly 1 attempt. If the description-edit regressed the
+    # skip-list match, the orchestrator would re-pick and burn M=10.
+    [[ "$last_completed" == "1" ]] || {
+        echo "FAIL: expected 1 attempt but got $last_completed (P1 #8 regressed)" >&2
+        echo "$output" >&2
+        return 1
+    }
+    [[ "$output" == *"queue empty"* ]]
+    # The key recorded in the skip-list line MUST be `repo|task_id|line` —
+    # no description fragment. The old (buggy) key was
+    # `api-repo|bug-101|5|[bug-101]` (first-word of `[bug-101] Initial …`).
+    [[ "$output" == *"skip-list += api-repo|bug-101|5 "* ]]
+}
+
+@test "P1 #8: single-repo skip-list survives line shifts (slug-only key)" {
+    source "${BATS_TEST_DIRNAME}/../../lib/worker_pool.sh"
+
+    mkdir -p .ralph
+    cat > .ralph/fix_plan.md << 'EOF'
+# Fix Plan
+- [ ] First broken task
+EOF
+
+    # The "broken" exec reverts [~] → [ ] AND inserts a comment line at the
+    # top of the file, shifting the bug task's line number from 2 → 3.
+    # With the old `task_id|line|bead_id` key the second pick's line=3
+    # would never match the recorded line=2 key, and the K-limit would be
+    # silently bypassed. The new slug-only key (`first-broken-task`) is
+    # stable across the shift.
+    _shifty_exec() {
+        local descriptor="$1"
+        local line_num
+        line_num=$(echo "$descriptor" | cut -d'|' -f2)
+        # Revert [~] and prepend a new line.
+        local tmp="${PWD}/.ralph/fix_plan.md.tmp.$$"
+        awk -v ln="$line_num" 'NR==ln { sub(/- \[~\]/, "- [ ]") } 1' "${PWD}/.ralph/fix_plan.md" > "$tmp" \
+            && mv "$tmp" "${PWD}/.ralph/fix_plan.md"
+        local tmp2="${PWD}/.ralph/fix_plan.md.tmp2.$$"
+        printf '<!-- a new line that shifts task numbers down -->\n%s' "$(cat "${PWD}/.ralph/fix_plan.md")" > "$tmp2" \
+            && mv "$tmp2" "${PWD}/.ralph/fix_plan.md"
+        return 1
+    }
+    export -f _shifty_exec
+    _shifty_pick() { pick_next_task_for_pool "${PWD}/.ralph/fix_plan.md" "$1"; }
+    export -f _shifty_pick
+    _shifty_oc() { :; }
+    export -f _shifty_oc
+
+    export RALPH_DIR="${PWD}/.ralph"
+    run run_continuous_worker_pool 1 10 1 0 _shifty_pick _shifty_exec _shifty_oc
+
+    [[ "$output" == *"skip-list +="* ]]
+    local last_completed
+    last_completed=$(echo "$output" | grep -oE 'completed=[0-9]+/10' | tail -1 | grep -oE '[0-9]+' | head -1)
+    # K=1: exactly 1 attempt. Old behavior would have burned all M=10.
+    [[ "$last_completed" == "1" ]] || {
+        echo "FAIL: expected 1 attempt but got $last_completed (P1 #8 regressed)" >&2
+        echo "$output" >&2
+        return 1
+    }
+}
+
+@test "P1 #8: tabs orchestrator emits skip-key via _continuous_skip_key (source contract)" {
+    # Tabs orchestrator must NOT recompute the skip-key inline. The fix
+    # routes through _continuous_skip_key so single-pane and tabs modes
+    # use identical key shapes.
+    local tabs_lib="${BATS_TEST_DIRNAME}/../../lib/worker_pool_tabs.sh"
+    # The legacy form `task_key="${task_id:-${descriptor%% *}}"` must
+    # have been replaced.
+    ! grep -q 'task_key="${task_id:-${descriptor%% \*}}"' "$tabs_lib"
+    # The new call to _continuous_skip_key must be present.
+    grep -q '_continuous_skip_key' "$tabs_lib"
+}
+
+@test "P1 #8: single-pane orchestrator emits skip-key via _continuous_skip_key (source contract)" {
+    local pool_lib="${BATS_TEST_DIRNAME}/../../lib/worker_pool.sh"
+    # The function must be defined.
+    grep -q '^_continuous_skip_key()' "$pool_lib"
+    # The failure path must call it (not the legacy `${finished_descriptor%% *}`).
+    awk '/^run_continuous_worker_pool\(\)/,/^}/' "$pool_lib" | grep -q '_continuous_skip_key'
 }

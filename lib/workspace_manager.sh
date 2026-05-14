@@ -1039,20 +1039,25 @@ workspace_repo_cleanup() {
 # pick_workspace_task_for_pool — Skip-list-aware variant of pick_workspace_task
 # for use by the continuous worker pool (see lib/worker_pool.sh).
 #
-# Skip-list semantics (must match the orchestrator in lib/worker_pool.sh):
-#   The worker pool skip-lists a task by inserting `${descriptor%% *}` — the
-#   first-space-prefix of the descriptor that this picker emits — one per
-#   line. So the picker must compute the same prefix from its candidate
-#   descriptor BEFORE marking `[~]`, and skip if it matches.
+# Skip-list semantics (must match _continuous_skip_key in lib/worker_pool.sh):
+#   The worker pool skip-lists a workspace task by inserting
+#   `repo|task_id|line` — the three identifying fields of the descriptor
+#   (the description is dropped). So the picker must compute the same
+#   `repo|task_id|line` key from its candidate BEFORE marking `[~]`, and
+#   skip if it matches.
 #
-#   Earlier (buggy) versions of this function checked `skip_list` against the
-#   bare line number, which never matched what the orchestrator had inserted,
-#   so the K=max-task-attempts limit was silently a no-op. Do not revert to
-#   that form without realigning worker_pool.sh's insertion logic too.
+#   Earlier (buggy) versions of this function:
+#     1. Checked `skip_list` against the bare line number — silent no-op
+#        (orchestrator inserted descriptor prefixes).
+#     2. Then briefly checked `${candidate_desc%% *}` (first-space-prefix
+#        of `repo|task_id|line|description`) — silently mis-matched when
+#        the description's first word changed between picks (P1 #8).
+#   Do not revert to either form without realigning worker_pool.sh's
+#   insertion logic too — _continuous_skip_key is the canonical source.
 #
 # Args:
 #   $1 - fix_plan_file: Path to workspace fix_plan.md
-#   $2 - skip_list:     Newline-separated list of descriptor-prefix tokens.
+#   $2 - skip_list:     Newline-separated list of `repo|task_id|line` keys.
 #   $3 - allowed_repos (optional): newline-separated allowlist of repo
 #        section names (same semantics as pick_workspace_task's $2). When
 #        non-empty, cross-repo and any section not in the list are skipped.
@@ -1118,10 +1123,11 @@ pick_workspace_task_for_pool() {
                 task_id=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
             fi
 
-            # Skip-list check: compute the same descriptor-prefix the worker
-            # pool stores so skip_list entries match 1:1.
+            # Skip-list check (P1 #8): compute the same `repo|task_id|line`
+            # key the worker pool's _continuous_skip_key emits, so skip_list
+            # entries match 1:1 regardless of how the task description looks.
             local candidate_desc="${current_repo}|${task_id}|${line_num}|${task_desc}"
-            local candidate_token="${candidate_desc%% *}"
+            local candidate_token="${current_repo}|${task_id}|${line_num}"
             if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$candidate_token"; then
                 continue
             fi

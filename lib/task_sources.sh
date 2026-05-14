@@ -1089,20 +1089,19 @@ mark_single_bead_in_progress() {
 # pick_next_task_for_pool - Skip-list-aware variant of pick_next_task for use
 # by the continuous worker pool (see lib/worker_pool.sh).
 #
-# Skip-list semantics (must match the orchestrator in lib/worker_pool.sh):
-#   The worker pool skip-lists a task by inserting `${descriptor%% *}` — the
-#   first-space-prefix of the descriptor that this picker emits — one per
-#   line. The single-repo descriptor `task_id|line_num|bead_id` has no
-#   spaces (task_id is sanitized to [a-z0-9-]), so the prefix equals the
-#   whole descriptor.
+# Skip-list semantics (must match _continuous_skip_key in lib/worker_pool.sh):
+#   The worker pool skip-lists a single-repo task by inserting just the
+#   task_id slug (P1 #8) — dropping line_num and bead_id so the key is
+#   stable even if fix_plan.md is edited between picks.
 #
-#   Earlier (buggy) versions checked `skip_list` against the bare line
-#   number, which never matched the orchestrator's insertion, so the
-#   K=max-task-attempts limit was silently a no-op.
+#   Earlier (buggy) versions checked `skip_list` against either the bare
+#   line number or the full `task_id|line|bead_id` descriptor. Neither
+#   matched all orchestrator paths, so K=max-task-attempts was unreliable.
+#   _continuous_skip_key is now the canonical source of the key shape.
 #
 # Args:
 #   $1 - fix_plan_file: Path to fix_plan.md
-#   $2 - skip_list:     Newline-separated list of descriptor-prefix tokens.
+#   $2 - skip_list:     Newline-separated list of task_id slugs.
 # Output (stdout): task_id|line_num|bead_id (same as pick_next_task)
 # Returns: 0 on success, 1 if no eligible tasks remain.
 pick_next_task_for_pool() {
@@ -1136,11 +1135,11 @@ pick_next_task_for_pool() {
                 task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
             fi
 
-            # Skip-list check: compute the same descriptor-prefix the worker
-            # pool stores so skip_list entries match 1:1. The single-repo
-            # descriptor has no spaces, so the prefix is the whole string.
+            # Skip-list check (P1 #8): compute the same `task_id` slug the
+            # worker pool's _continuous_skip_key emits, so skip_list entries
+            # match 1:1 regardless of line shifts or bead_id changes.
             local candidate_desc="${task_id}|${line_num}|${bead_id}"
-            local candidate_token="${candidate_desc%% *}"
+            local candidate_token="${task_id}"
             if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$candidate_token"; then
                 continue
             fi
