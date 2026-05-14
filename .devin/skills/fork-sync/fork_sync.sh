@@ -285,6 +285,7 @@ fork_sync_extract_conflict() {
 
         if [[ "$in_conflict" == "true" ]]; then
             if [[ "$line" =~ ^======= ]]; then
+                # shellcheck disable=SC2034 # informational marker; reserved for richer per-section reporting
                 section="upstream"
                 echo "--- UPSTREAM CHANGES ---"
                 continue

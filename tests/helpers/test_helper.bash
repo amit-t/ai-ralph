@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Test Helper Utilities for Ralph Test Suite
+# shellcheck disable=SC2154 # `status` and `output` are populated by bats `run` before the assertion helpers are called
 
 # Helper: Fail with message (for use in assertions)
 fail() {
@@ -46,8 +47,9 @@ export BATS_TEST_TMPDIR="${BATS_TEST_TMPDIR:-/tmp/bats-ralph-$$}"
 # Setup function - runs before each test
 setup() {
     # Create unique temp directory for this test
-    export TEST_TEMP_DIR="$(mktemp -d "${BATS_TEST_TMPDIR}/test.XXXXXX")"
-    cd "$TEST_TEMP_DIR"
+    TEST_TEMP_DIR="$(mktemp -d "${BATS_TEST_TMPDIR}/test.XXXXXX")"
+    export TEST_TEMP_DIR
+    cd "$TEST_TEMP_DIR" || return 1
 
     # Set up test environment variables with .ralph/ subfolder structure
     export RALPH_DIR=".ralph"

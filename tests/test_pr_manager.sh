@@ -22,7 +22,9 @@ run_test() {
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 RALPH_ENGINE="claude"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 RALPH_DIR=".ralph"
 
 # Mock log_status so tests don't need the full loop environment
@@ -168,14 +170,14 @@ run_test "empty task_id and task_name omits Task line" \
 WT_DIR=$(mktemp -d)
 WT_MAIN_DIR=$(mktemp -d)
 (
-    cd "$WT_MAIN_DIR"
+    cd "$WT_MAIN_DIR" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
     touch README.md && git add . && git commit -q -m "init"
 )
 (
-    cd "$WT_DIR"
+    cd "$WT_DIR" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
@@ -186,12 +188,16 @@ WT_MAIN_DIR=$(mktemp -d)
 _WT_CURRENT_PATH="$WT_DIR"
 _WT_CURRENT_BRANCH="ralph-claude/T-1-1234"
 _WT_MAIN_DIR="$WT_MAIN_DIR"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 RALPH_DIR=".ralph"
 RALPH_PR_PUSH_CAPABLE="false"   # no real remote in test
 RALPH_PR_GH_CAPABLE="false"
 PR_ENABLED="true"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import (see consumed_by note in pr_manager)
 PR_BASE_BRANCH="main"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import (see consumed_by note in pr_manager)
 PR_DRAFT="false"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 RALPH_ENGINE="claude"
 
 # Add uncommitted changes to test auto-commit
@@ -235,7 +241,7 @@ RALPH_PR_GH_CAPABLE="true"
 # Set up temp dirs again for this test
 WT_DIR2=$(mktemp -d)
 (
-    cd "$WT_DIR2"
+    cd "$WT_DIR2" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
@@ -245,6 +251,7 @@ _WT_CURRENT_PATH="$WT_DIR2"
 _WT_CURRENT_BRANCH="ralph-claude/T-1-1234"
 _WT_MAIN_DIR="$WT_DIR2"
 PR_ENABLED="true"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import (see consumed_by note in pr_manager)
 PR_BASE_BRANCH="main"
 # Mock gh: pr view returns URL (PR exists), pr create must NOT be called
 PR_CREATE_CALLED=0
@@ -266,7 +273,7 @@ rm -rf "$WT_DIR2"
 # Test: gh pr create failure → function returns 1
 WT_DIR3=$(mktemp -d)
 (
-    cd "$WT_DIR3"
+    cd "$WT_DIR3" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
@@ -293,7 +300,7 @@ rm -rf "$WT_DIR3"
 # Test: gate_passed=false + GH_CAPABLE=true → quality-gates-failed label applied
 WT_DIR4=$(mktemp -d)
 (
-    cd "$WT_DIR4"
+    cd "$WT_DIR4" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
@@ -345,7 +352,7 @@ unset -f gh
 
 FB_DIR=$(mktemp -d)
 (
-    cd "$FB_DIR"
+    cd "$FB_DIR" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
@@ -358,16 +365,18 @@ echo "new work" >> "$FB_DIR/file.txt"
 
 # Set globals for test
 _WT_CURRENT_PATH="$FB_DIR"   # not used by fallback fn, but set for consistency
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 RALPH_ENGINE="claude"
 RALPH_PR_PUSH_CAPABLE="false"
 RALPH_PR_GH_CAPABLE="false"
 PR_ENABLED="true"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 RALPH_DIR=".ralph"
 
 # Run the fallback fn from within FB_DIR context
 # The function operates in the current shell dir, so cd there first (in subshell)
 fb_result=$(
-    cd "$FB_DIR"
+    cd "$FB_DIR" || exit
     worktree_fallback_branch_pr "T-2" "Add feature" "7"
     echo "EXIT:$?"
 )
@@ -387,13 +396,14 @@ rm -rf "$FB_DIR"
 # Test: PR_ENABLED=false skips fallback branch PR
 FB_DIR2=$(mktemp -d)
 (
-    cd "$FB_DIR2"
+    cd "$FB_DIR2" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
     echo "init" > f.txt && git add . && git commit -q -m "init"
     echo "work" >> f.txt
 )
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 RALPH_ENGINE="claude"
 RALPH_PR_PUSH_CAPABLE="false"
 RALPH_PR_GH_CAPABLE="false"
@@ -411,7 +421,7 @@ rm -rf "$FB_DIR2"
 
 WEBURL_DIR=$(mktemp -d)
 (
-    cd "$WEBURL_DIR"
+    cd "$WEBURL_DIR" || exit
     git init -q
     git remote add origin "https://github.com/owner/repo.git"
 )
@@ -421,7 +431,7 @@ rm -rf "$WEBURL_DIR"
 
 WEBURL_DIR2=$(mktemp -d)
 (
-    cd "$WEBURL_DIR2"
+    cd "$WEBURL_DIR2" || exit
     git init -q
     git remote add origin "git@github.com:owner/repo.git"
 )
@@ -433,7 +443,7 @@ rm -rf "$WEBURL_DIR2"
 
 CMP_DIR=$(mktemp -d)
 (
-    cd "$CMP_DIR"
+    cd "$CMP_DIR" || exit
     git init -q
     git config user.email "test@test.com"
     git config user.name "Test"
@@ -445,6 +455,7 @@ _WT_CURRENT_BRANCH="ralph-claude/T-cmp"
 _WT_MAIN_DIR="$CMP_DIR"
 RALPH_PR_PUSH_CAPABLE="true"
 RALPH_PR_GH_CAPABLE="false"
+# shellcheck disable=SC2034 # test fixture variable; sourced library reads it via env import
 PR_ENABLED="true"
 git() {
     if [[ "$1" == "push" ]]; then return 0
