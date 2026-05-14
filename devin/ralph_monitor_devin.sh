@@ -11,6 +11,7 @@ set -e
 RALPH_DIR=".ralph"
 STATUS_FILE="$RALPH_DIR/status.json"
 LOG_FILE="$RALPH_DIR/logs/ralph.log"
+# shellcheck disable=SC2034 # documented log surface; reserved for live-tail mode
 LIVE_LOG_FILE="$RALPH_DIR/live.log"
 REFRESH_INTERVAL=5
 

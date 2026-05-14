@@ -29,6 +29,7 @@ CB_AUTO_RESET=${CB_AUTO_RESET:-false}                               # Reset to C
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+# shellcheck disable=SC2034 # BLUE reserved for future use; keeps palette symmetric
 BLUE='\033[0;34m'
 NC='\033[0m'
 
@@ -138,7 +139,8 @@ get_circuit_state() {
 
 # Check if circuit breaker allows execution
 can_execute() {
-    local state=$(get_circuit_state)
+    local state
+    state=$(get_circuit_state)
 
     if [[ "$state" == "$CB_STATE_OPEN" ]]; then
         return 1  # Circuit is open, cannot execute
@@ -152,16 +154,23 @@ record_loop_result() {
     local loop_number=$1
     local files_changed=$2
     local has_errors=$3
+    # shellcheck disable=SC2034 # output_length is part of the API; reserved for future heuristics
     local output_length=$4
 
     init_circuit_breaker
 
-    local state_data=$(cat "$CB_STATE_FILE")
-    local current_state=$(echo "$state_data" | jq -r '.state')
-    local consecutive_no_progress=$(echo "$state_data" | jq -r '.consecutive_no_progress' | tr -d '[:space:]')
-    local consecutive_same_error=$(echo "$state_data" | jq -r '.consecutive_same_error' | tr -d '[:space:]')
-    local consecutive_permission_denials=$(echo "$state_data" | jq -r '.consecutive_permission_denials // 0' | tr -d '[:space:]')
-    local last_progress_loop=$(echo "$state_data" | jq -r '.last_progress_loop' | tr -d '[:space:]')
+    local state_data
+    state_data=$(cat "$CB_STATE_FILE")
+    local current_state
+    current_state=$(echo "$state_data" | jq -r '.state')
+    local consecutive_no_progress
+    consecutive_no_progress=$(echo "$state_data" | jq -r '.consecutive_no_progress' | tr -d '[:space:]')
+    local consecutive_same_error
+    consecutive_same_error=$(echo "$state_data" | jq -r '.consecutive_same_error' | tr -d '[:space:]')
+    local consecutive_permission_denials
+    consecutive_permission_denials=$(echo "$state_data" | jq -r '.consecutive_permission_denials // 0' | tr -d '[:space:]')
+    local last_progress_loop
+    last_progress_loop=$(echo "$state_data" | jq -r '.last_progress_loop' | tr -d '[:space:]')
 
     # Ensure integers
     consecutive_no_progress=$((consecutive_no_progress + 0))
@@ -291,7 +300,8 @@ record_loop_result() {
     esac
 
     # Update state file
-    local total_opens=$(echo "$state_data" | jq -r '.total_opens' | tr -d '[:space:]')
+    local total_opens
+    total_opens=$(echo "$state_data" | jq -r '.total_opens' | tr -d '[:space:]')
     total_opens=$((total_opens + 0))
     if [[ "$new_state" == "$CB_STATE_OPEN" && "$current_state" != "$CB_STATE_OPEN" ]]; then
         total_opens=$((total_opens + 1))
@@ -342,8 +352,10 @@ log_circuit_transition() {
     local reason=$3
     local loop_number=$4
 
-    local history=$(cat "$CB_HISTORY_FILE")
-    local transition="{
+    local history
+    history=$(cat "$CB_HISTORY_FILE")
+    local transition
+    transition="{
         \"timestamp\": \"$(get_iso_timestamp)\",
         \"loop\": $loop_number,
         \"from_state\": \"$from_state\",
@@ -375,13 +387,20 @@ log_circuit_transition() {
 show_circuit_status() {
     init_circuit_breaker
 
-    local state_data=$(cat "$CB_STATE_FILE")
-    local state=$(echo "$state_data" | jq -r '.state')
-    local reason=$(echo "$state_data" | jq -r '.reason')
-    local no_progress=$(echo "$state_data" | jq -r '.consecutive_no_progress')
-    local last_progress=$(echo "$state_data" | jq -r '.last_progress_loop')
-    local current_loop=$(echo "$state_data" | jq -r '.current_loop // "N/A"')
-    local total_opens=$(echo "$state_data" | jq -r '.total_opens')
+    local state_data
+    state_data=$(cat "$CB_STATE_FILE")
+    local state
+    state=$(echo "$state_data" | jq -r '.state')
+    local reason
+    reason=$(echo "$state_data" | jq -r '.reason')
+    local no_progress
+    no_progress=$(echo "$state_data" | jq -r '.consecutive_no_progress')
+    local last_progress
+    last_progress=$(echo "$state_data" | jq -r '.last_progress_loop')
+    local current_loop
+    current_loop=$(echo "$state_data" | jq -r '.current_loop // "N/A"')
+    local total_opens
+    total_opens=$(echo "$state_data" | jq -r '.total_opens')
 
     local color=""
     local status_icon=""
@@ -436,7 +455,8 @@ EOF
 
 # Check if loop should halt (used in main loop)
 should_halt_execution() {
-    local state=$(get_circuit_state)
+    local state
+    state=$(get_circuit_state)
 
     if [[ "$state" == "$CB_STATE_OPEN" ]]; then
         show_circuit_status

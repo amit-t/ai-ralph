@@ -98,6 +98,7 @@ check_existing_ralph() {
         fi
     done
 
+    # shellcheck disable=SC2034 # documented global side effect (see header); consumed by callers in other files
     RALPH_MISSING_FILES=("${missing[@]}")
 
     if [[ $found -eq 0 ]]; then
@@ -829,6 +830,7 @@ inject_ralph_gitignore() {
 #
 enable_ralph_in_directory() {
     local force="${ENABLE_FORCE:-false}"
+    # shellcheck disable=SC2034 # documented function parameter; reserved for task-import branch; remove only with API change
     local skip_tasks="${ENABLE_SKIP_TASKS:-false}"
     local project_name="${ENABLE_PROJECT_NAME:-}"
     local project_type="${ENABLE_PROJECT_TYPE:-}"

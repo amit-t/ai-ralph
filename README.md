@@ -1434,6 +1434,15 @@ Uninstalling one engine does not affect the others.
 
 ---
 
+## Running on WSL2
+
+ai-ralph runs on WSL2 Ubuntu (bash 5.x) in addition to macOS. Clone target
+repos under `$HOME` (not `/mnt/c/`) for sane IO and `fsync` semantics. See
+[docs/onboarding-wsl.md](docs/onboarding-wsl.md) for prereqs, common issues,
+and the local smoke test (`tests/integration/smoke-ralph.bash`).
+
+---
+
 ## Versioning + upgrades
 
 ai-ralph ships under semver. `version.json` at repo root tracks the canonical version. To update:

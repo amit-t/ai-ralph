@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # version-check.sh — bash-portable shared library for upgrade-notification.
 # Origin: ai-devkit (canonical). This is a mirrored copy in ai-ralph. Keep in sync.
 # Sourced from bash/zsh; body must remain bash-compatible.

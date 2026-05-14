@@ -5,7 +5,7 @@ REPO_ROOT="${SCRIPT_DIR}/../.."
 UPGRADE="${REPO_ROOT}/ralph-upgrade.sh"
 
 scratch="$(mktemp -d)"
-trap "rm -rf '$scratch'" EXIT
+trap 'rm -rf "$scratch"' EXIT
 
 upstream="$scratch/upstream.git"
 clone="$scratch/clone"

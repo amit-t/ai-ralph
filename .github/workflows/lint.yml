@@ -1,0 +1,89 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shell-lint:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck (Linux)
+        if: runner.os == 'Linux'
+        # Pin to upstream binary release so Linux and macOS surface the same
+        # findings (apt's shellcheck on ubuntu-latest is 0.9.0; homebrew is 0.11.0
+        # and emits different warnings, notably SC2120).
+        run: |
+          set -euo pipefail
+          SC_VERSION="v0.11.0"
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SC_VERSION}/shellcheck-${SC_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJf - --strip-components=1 -C /tmp "shellcheck-${SC_VERSION}/shellcheck"
+          sudo install -m 0755 /tmp/shellcheck /usr/local/bin/shellcheck
+          rm -f /tmp/shellcheck
+
+      - name: Install shellcheck (macOS)
+        if: runner.os == 'macOS'
+        run: brew install shellcheck
+
+      - name: Show shellcheck version
+        run: shellcheck --version
+
+      - name: bash -n syntax check
+        run: |
+          set -e
+          files=$(git ls-files '*.sh' '*.bash')
+          if [[ -z "$files" ]]; then
+            echo "No shell files to check"
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          for f in $files; do
+            bash -n "$f"
+          done
+
+      - name: shellcheck (severity=warning)
+        run: |
+          set -e
+          files=$(git ls-files '*.sh' '*.bash')
+          if [[ -z "$files" ]]; then
+            echo "No shell files to check"
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          shellcheck -x -e SC1091 -S warning $files
+
+  unit-tests:
+    # Wave 2 PR 2b: pin lib/date_utils.sh and lib/timeout_utils.sh cross-platform
+    # behaviour with bats. ubuntu-latest acts as the WSL2 proxy; macos-latest
+    # guards the existing macOS path (HARD rule: macOS must stay green).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats and coreutils (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats coreutils
+
+      - name: Install bats-core and coreutils (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bats-core coreutils
+
+      - name: Show bats version
+        run: bats --version
+
+      - name: Run lib unit tests
+        run: |
+          bats tests/unit/lib_date_utils.bats tests/unit/lib_timeout_utils.bats
