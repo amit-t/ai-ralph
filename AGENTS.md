@@ -137,6 +137,29 @@ The system uses a modular architecture with reusable components in the `lib/` di
      subshells so the AI writes to the isolated branch, not the main branch.
      This parity was added for Claude in `ralph_loop.sh` across three paths:
      live mode, modern background mode, and legacy background mode.
+   - **Python + JS dependency install** (`_worktree_install_deps`): walks both
+     `package.json` (npm/pnpm/yarn/bun) AND Python projects (`uv sync` for
+     `uv.lock` / `[tool.uv]` / `[dependency-groups]`; `poetry install`;
+     `pipenv install --deploy`; `pip install -r requirements*.txt`;
+     `pip install -e '.[dev]'` fallback). The split helpers
+     `_resolve_js_install` / `_resolve_python_install` return the
+     `(tool, command)` pair without side effects so the detection logic is
+     unit-testable. `_install_deps_one` then resolves + executes via the
+     shared `_run_install_with_timeout` wrapper.
+   - **uv/poetry-aware gate detection** (`_detect_gates_for_dir` /
+     `_detect_quality_gates`): when a Python project uses uv or poetry,
+     the auto-detected `pytest` / `ruff` gates are emitted as `uv run pytest`
+     / `poetry run pytest` so the commands actually find their deps. Bare
+     `pytest` was previously emitted unconditionally, which fails with exit
+     127 ("command not found") whenever pytest only lives inside the
+     project's venv.
+   - **Monorepo subdir support** (`WORKTREE_GATE_SUBDIRS`): space-separated
+     list of directories under the worktree to also scan for gates (e.g.
+     `WORKTREE_GATE_SUBDIRS="frontend backend"`). For each present subdir
+     the helpers detect deps + gates as if it were a sibling project, and
+     gates are emitted wrapped in `(cd <subdir> && <gate>)` so each is
+     self-contained. Disabled by default — root-only behavior is preserved
+     when the env var is empty.
 
 10. **lib/pr_manager.sh** - PR lifecycle management
     - `pr_preflight_check()`: validates git remote, gh CLI, authentication
