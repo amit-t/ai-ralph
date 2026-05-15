@@ -585,10 +585,13 @@ run_continuous_worker_pool_tabs() {
 
         local task_id="" line_num=""
         if declare -F "${RALPH_TABS_PARSE_FN:-_tabs_default_parse}" >/dev/null 2>&1; then
+            # Single command-substitution + IFS read instead of two `cut`
+            # subshells — follow-up cleanup to P2 #16 (the parse helper
+            # itself already collapsed to one IFS read; this finishes the
+            # caller's side so each slot assignment costs 1 fork instead of 3).
             local parsed
             parsed=$("${RALPH_TABS_PARSE_FN:-_tabs_default_parse}" "$descriptor")
-            task_id=$(echo "$parsed" | cut -d'|' -f1)
-            line_num=$(echo "$parsed" | cut -d'|' -f2)
+            IFS='|' read -r task_id line_num _rest <<< "$parsed"
         fi
 
         local wid

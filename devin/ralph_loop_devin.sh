@@ -100,7 +100,9 @@ MAX_CONSECUTIVE_TEST_LOOPS=3
 MAX_CONSECUTIVE_DONE_SIGNALS=2
 TEST_PERCENTAGE_THRESHOLD=30
 
-# Quality gate mode configuration (used with --qg flag)
+# Quality gate retry budget for the worktree quality-gates path.
+# Note: the standalone --qg flag is Claude-only (parsed by ralph_loop.sh);
+# devin/codex consume this knob via worktree_run_quality_gates() only.
 MAX_QG_RETRIES="${MAX_QG_RETRIES:-3}"
 
 # .ralphrc.devin configuration file (separate from Claude's .ralphrc)
