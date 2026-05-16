@@ -1,1 +1,9 @@
 .github/workflows/*.lock.yml linguist-generated=true merge=ours
+
+# LF line endings across the repo (WSL2 port — Wave 2 PR 2a).
+* text=auto eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.png binary

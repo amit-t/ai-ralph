@@ -51,5 +51,8 @@ target/
 # Claude Code local settings
 .claude/settings.local.json
 
+# Claude Code session handoffs (local-only, not for sharing)
+/.claude/handoffs/
+
 # Ralph backup directories (created by migration)
 .ralph_backup_*

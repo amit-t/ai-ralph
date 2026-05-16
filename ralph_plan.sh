@@ -245,6 +245,7 @@ update_constitution() {
     local prd_dir=$1
     local prd_files_found=$2
     local beads_count=$3
+    # shellcheck disable=SC2034 # documented function parameter; reserved for richer constitution output
     local json_count=$4
     local tasks_generated=$5
     local timestamp
@@ -580,7 +581,8 @@ run_ai_planning() {
     fi
 
     # Build context
-    local context="Project Root: $(pwd)"
+    local context
+    context="Project Root: $(pwd)"
 
     if [[ -n "$prd_dir" ]]; then
         context+="\nPRD Directory: $prd_dir"
@@ -1182,7 +1184,7 @@ run_workspace_plan() {
     fi
     if [[ -n "$run_token" && "$merge_failed" == false ]]; then
         if [[ "$_worker_failed" == false ]]; then
-            rm -rf "$plan_tmp_root/$run_token" 2>/dev/null || true
+            rm -rf "${plan_tmp_root:?}/${run_token:?}" 2>/dev/null || true
         else
             log "WARN" "[parallel-plan] tmp preserved for debug: $plan_tmp_root/$run_token"
         fi
@@ -1362,6 +1364,7 @@ main() {
     echo -e "${PURPLE}===================${NC}"
     echo ""
 
+    # shellcheck disable=SC2034 # telemetry flag; reserved for richer planning-result reporting
     local ralph_was_enabled=true
     local use_pm_doe=false
 
@@ -1377,6 +1380,7 @@ main() {
 
     # Check if Ralph is already enabled in this directory
     if [[ ! -d "$RALPH_DIR" ]]; then
+        # shellcheck disable=SC2034 # telemetry flag; reserved for richer planning-result reporting (see local declaration above)
         ralph_was_enabled=false
         log "INFO" "Ralph not enabled in current directory (no .ralph/ folder)"
 
@@ -1423,6 +1427,7 @@ main() {
 
         # Run AI planning (prd_dir can be empty for pm-os/doe-os flow)
         if run_ai_planning "${PRD_DIR:-}"; then
+            # shellcheck disable=SC2034 # documentation marker; reserved for richer planning-result reporting
             local prd_label="pm-os/doe-os"
             update_constitution "${PM_OS_DIR:-}+${DOE_OS_DIR:-}" "$source_count files" "0" "0" "AI-generated from PM-OS/DoE-OS"
             echo ""

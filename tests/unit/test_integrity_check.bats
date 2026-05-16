@@ -145,11 +145,15 @@ create_integrity_project() {
 # =============================================================================
 
 @test "ralph_loop.sh has startup integrity check before main loop" {
-    # The integrity check should appear before the 'while true' main loop
-    local integrity_line=$(grep -n 'validate_ralph_integrity' "$RALPH_LOOP" | head -1 | cut -d: -f1)
-    local while_line=$(grep -n 'while true' "$RALPH_LOOP" | head -1 | cut -d: -f1)
+    # The integrity check should appear before the run does any real work.
+    # Pre-cc65616 the anchor was `while true`; the single-run refactor removed
+    # that loop, so the equivalent anchor is now the first execute_claude_code
+    # call site (the actual unit of work). Same intent: fail fast on missing
+    # critical files before invoking the AI.
+    local integrity_line=$(grep -n 'if ! validate_ralph_integrity' "$RALPH_LOOP" | head -1 | cut -d: -f1)
+    local exec_call_line=$(grep -n 'execute_claude_code 1 ' "$RALPH_LOOP" | head -1 | cut -d: -f1)
 
     [[ -n "$integrity_line" ]]
-    [[ -n "$while_line" ]]
-    [[ "$integrity_line" -lt "$while_line" ]]
+    [[ -n "$exec_call_line" ]]
+    [[ "$integrity_line" -lt "$exec_call_line" ]]
 }

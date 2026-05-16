@@ -16,6 +16,9 @@ Best practices for writing PROMPT.md, when to use specs/, and how fix_plan.md ev
 ### [Advanced Features](04-advanced-features.md)
 Parallel agents, workspace mode (multi-repo), planning modes (`ralph-plan`), `--qg` quality-gate fix mode, timeout/live-output knobs, and the Execution Failed summary. Covers everything beyond a single-repo single-agent loop.
 
+### [Versioning and Upgrades](05-versioning-upgrades.md)
+How `ralph.upgrade` works, the one-step rollback, the 12-hour update notification cache, and how peer `requires` constraints interact with `--force`.
+
 ## Example Projects
 
 Check out the [examples/](../../examples/) directory for complete, realistic project configurations:
@@ -38,6 +41,8 @@ Check out the [examples/](../../examples/) directory for complete, realistic pro
 | Run 3 agents in parallel | `rpc.p 3` (Claude), `rpd.p 3` (Devin), `rpx.int.p 3` (Codex) |
 | Fix failing quality gates after a PR | `ralph --qg` / `rpc.qg` |
 | Check what Ralph is doing | `ralph --status` |
+| Upgrade Ralph to the latest stable release | `ralph.upgrade` |
+| Roll back the last upgrade | `ralph.upgrade --rollback` |
 
 ## Need Help?
 

@@ -191,3 +191,21 @@ jobs:
         directory: coverage/all-unit
         fail_ci_if_error: false
         verbose: true
+
+  versioncheck:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+      - name: Lib unit tests
+        run: bash tests/integration/test_versioncheck.sh
+      - name: Upgrade integration tests
+        run: bash tests/integration/test_ralph_upgrade.sh
+  # TODO(windows): add windows-latest when bash port lands.

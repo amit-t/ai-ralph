@@ -315,6 +315,7 @@ extract_prd_tasks() {
         # Extract content after these headings as potential tasks
         while IFS= read -r heading; do
             local section_name
+            # shellcheck disable=SC2034 # informational extraction placeholder; reserved for richer task-section parsing
             section_name=$(echo "$heading" | sed -E 's/^#*[[:space:]]*//')
             # This is informational - actual task extraction would need more context
         done <<< "$headings"
@@ -344,6 +345,7 @@ extract_prd_tasks() {
 #
 convert_prd_with_claude() {
     local prd_file=$1
+    # shellcheck disable=SC2034 # documented parameter (see header); ralph-import path handles real conversion, basic-extraction fallback does not use it
     local output_dir="${2:-.ralph}"
 
     # This would call into ralph_import.sh's convert_prd function
@@ -381,6 +383,7 @@ convert_prd_with_claude() {
 #
 normalize_tasks() {
     local tasks=$1
+    # shellcheck disable=SC2034 # documented parameter (see header); reserved for source-aware normalization
     local source="${2:-unknown}"
 
     if [[ -z "$tasks" ]]; then

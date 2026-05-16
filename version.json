@@ -1,0 +1,8 @@
+{
+  "version": "2.1.0",
+  "released": "2026-05-09",
+  "check_ttl_hours": 12,
+  "channel": "stable",
+  "requires": {},
+  "changelog_url": "https://github.com/Invenco-Cloud-Systems-ICS/ai-ralph/blob/main/CHANGELOG.md"
+}
