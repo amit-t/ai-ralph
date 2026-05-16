@@ -401,3 +401,118 @@ _write_fix_plan() {
     run pick_task_by_id .ralph/fix_plan.md v1.0
     assert_success
 }
+
+# =============================================================================
+# pick_task_by_id: slug-form resolution (continuous-mode worker tabs)
+# =============================================================================
+# pick_next_task_for_pool slugifies the title for lines without a bead_id,
+# capped at 50 chars. Worker tabs are spawned with `--task <slug>` and must
+# be able to round-trip that slug back to the source line.
+
+@test "pick_task_by_id resolves slug from pick_next_task_for_pool" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **M2.** Unify desktop vs mobile branding"
+    # Slug produced by pick_next_task_for_pool's slugifier on that title:
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+    # task_id in the descriptor must be the slug (lowercase), so it round-trips.
+    [[ "$output" == m2-unify-desktop-vs-mobile-branding\|1\|* ]]
+}
+
+@test "pick_task_by_id resolves slug when line is already [~] (re-entry case)" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [~] **M2.** Unify desktop vs mobile branding"
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+}
+
+@test "pick_task_by_id slug match respects 50-char cap" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **L9.** A really long title that runs well past fifty characters and keeps going"
+    # head -c 50 of the slug "l9-a-really-long-title-that-runs-well-past-fifty-characters-and-keeps-going":
+    local slug
+    slug=$(printf '%s' "L9. A really long title that runs well past fifty characters and keeps going" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' \
+        | head -c 50 \
+        | sed 's/-$//')
+    run pick_task_by_id .ralph/fix_plan.md "$slug"
+    assert_success
+}
+
+@test "pick_task_by_id resolves slug whose 50-char truncation ends in a hyphen" {
+    # Regression: when the slugified title is >50 chars and the 50th char of
+    # the slug is a hyphen (word boundary), the producer's emitted slug and
+    # the consumer's re-derived slug must agree. Earlier pipelines applied
+    # `s/-$//` *before* `head -c 50`, so re-feeding the 50-char slug into the
+    # consumer caused asymmetric trimming (consumer stripped the trailing
+    # hyphen, producer's line-derived slug kept it) and the consumer failed
+    # to match. Pipeline must strip trailing hyphen *after* truncation.
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **L1.** Re-evaluate the magnifying-glass icon for Site Details nav"
+
+    # Compute the producer's slug the way pick_next_task_for_pool does:
+    local slug
+    slug=$(printf '%s' "L1. Re-evaluate the magnifying-glass icon for Site Details nav" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' \
+        | head -c 50 \
+        | sed 's/-$//')
+
+    # The raw 50-char head lands on a hyphen for this title; the
+    # post-truncation strip must trim it, leaving a 49-char slug that
+    # does NOT end in a hyphen.
+    [[ "${#slug}" -eq 49 ]] || { echo "Expected slug length 49, got ${#slug}: '$slug'"; false; }
+    [[ "${slug: -1}" != "-" ]] || { echo "Slug must not end in hyphen: '$slug'"; false; }
+
+    # Round-trip: feeding the producer's slug back into pick_task_by_id
+    # must resolve to the same line, and the descriptor's task_id must be
+    # the clean (post-truncate-strip) slug so producer/consumer agree.
+    run pick_task_by_id .ralph/fix_plan.md "$slug"
+    assert_success
+    [[ "$output" == "$slug|1|"* ]]
+}
+
+@test "pick_task_by_id resolves the legacy 50-char slug with trailing hyphen" {
+    # Backward-compat: a worker tab spawned by an older orchestrator build
+    # passes the 50-char slug that still has its trailing hyphen. The
+    # patched consumer must resolve it to the canonical 49-char slug.
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **L1.** Re-evaluate the magnifying-glass icon for Site Details nav"
+    local legacy_slug="l1-re-evaluate-the-magnifying-glass-icon-for-site-"
+    run pick_task_by_id .ralph/fix_plan.md "$legacy_slug"
+    assert_success
+    # Consumer must emit the clean (no trailing hyphen) form of the slug.
+    [[ "$output" == "l1-re-evaluate-the-magnifying-glass-icon-for-site|1|"* ]]
+}
+
+@test "pick_task_by_id slug match does not match unrelated lines" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **M1.** Tone down login decoration" \
+        "- [ ] **M2.** Unify desktop vs mobile branding"
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+    # Must pick line 2 (M2), not line 1 (M1).
+    [[ "$output" == *"|2|"* ]]
+}
+
+@test "pick_task_by_id slug match falls behind bold-id match in precedence" {
+    # If both a bold ID and a slug could match different lines, the bold-id
+    # match (first hit when scanning) should win. Here the slug `e1-first`
+    # would match line 1, and so would `E1` via bold-id — both pick line 1.
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **E1.** First task" \
+        "- [ ] **E2.** Second task"
+    run pick_task_by_id .ralph/fix_plan.md E1
+    assert_success
+    [[ "$output" == E1\|1\|* ]]
+}
+
+@test "pick_task_by_id slug match marks line in-progress on hit" {
+    _write_fix_plan .ralph/fix_plan.md \
+        "- [ ] **M2.** Unify desktop vs mobile branding"
+    run pick_task_by_id .ralph/fix_plan.md m2-unify-desktop-vs-mobile-branding
+    assert_success
+    run grep -F -e '- [~] **M2.**' .ralph/fix_plan.md
+    assert_success
+}

@@ -1036,6 +1036,120 @@ workspace_repo_cleanup() {
     return 0
 }
 
+# pick_workspace_task_for_pool — Skip-list-aware variant of pick_workspace_task
+# for use by the continuous worker pool (see lib/worker_pool.sh).
+#
+# Skip-list semantics (must match _continuous_skip_key in lib/worker_pool.sh):
+#   The worker pool skip-lists a workspace task by inserting
+#   `repo|task_id|line` — the three identifying fields of the descriptor
+#   (the description is dropped). So the picker must compute the same
+#   `repo|task_id|line` key from its candidate BEFORE marking `[~]`, and
+#   skip if it matches.
+#
+#   Earlier (buggy) versions of this function:
+#     1. Checked `skip_list` against the bare line number — silent no-op
+#        (orchestrator inserted descriptor prefixes).
+#     2. Then briefly checked `${candidate_desc%% *}` (first-space-prefix
+#        of `repo|task_id|line|description`) — silently mis-matched when
+#        the description's first word changed between picks (P1 #8).
+#   Do not revert to either form without realigning worker_pool.sh's
+#   insertion logic too — _continuous_skip_key is the canonical source.
+#
+# Args:
+#   $1 - fix_plan_file: Path to workspace fix_plan.md
+#   $2 - skip_list:     Newline-separated list of `repo|task_id|line` keys.
+#   $3 - allowed_repos (optional): newline-separated allowlist of repo
+#        section names (same semantics as pick_workspace_task's $2). When
+#        non-empty, cross-repo and any section not in the list are skipped.
+# Output (stdout): repo_name|task_id|line_num|task_description (same as pick_workspace_task)
+# Returns: 0 on success, 1 if no eligible tasks remain.
+pick_workspace_task_for_pool() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local skip_list="${2:-}"
+    local allowed_repos="${3:-}"
+
+    if [[ ! -f "$fix_plan_file" ]]; then
+        return 1
+    fi
+
+    # Acquire the same lock used by pick_workspace_task so concurrent picks
+    # remain atomic.
+    local lock_dir
+    lock_dir="$(dirname "$fix_plan_file")/.workspace_task_lock"
+    if command -v _acquire_task_lock &>/dev/null; then
+        if ! _acquire_task_lock "$lock_dir"; then
+            echo "WARN: Could not acquire workspace task lock after timeout" >&2
+            return 1
+        fi
+    else
+        mkdir "$lock_dir" 2>/dev/null || true
+    fi
+
+    local current_repo=""
+    local line_num=0
+    local found=1
+
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+
+        if echo "$line" | grep -qE '^#{2,3} [A-Za-z0-9]'; then
+            current_repo=$(echo "$line" | sed 's/^#\{2,3\} *//' | sed 's/[[:space:]]*$//')
+            continue
+        fi
+
+        [[ -z "$current_repo" ]] && continue
+        [[ "$current_repo" == "cross-repo" ]] && continue
+
+        # Filter: when allowed_repos is non-empty, skip any section not in
+        # the list. Matches pick_workspace_task's V1 behavior so --repos /
+        # --exclude are honored in continuous mode too.
+        if [[ -n "$allowed_repos" ]]; then
+            if ! echo "$allowed_repos" | grep -qxF "$current_repo"; then
+                continue
+            fi
+        fi
+
+        if echo "$line" | grep -qE '^- \[ \] '; then
+            local task_desc
+            task_desc=$(echo "$line" | sed 's/^- \[ \] //')
+
+            local bead_id=""
+            bead_id=$(echo "$line" | sed -n 's/.*\[ \] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
+
+            local task_id=""
+            if [[ -n "$bead_id" ]]; then
+                task_id="$bead_id"
+            else
+                task_id=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+            fi
+
+            # Skip-list check (P1 #8): compute the same `repo|task_id|line`
+            # key the worker pool's _continuous_skip_key emits, so skip_list
+            # entries match 1:1 regardless of how the task description looks.
+            local candidate_desc="${current_repo}|${task_id}|${line_num}|${task_desc}"
+            local candidate_token="${current_repo}|${task_id}|${line_num}"
+            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$candidate_token"; then
+                continue
+            fi
+
+            local tmp_file="${fix_plan_file}.tmp.$$"
+            awk -v ln="$line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
+                && mv "$tmp_file" "$fix_plan_file"
+
+            echo "$candidate_desc"
+            found=0
+            break
+        fi
+    done < "$fix_plan_file"
+
+    if command -v _release_task_lock &>/dev/null; then
+        _release_task_lock "$lock_dir"
+    else
+        rmdir "$lock_dir" 2>/dev/null || true
+    fi
+    return $found
+}
+
 # Export all functions for use in subshells
 export -f _split_csv_trimmed
 export -f resolve_workspace_filter_spec
@@ -1044,6 +1158,7 @@ export -f discover_workspace_repos
 export -f discover_workspace_repos_filtered
 export -f parse_workspace_fix_plan
 export -f pick_workspace_task
+export -f pick_workspace_task_for_pool
 export -f get_repo_default_branch
 export -f validate_workspace
 export -f build_workspace_repo_context
