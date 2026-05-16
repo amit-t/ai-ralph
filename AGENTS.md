@@ -137,6 +137,29 @@ The system uses a modular architecture with reusable components in the `lib/` di
      subshells so the AI writes to the isolated branch, not the main branch.
      This parity was added for Claude in `ralph_loop.sh` across three paths:
      live mode, modern background mode, and legacy background mode.
+   - **Python + JS dependency install** (`_worktree_install_deps`): walks both
+     `package.json` (npm/pnpm/yarn/bun) AND Python projects (`uv sync` for
+     `uv.lock` / `[tool.uv]` / `[dependency-groups]`; `poetry install`;
+     `pipenv install --deploy`; `pip install -r requirements*.txt`;
+     `pip install -e '.[dev]'` fallback). The split helpers
+     `_resolve_js_install` / `_resolve_python_install` return the
+     `(tool, command)` pair without side effects so the detection logic is
+     unit-testable. `_install_deps_one` then resolves + executes via the
+     shared `_run_install_with_timeout` wrapper.
+   - **uv/poetry-aware gate detection** (`_detect_gates_for_dir` /
+     `_detect_quality_gates`): when a Python project uses uv or poetry,
+     the auto-detected `pytest` / `ruff` gates are emitted as `uv run pytest`
+     / `poetry run pytest` so the commands actually find their deps. Bare
+     `pytest` was previously emitted unconditionally, which fails with exit
+     127 ("command not found") whenever pytest only lives inside the
+     project's venv.
+   - **Monorepo subdir support** (`WORKTREE_GATE_SUBDIRS`): space-separated
+     list of directories under the worktree to also scan for gates (e.g.
+     `WORKTREE_GATE_SUBDIRS="frontend backend"`). For each present subdir
+     the helpers detect deps + gates as if it were a sibling project, and
+     gates are emitted wrapped in `(cd <subdir> && <gate>)` so each is
+     self-contained. Disabled by default — root-only behavior is preserved
+     when the env var is empty.
 
 10. **lib/pr_manager.sh** - PR lifecycle management
     - `pr_preflight_check()`: validates git remote, gh CLI, authentication
@@ -178,6 +201,7 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - `discover_workspace_repos()`: finds git repos (directories with `.git/`) in a workspace, sorted alphabetically, skips hidden dirs
     - `parse_workspace_fix_plan()`: extracts pending tasks grouped by repo from `## repo-name` sections in workspace fix_plan.md
     - `pick_workspace_task()`: picks first unclaimed task, atomically marks `[~]`, returns `repo_name|task_id|line_num|description`
+    - `pick_workspace_task_for_pool()`: skip-list-aware variant of `pick_workspace_task()` used by the continuous worker pool
     - `get_repo_default_branch()`: detects default branch of a git repository via `git symbolic-ref`
     - `validate_workspace()`: validates workspace structure (`.ralph/fix_plan.md` exists, repos found, warns about missing repos)
     - `build_workspace_repo_context()`: builds AI prompt context with repo name, task, and working directory constraint
@@ -194,6 +218,59 @@ The system uses a modular architecture with reusable components in the `lib/` di
     - `workspace_repo_cleanup()`: cleans up worktree for a workspace repo — preserves branch for PR, syncs state back
     - Workspace fix_plan.md format uses `## repo-name` section headers with standard checkbox tasks underneath
     - Supports `cross-repo` section for tasks spanning multiple repositories
+
+15. **lib/worker_pool.sh** — Continuous parallel execution worker pool (proposal: `docs/proposals/continuous-parallel-execution.md`)
+    - `run_continuous_worker_pool()`: bounded continuous orchestrator. Keeps ≤ N workers running, spawns a replacement as soon as one finishes, until M total attempts are spent or the picker returns no more tasks. Args: `N M K respawn_delay picker_fn executor_fn on_complete_fn`.
+    - `_wait_for_any()`: portable wait-for-any-PID via polling (works on macOS bash 3.2; bash 4.3+'s `wait -n` is not required). Sets `_WAIT_FOR_ANY_SLOT` and `_WAIT_FOR_ANY_RC` globals — must be called directly (not via `$()`) so `wait` runs in the orchestrator shell where worker PIDs are children.
+    - `_atomic_inc_call_count()`: race-free `CALL_COUNT_FILE` increment under an `mkdir`-based lock. Replaces the inline `cat`/`echo` pattern from the V1 batch path. Failsafe rmdir on lock-stuck (after ~10s) resets the wait counter so two callers past the timeout cannot both rmdir each other's freshly-acquired locks (P1 #6).
+    - `init_continuous_state()` / `record_inflight()` / `clear_inflight()` / `cleanup_continuous_state()`: lifecycle helpers for `.ralph/.continuous_state` (a flat TSV format — no jq dependency). `record_inflight()` and `clear_inflight()` run under `_with_continuous_state_lock` (mkdir-based) so concurrent workers in the same orchestrator cannot interleave appends with read-modify-writes (P1 #7). The 4th field (formerly `worker_pid`) is now `worker_key` — a unique per-worker handle: PID for single-pane, wid string for tab mode (P1 #5).
+    - `_continuous_skip_key(descriptor)`: canonical skip-list key generator used by both orchestrators (`worker_pool.sh` + `worker_pool_tabs.sh`) AND both pickers (`pick_workspace_task_for_pool`, `pick_next_task_for_pool`). Emits `repo|task_id|line` for workspace descriptors, `task_id` for single-repo descriptors, and `${descriptor%% *}` for pipe-less test mocks. Replaces the brittle `${descriptor%% *}` shared by both sides that broke whenever the task description changed between picks or two repos shared a task slug (P1 #8).
+    - `_continuous_emit_summary()`: prints the run summary block AND appends to `.ralph/logs/continuous-summary.log`.
+    - SIGINT/SIGTERM trap: the orchestrator catches both signals identically (drain only — finish in-flight workers, no new spawns). Note: bash backgrounded `(...) &` inherit SIGINT as ignored, so test harnesses must use SIGTERM to exercise the drain path.
+
+16. **lib/continuous_recovery.sh** — Stale `[~]` marker sweeper (proposal §16)
+    - `sweep_stale_continuous_state()`: runs at the top of every ralph entry point. Reads `.ralph/.continuous_state`, checks the orchestrator PID with `kill -0`, and if the PID is dead reverts each in-flight `[~]` line back to `[ ]` then deletes the state file.
+    - Silent no-op when the state file is absent (the common case).
+    - Falls back to `.ralph/fix_plan.md` when `WORKSPACE_FIX_PLAN` is unset; handles malformed PIDs / missing fix_plan / jq absence gracefully.
+
+17. **lib/worker_pool_tabs.sh** — Tab-based continuous parallel execution (proposal: `docs/proposals/continuous-with-tabs.md`)
+    - `run_continuous_worker_pool_tabs()`: tab-spawning variant of `run_continuous_worker_pool`. Same calling convention; each worker runs in its own terminal tab (iTerm2 / VS Code / Windsurf / Cursor) via `spawn_parallel_agents` with count=1. Workers communicate completion via atomic JSON files in `.ralph/.continuous_completions/`.
+    - **Completion protocol**: `write_completion_file()` (worker → atomic `tmp`+`mv` JSON write), `read_completion_files()` / `delete_completion_file()` / `parse_completion_file()` (orchestrator side). JSON schema matches proposal §Completion protocol exactly. Parsing uses portable sed (gawk's 3-arg `match()` is not available on macOS BSD awk).
+    - **Heartbeat protocol**: `start_heartbeat_writer()` / `stop_heartbeat_writer()` (background ticker), `write_heartbeat()` / `heartbeat_age_seconds()` / `is_heartbeat_stale()`. Workers bump their heartbeat every `WORKER_POOL_TABS_HEARTBEAT_INTERVAL` seconds (default 10s); the orchestrator declares a worker dead when its heartbeat age exceeds `WORKER_POOL_TABS_HEARTBEAT_STALE_SECONDS` (default 60s) and synthesizes a rc=124 completion so the regular path handles it.
+    - **Worker lifecycle**: `worker_init_completion_protocol()` installs an EXIT/INT/TERM trap that writes the completion JSON with the engine's `$?` as rc and cleans up the heartbeat. Called by each engine when `--continuous-worker-id WID` is passed. First heartbeat is written synchronously to avoid orchestrator false-positives during the start grace window.
+    - **GC**: `gc_stale_continuous_artifacts()` runs at startup (next to `sweep_stale_continuous_state`) and wipes orphaned completion / heartbeat files from previously crashed orchestrators. No-op when a live orchestrator owns the state file.
+    - **Tab vs. single-pane decision**: `tabs_supported_by_terminal()` returns 0 under iTerm2 / VS Code-family terminals, 1 otherwise. Each engine's `run_continuous_*` function inspects `NO_TABS` (CLI `--no-tabs`) and `RALPH_DISABLE_TABS` (env) before falling through to `tabs_supported_by_terminal`. Tabs is the default; single-pane is the automatic fallback.
+    - **Engine flags added** (all three engines): `--no-tabs`, `--continuous-worker-id WID`, `--workspace-task DESCRIPTOR`. The last two are emitted by the tabs orchestrator when spawning each tab.
+
+### Continuous Parallel Execution
+
+`--parallel N M` engages a continuous worker pool: keep ≤ N workers running until M total attempts (success or failure) are spent, then drain. Strictly opt-in — `--parallel N` (one positional arg) retains its V1 batch behavior byte-identically.
+
+CLI shape (all three engines: claude / devin / codex):
+
+```
+--parallel N              batch mode (V1 — spawn N independent agents)
+--parallel N M            continuous mode (single coordinator, N workers, M total attempts)
+--max-task-attempts K     per-task retry threshold (default 1)
+--respawn-delay SEC       cooldown between worker replacements (default 0)
+```
+
+Env overrides for tuning knobs: `RALPH_MAX_TASK_ATTEMPTS`, `RALPH_RESPAWN_DELAY`. CLI flag wins over env. There is no `RALPH_MAX_TASKS` env — engagement of continuous mode is always explicit at the CLI (pass M as the second positional arg to `--parallel`).
+
+Aliases (canonical form for both modes — the alias detects M):
+
+```
+rpc.p N         rpd.p N         rpx.p N            # batch
+rpc.p N M       rpd.p N M       rpx.p N M          # continuous
+rpc.ws.p N      rpd.ws.p N      rpx.ws.p N         # batch workspace
+rpc.ws.p N M    rpd.ws.p N M    rpx.ws.p N M       # continuous workspace
+```
+
+Continuous mode is mutually exclusive with `--task`, `--qg` (Claude only), and `--parallel-bg`. The validator emits human-readable errors when these are combined.
+
+Stop reasons reported in the summary: `target reached (M)`, `queue empty`, `user interrupt`, `circuit breaker open`, `fatal error`. Hard-kill (SIGKILL) leaves stale `[~]` markers; the next ralph startup auto-recovers them via `sweep_stale_continuous_state`.
+
+Skip-list (per-run, in-memory): when a task fails K times within a run it is added to the orchestrator's skip-list and never re-picked on that run. The pickers (`pick_workspace_task_for_pool`, `pick_next_task_for_pool`) accept the skip-list as their second argument and silently skip over listed line numbers.
 
 ### Quality Gate Behaviour
 
@@ -621,7 +698,7 @@ Ralph installs to:
 - **Commands**: `~/.local/bin/` (ralph, ralph-monitor, ralph-setup, ralph-import, ralph-migrate, ralph-enable, ralph-enable-ci)
 - **Templates**: `~/.ralph/templates/`
 - **Scripts**: `~/.ralph/` (ralph_loop.sh, ralph_monitor.sh, setup.sh, ralph_import.sh, migrate_to_ralph_folder.sh, ralph_enable.sh, ralph_enable_ci.sh)
-- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh, workspace_manager.sh)
+- **Libraries**: `~/.ralph/lib/` (circuit_breaker.sh, response_analyzer.sh, date_utils.sh, timeout_utils.sh, enable_core.sh, wizard_utils.sh, task_sources.sh, file_protection.sh, workspace_manager.sh, worker_pool.sh, worker_pool_tabs.sh, continuous_recovery.sh)
 
 After installation, the following global commands are available:
 - `ralph` - Start the autonomous development loop

@@ -52,7 +52,13 @@ alias rpd.wt.int='ralph-devin --no-devin-auto-exit --live --monitor'
 
 # Parallel non-interactive (spawns N agents: iTerm2 tabs or IDE terminal tabs)
 # Usage: rpd.p 3  -> spawns 3 parallel devin agents (auto-exit)
-rpd.p() { ralph-devin --parallel "${1:?Usage: rpd.p <number>}"; }
+# rpd.p N        → batch mode (spawn N parallel agents)
+# rpd.p N M      → continuous mode (keep N workers saturated until M attempts;
+#                                    per-worker terminal tabs when supported)
+rpd.p() { ralph-devin --parallel "${1:?Usage: rpd.p <N> [M]}" ${2:+"$2"}; }
+
+# Continuous mode forcing the single-pane orchestrator (no tabs)
+rpd.p.notabs() { ralph-devin --parallel "${1:?Usage: rpd.p.notabs <N> <M>}" "${2:?Usage: rpd.p.notabs <N> <M>}" --no-tabs; }
 
 # Parallel interactive (spawns N agents in TUI mode)
 # Usage: rpd.int.p 3  -> spawns 3 parallel devin agents in interactive mode
@@ -112,4 +118,9 @@ rpd.task.int() { ralph-devin --no-devin-auto-exit --task "${1:?Usage: rpd.task.i
 # Workspace mode (multi-repo orchestration)
 alias rpd.ws='ralph-devin --workspace'
 alias rpd.ws.int='ralph-devin --workspace --live --monitor'
-rpd.ws.p() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.p <N>}"; }
+# rpd.ws.p N      → batch workspace (1 batch of N tasks)
+# rpd.ws.p N M    → continuous workspace (N concurrent until M attempts; per-worker tabs by default)
+rpd.ws.p() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.p <N> [M]}" ${2:+"$2"}; }
+
+# Workspace continuous forcing single-pane (no tabs)
+rpd.ws.p.notabs() { ralph-devin --workspace --parallel "${1:?Usage: rpd.ws.p.notabs <N> <M>}" "${2:?Usage: rpd.ws.p.notabs <N> <M>}" --no-tabs; }
