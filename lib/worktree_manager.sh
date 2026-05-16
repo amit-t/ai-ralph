@@ -24,6 +24,7 @@ WORKTREE_BRANCH_PREFIX="${WORKTREE_BRANCH_PREFIX:-ralph-claude}"
 WORKTREE_AUTO_COMMIT="${WORKTREE_AUTO_COMMIT:-true}"
 WORKTREE_GATE_TIMEOUT="${WORKTREE_GATE_TIMEOUT:-600}"          # per-gate seconds
 WORKTREE_INSTALL_TIMEOUT="${WORKTREE_INSTALL_TIMEOUT:-600}"    # dep-install seconds
+WORKTREE_GATE_SUBDIRS="${WORKTREE_GATE_SUBDIRS:-}"             # space-separated subdirs (e.g. "frontend backend") to also scan for gates
 
 # Internal state
 _WT_BASE_DIR=""
@@ -200,48 +201,127 @@ worktree_is_active() {
 # =============================================================================
 
 # Install dependencies in the worktree before running quality gates.
-# Worktrees don't inherit node_modules from the main project — tools like
-# biome, eslint, jest, etc. live inside node_modules/.bin and will fail
-# if node_modules is missing.
+# Worktrees don't inherit node_modules / .venv from the main project — tools
+# like biome, eslint, jest (JS) and pytest, ruff (Python) live inside the
+# project's dependency tree and will fail with "command not found" otherwise.
 #
-# Detects the package manager from lock files and runs the appropriate install.
+# Detects the package manager from lock files and runs the appropriate install
+# for both JS (npm/pnpm/yarn/bun) and Python (uv/poetry/pipenv/pip).
+#
+# Also walks into directories named in WORKTREE_GATE_SUBDIRS (space-separated)
+# so monorepos with e.g. a `frontend/package.json` get their deps installed too.
+#
 # Args:
 #   $1 - workdir: Path to the worktree directory
 # Returns: 0 on success or no-op, 1 on install failure (non-fatal)
 _worktree_install_deps() {
     local workdir="${1:-.}"
 
-    if [[ ! -f "$workdir/package.json" ]]; then
-        return 0
+    _install_deps_one "$workdir" "js"
+    _install_deps_one "$workdir" "python"
+
+    if [[ -n "${WORKTREE_GATE_SUBDIRS:-}" ]]; then
+        local subdir
+        for subdir in $WORKTREE_GATE_SUBDIRS; do
+            if [[ -d "$workdir/$subdir" ]]; then
+                _install_deps_one "$workdir/$subdir" "js"
+                _install_deps_one "$workdir/$subdir" "python"
+            fi
+        done
     fi
+
+    return 0
+}
+
+# Resolve the JS install command (no execution).
+# Sets globals: _DEPS_INSTALL_TOOL, _DEPS_INSTALL_CMD (empty if not applicable).
+_resolve_js_install() {
+    local workdir="$1"
+    _DEPS_INSTALL_TOOL=""
+    _DEPS_INSTALL_CMD=""
+
+    [[ ! -f "$workdir/package.json" ]] && return 0
 
     # Skip if node_modules already exists and looks populated
     if [[ -d "$workdir/node_modules" ]] && [[ -n "$(ls -A "$workdir/node_modules" 2>/dev/null)" ]]; then
         return 0
     fi
 
-    local pkg_manager="npm"
-    local install_cmd="npm install"
-
     if [[ -f "$workdir/pnpm-lock.yaml" ]]; then
-        pkg_manager="pnpm"
-        install_cmd="pnpm install --frozen-lockfile"
+        _DEPS_INSTALL_TOOL="pnpm"
+        _DEPS_INSTALL_CMD="pnpm install --frozen-lockfile"
     elif [[ -f "$workdir/bun.lockb" ]] || [[ -f "$workdir/bun.lock" ]]; then
-        pkg_manager="bun"
-        install_cmd="bun install --frozen-lockfile"
+        _DEPS_INSTALL_TOOL="bun"
+        _DEPS_INSTALL_CMD="bun install --frozen-lockfile"
     elif [[ -f "$workdir/yarn.lock" ]]; then
-        pkg_manager="yarn"
-        install_cmd="yarn install --frozen-lockfile"
+        _DEPS_INSTALL_TOOL="yarn"
+        _DEPS_INSTALL_CMD="yarn install --frozen-lockfile"
     else
-        install_cmd="npm ci"
+        _DEPS_INSTALL_TOOL="npm"
+        _DEPS_INSTALL_CMD="npm ci"
+    fi
+}
+
+# Resolve the Python install command (no execution).
+# Sets globals: _DEPS_INSTALL_TOOL, _DEPS_INSTALL_CMD (empty if not applicable).
+# Detection priority: uv > poetry > pipenv > requirements-dev.txt > requirements*.txt > plain pip install -e
+_resolve_python_install() {
+    local workdir="$1"
+    _DEPS_INSTALL_TOOL=""
+    _DEPS_INSTALL_CMD=""
+
+    local has_python=0
+    if [[ -f "$workdir/pyproject.toml" ]] || \
+       [[ -f "$workdir/setup.py" ]] || \
+       [[ -f "$workdir/Pipfile" ]]; then
+        has_python=1
+    fi
+    if compgen -G "$workdir/requirements*.txt" >/dev/null 2>&1; then
+        has_python=1
+    fi
+    [[ $has_python -eq 0 ]] && return 0
+
+    # Skip if a venv already exists and seems populated
+    if [[ -d "$workdir/.venv" ]] && [[ -n "$(ls -A "$workdir/.venv" 2>/dev/null)" ]]; then
+        return 0
     fi
 
-    if ! command -v "$pkg_manager" &>/dev/null; then
-        echo "DEPS_INSTALL: $pkg_manager not found — skipping dependency install" >&2
-        return 1
+    if [[ -f "$workdir/uv.lock" ]] || \
+       { [[ -f "$workdir/pyproject.toml" ]] && grep -qE '^\[tool\.uv\]|^\[dependency-groups\]' "$workdir/pyproject.toml" 2>/dev/null; }; then
+        _DEPS_INSTALL_TOOL="uv"
+        _DEPS_INSTALL_CMD="uv sync"
+    elif [[ -f "$workdir/poetry.lock" ]] || \
+         { [[ -f "$workdir/pyproject.toml" ]] && grep -qE '^\[tool\.poetry\]' "$workdir/pyproject.toml" 2>/dev/null; }; then
+        _DEPS_INSTALL_TOOL="poetry"
+        _DEPS_INSTALL_CMD="poetry install --no-interaction"
+    elif [[ -f "$workdir/Pipfile.lock" ]]; then
+        _DEPS_INSTALL_TOOL="pipenv"
+        _DEPS_INSTALL_CMD="pipenv install --deploy"
+    elif [[ -f "$workdir/requirements-dev.txt" ]]; then
+        _DEPS_INSTALL_TOOL="pip"
+        _DEPS_INSTALL_CMD="pip install -r requirements-dev.txt"
+    elif compgen -G "$workdir/requirements*.txt" >/dev/null 2>&1; then
+        local req_file
+        req_file=$(ls "$workdir"/requirements*.txt 2>/dev/null | head -1)
+        _DEPS_INSTALL_TOOL="pip"
+        _DEPS_INSTALL_CMD="pip install -r $(basename "$req_file")"
+    elif [[ -f "$workdir/pyproject.toml" ]]; then
+        _DEPS_INSTALL_TOOL="pip"
+        _DEPS_INSTALL_CMD="pip install -e '.[dev]' 2>/dev/null || pip install -e ."
     fi
+}
 
-    echo "DEPS_INSTALL: Installing dependencies ($install_cmd, timeout ${WORKTREE_INSTALL_TIMEOUT}s)..." >&2
+# Run an install command with the standard timeout / logging wrapper.
+# Args:
+#   $1 - workdir
+#   $2 - install command (string, run via bash -c)
+#   $3 - label (optional, default "Dependencies")
+_run_install_with_timeout() {
+    local workdir="$1"
+    local install_cmd="$2"
+    local label="${3:-Dependencies}"
+
+    echo "DEPS_INSTALL: Installing $label ($install_cmd, timeout ${WORKTREE_INSTALL_TIMEOUT}s)..." >&2
     local install_output install_exit
     local _to_bin=""
     if command -v timeout >/dev/null 2>&1; then
@@ -261,7 +341,7 @@ _worktree_install_deps() {
     install_exit=${install_exit:-0}
 
     if [[ $install_exit -eq 0 ]]; then
-        echo "DEPS_INSTALL: Dependencies installed successfully" >&2
+        echo "DEPS_INSTALL: $label installed successfully" >&2
     elif [[ $install_exit -eq 124 || $install_exit -eq 137 ]]; then
         echo "DEPS_INSTALL: TIMEOUT after ${WORKTREE_INSTALL_TIMEOUT}s — gates may still fail" >&2
         echo "DEPS_INSTALL: Output: $(echo "$install_output" | tail -3)" >&2
@@ -273,15 +353,48 @@ _worktree_install_deps() {
     return 0
 }
 
+# Install dependencies for a single directory + language.
+# Args:
+#   $1 - workdir
+#   $2 - kind: "js" or "python"
+_install_deps_one() {
+    local workdir="$1"
+    local kind="$2"
+
+    if [[ "$kind" == "js" ]]; then
+        _resolve_js_install "$workdir"
+    else
+        _resolve_python_install "$workdir"
+    fi
+
+    [[ -z "$_DEPS_INSTALL_CMD" ]] && return 0
+
+    if ! command -v "$_DEPS_INSTALL_TOOL" &>/dev/null; then
+        echo "DEPS_INSTALL: $_DEPS_INSTALL_TOOL not found — skipping $kind dependency install in $workdir" >&2
+        return 1
+    fi
+
+    local label
+    case "$kind" in
+        js)     label="JS deps ($_DEPS_INSTALL_TOOL)" ;;
+        python) label="Python deps ($_DEPS_INSTALL_TOOL)" ;;
+        *)      label="Dependencies" ;;
+    esac
+
+    _run_install_with_timeout "$workdir" "$_DEPS_INSTALL_CMD" "$label"
+}
+
 # =============================================================================
 # QUALITY GATES
 # =============================================================================
 
-# Auto-detect quality gate commands from project files
+# Detect quality gate commands for a SINGLE directory (no subdir recursion).
+# Python gates are prefixed with `uv run ` / `poetry run ` when the project
+# uses that tool, so the commands actually find their deps.
 # Args:
 #   $1 - workdir: Directory to scan for project config
 # Outputs: Semicolon-separated list of commands on stdout
-_detect_quality_gates() {
+_detect_gates_for_dir() {
     local workdir="${1:-.}"
     local gates=()
 
@@ -311,10 +424,21 @@ _detect_quality_gates() {
 
     # Python
     if [[ -f "$workdir/pyproject.toml" ]] || [[ -f "$workdir/pytest.ini" ]] || [[ -f "$workdir/setup.py" ]]; then
-        if [[ -f "$workdir/pyproject.toml" ]] && grep -q "ruff" "$workdir/pyproject.toml" 2>/dev/null; then
-            gates+=("ruff check .")
+        # Choose the runner prefix so `pytest` / `ruff` actually find the
+        # project's deps. Bare `pytest` only works when pytest is on PATH.
+        local py_prefix=""
+        if [[ -f "$workdir/uv.lock" ]] || \
+           { [[ -f "$workdir/pyproject.toml" ]] && grep -qE '^\[tool\.uv\]|^\[dependency-groups\]' "$workdir/pyproject.toml" 2>/dev/null; }; then
+            py_prefix="uv run "
+        elif [[ -f "$workdir/poetry.lock" ]] || \
+             { [[ -f "$workdir/pyproject.toml" ]] && grep -qE '^\[tool\.poetry\]' "$workdir/pyproject.toml" 2>/dev/null; }; then
+            py_prefix="poetry run "
         fi
-        gates+=("pytest")
+
+        if [[ -f "$workdir/pyproject.toml" ]] && grep -q "ruff" "$workdir/pyproject.toml" 2>/dev/null; then
+            gates+=("${py_prefix}ruff check .")
+        fi
+        gates+=("${py_prefix}pytest")
     fi
 
     # Go
@@ -337,6 +461,51 @@ _detect_quality_gates() {
         if grep -q "^test:" "$workdir/Makefile" 2>/dev/null; then
             gates+=("make test")
         fi
+    fi
+
+    local IFS=";"
+    echo "${gates[*]}"
+}
+
+# Auto-detect quality gate commands from project files. Walks into each path
+# listed in WORKTREE_GATE_SUBDIRS (space-separated) so monorepos with nested
+# package.json / pyproject.toml get those gates too — emitted as
+# `(cd <subdir> && <gate>)` so each gate is self-contained.
+# Args:
+#   $1 - workdir: Directory to scan for project config
+# Outputs: Semicolon-separated list of commands on stdout
+_detect_quality_gates() {
+    local workdir="${1:-.}"
+    local gates=()
+
+    local primary
+    primary=$(_detect_gates_for_dir "$workdir")
+    if [[ -n "$primary" ]]; then
+        local OLD_IFS="$IFS"
+        IFS=";"
+        # shellcheck disable=SC2206
+        gates=( $primary )
+        IFS="$OLD_IFS"
+    fi
+
+    if [[ -n "${WORKTREE_GATE_SUBDIRS:-}" ]]; then
+        local subdir
+        for subdir in $WORKTREE_GATE_SUBDIRS; do
+            if [[ -d "$workdir/$subdir" ]]; then
+                local sub
+                sub=$(_detect_gates_for_dir "$workdir/$subdir")
+                if [[ -n "$sub" ]]; then
+                    local OLD_IFS="$IFS"
+                    IFS=";"
+                    local g
+                    # shellcheck disable=SC2206
+                    for g in $sub; do
+                        [[ -n "$g" ]] && gates+=("(cd $subdir && $g)")
+                    done
+                    IFS="$OLD_IFS"
+                fi
+            fi
+        done
     fi
 
     local IFS=";"

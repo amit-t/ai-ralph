@@ -11,6 +11,9 @@
 .ralph/.circuit_breaker_history
 .ralph/.json_parse_result
 .ralph/.last_output_length
+.ralph/.continuous_state
+.ralph/.continuous_completions/
+.ralph/.continuous_heartbeats/
 
 # Ralph logs and generated docs
 .ralph/logs/*

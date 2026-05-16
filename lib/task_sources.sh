@@ -781,7 +781,7 @@ pick_next_task() {
             if [[ -n "$bead_id" ]]; then
                 task_id="$bead_id"
             else
-                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
             fi
 
             # Atomically mark in-progress WHILE holding the lock
@@ -919,7 +919,7 @@ pick_task_by_number() {
     if [[ -n "$bead_id" ]]; then
         task_id="$bead_id"
     else
-        task_id=$(echo "$target_line" | sed 's/.*\[[ ~]\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' | head -c 50)
+        task_id=$(echo "$target_line" | sed 's/.*\[[ ~]\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
     fi
 
     # Mark in-progress if currently unclaimed
@@ -983,10 +983,22 @@ pick_task_by_id() {
     id_re=$(printf '%s' "$task_id_query" | sed -e 's/[.\\*^$()+?{|/[]/\\&/g')
     local plain_pattern="(^|[[:space:]([])${id_re}[.:)]?([[:space:]]|$)"
 
+    # Slug form: the continuous worker-pool orchestrator
+    # (pick_next_task_for_pool) emits a task_id derived by slugifying the
+    # full task title, capped at 50 chars, for lines without a bead_id.
+    # Worker tabs then spawn with `--task <slug>` and re-enter this
+    # function. Mirror that slugifier here so the consumer can resolve a
+    # slug back to its source line. The producer always slugs from a
+    # `[ ]` line; the consumer's line may be `[~]` by now, so strip any
+    # checkbox state with `\[.\]`.
+    local slug_query
+    slug_query=$(printf '%s' "$lower_id" | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
+
     # Scan fix_plan.md for a task line containing the ID
     local line_num=0
     local target_line=""
     local target_line_num=0
+    local match_kind=""
 
     while IFS= read -r line; do
         line_num=$((line_num + 1))
@@ -1000,11 +1012,22 @@ pick_task_by_id() {
         for v in "${bold_variants[@]}"; do
             if echo "$line" | grep -qF -- "$v"; then
                 matched=1
+                match_kind="bold"
                 break
             fi
         done
         if (( ! matched )) && echo "$line" | grep -qiE -- "$plain_pattern"; then
             matched=1
+            match_kind="plain"
+        fi
+        # Slug fallback for continuous-mode worker tabs (see comment above).
+        if (( ! matched )) && [[ -n "$slug_query" ]]; then
+            local line_slug
+            line_slug=$(printf '%s' "$line" | sed 's/.*\[.\] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
+            if [[ -n "$line_slug" && "$line_slug" == "$slug_query" ]]; then
+                matched=1
+                match_kind="slug"
+            fi
         fi
         if (( matched )); then
             target_line="$line"
@@ -1029,7 +1052,12 @@ pick_task_by_id() {
     bead_id=$(echo "$target_line" | sed -n 's/.*\[[ ~]\] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
 
     # Use the queried ID (uppercased) as the task_id for branch naming etc.
+    # For slug-form queries (continuous-mode worker tabs), preserve the
+    # lowercase slug so producer (pick_next_task_for_pool) and consumer
+    # agree on the descriptor — important for in-flight tracking and
+    # branch names that match what the orchestrator already recorded.
     local task_id="$upper_id"
+    [[ "$match_kind" == "slug" ]] && task_id="$slug_query"
 
     # Mark in-progress if currently unclaimed
     if echo "$target_line" | grep -qE '^\s*- \[ \] '; then
@@ -1061,6 +1089,78 @@ mark_single_bead_in_progress() {
     return 1
 }
 
+# pick_next_task_for_pool - Skip-list-aware variant of pick_next_task for use
+# by the continuous worker pool (see lib/worker_pool.sh).
+#
+# Skip-list semantics (must match _continuous_skip_key in lib/worker_pool.sh):
+#   The worker pool skip-lists a single-repo task by inserting just the
+#   task_id slug (P1 #8) — dropping line_num and bead_id so the key is
+#   stable even if fix_plan.md is edited between picks.
+#
+#   Earlier (buggy) versions checked `skip_list` against either the bare
+#   line number or the full `task_id|line|bead_id` descriptor. Neither
+#   matched all orchestrator paths, so K=max-task-attempts was unreliable.
+#   _continuous_skip_key is now the canonical source of the key shape.
+#
+# Args:
+#   $1 - fix_plan_file: Path to fix_plan.md
+#   $2 - skip_list:     Newline-separated list of task_id slugs.
+# Output (stdout): task_id|line_num|bead_id (same as pick_next_task)
+# Returns: 0 on success, 1 if no eligible tasks remain.
+pick_next_task_for_pool() {
+    local fix_plan_file="${1:-.ralph/fix_plan.md}"
+    local skip_list="${2:-}"
+
+    if [[ ! -f "$fix_plan_file" ]]; then
+        return 1
+    fi
+
+    local lock_dir
+    lock_dir="$(dirname "$fix_plan_file")/.task_pick_lock"
+    if ! _acquire_task_lock "$lock_dir"; then
+        echo "WARN: Could not acquire task pick lock after timeout" >&2
+        return 1
+    fi
+
+    local line_num=0
+    local found=1
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+
+        if echo "$line" | grep -qE '^\s*- \[ \] '; then
+            local bead_id=""
+            bead_id=$(echo "$line" | sed -n 's/.*\[ \] \[\([a-zA-Z0-9_-]*\)\].*/\1/p' | head -1)
+
+            local task_id=""
+            if [[ -n "$bead_id" ]]; then
+                task_id="$bead_id"
+            else
+                task_id=$(echo "$line" | sed 's/.*\[ \] //' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//' | head -c 50 | sed 's/-$//')
+            fi
+
+            # Skip-list check (P1 #8): compute the same `task_id` slug the
+            # worker pool's _continuous_skip_key emits, so skip_list entries
+            # match 1:1 regardless of line shifts or bead_id changes.
+            local candidate_desc="${task_id}|${line_num}|${bead_id}"
+            local candidate_token="${task_id}"
+            if [[ -n "$skip_list" ]] && echo "$skip_list" | grep -qxF "$candidate_token"; then
+                continue
+            fi
+
+            local tmp_file="${fix_plan_file}.tmp.$$"
+            awk -v ln="$line_num" 'NR==ln { sub(/- \[ \]/, "- [~]") } 1' "$fix_plan_file" > "$tmp_file" \
+                && mv "$tmp_file" "$fix_plan_file"
+
+            echo "$candidate_desc"
+            found=0
+            break
+        fi
+    done < "$fix_plan_file"
+
+    _release_task_lock "$lock_dir"
+    return $found
+}
+
 # =============================================================================
 # EXPORTS
 # =============================================================================
@@ -1083,6 +1183,7 @@ export -f beads_post_sync
 export -f _acquire_task_lock
 export -f _release_task_lock
 export -f pick_next_task
+export -f pick_next_task_for_pool
 export -f pick_task_by_id
 export -f mark_fix_plan_in_progress
 export -f mark_fix_plan_complete
