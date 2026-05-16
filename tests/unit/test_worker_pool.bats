@@ -762,21 +762,23 @@ EOF
 T1 rc=0
 EOF
 
-    # Install a custom INT trap before the run.
+    # Direct invocation (not via bats `run`) is required: bats `run`
+    # unconditionally installs `trap bats_interrupt_trap INT` after the
+    # command finishes, which would clobber whatever the function under
+    # test restored. Calling directly lets the restoration be observed
+    # in the test's own shell.
     trap 'echo USER_TRAP_FIRED' INT
     local before
     before=$(trap -p INT)
 
-    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
-    assert_success
+    run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete >/dev/null 2>&1
+    local rc=$?
 
-    # After the run, our trap should be intact.
     local after
     after=$(trap -p INT)
-    [[ "$after" == "$before" ]]
-
-    # Cleanup
     trap - INT
+    [[ "$rc" -eq 0 ]] || fail "function returned $rc"
+    [[ "$after" == "$before" ]] || fail "trap not restored: before=[$before] after=[$after]"
 }
 
 @test "run_continuous_worker_pool restores prior TERM trap after exit" {
@@ -784,18 +786,19 @@ EOF
 T1 rc=0
 EOF
 
+    # See INT-trap test above for why we invoke directly.
     trap 'echo USER_TERM_TRAP_FIRED' TERM
     local before
     before=$(trap -p TERM)
 
-    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
-    assert_success
+    run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete >/dev/null 2>&1
+    local rc=$?
 
     local after
     after=$(trap -p TERM)
-    [[ "$after" == "$before" ]]
-
     trap - TERM
+    [[ "$rc" -eq 0 ]] || fail "function returned $rc"
+    [[ "$after" == "$before" ]] || fail "trap not restored: before=[$before] after=[$after]"
 }
 
 @test "run_continuous_worker_pool restores 'no trap' state when no prior trap was set" {
@@ -803,16 +806,20 @@ EOF
 T1 rc=0
 EOF
 
-    # Ensure no INT/TERM traps are set before the run.
+    # Ensure no INT/TERM traps are set before the call. Direct invocation
+    # (not bats `run`) — see INT-trap test for rationale.
     trap - INT
     trap - TERM
 
-    run run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete
-    assert_success
+    run_continuous_worker_pool 1 1 1 0 _test_picker _test_executor _test_on_complete >/dev/null 2>&1
+    local rc=$?
 
-    # After the run, neither INT nor TERM should have a custom handler.
-    [[ -z "$(trap -p INT)" ]]
-    [[ -z "$(trap -p TERM)" ]]
+    local after_int after_term
+    after_int=$(trap -p INT)
+    after_term=$(trap -p TERM)
+    [[ "$rc" -eq 0 ]] || fail "function returned $rc"
+    [[ -z "$after_int" ]]  || fail "INT trap leaked: [$after_int]"
+    [[ -z "$after_term" ]] || fail "TERM trap leaked: [$after_term]"
 }
 
 # =============================================================================
