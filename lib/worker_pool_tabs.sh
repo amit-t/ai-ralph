@@ -152,12 +152,18 @@ read_completion_files() {
     local dir
     dir=$(_tabs_completions_dir)
     [[ -d "$dir" ]] || return 0
-    # `find` portable across macOS / Linux: ignore .tmp files, sort by mtime.
-    # macOS BSD find doesn't support -printf; use stat after the fact.
-    # We use -newer/oldest via a Python-free shell sort: ls -t reverses to
-    # newest first, so use `ls -tr` (reverse mtime = oldest first).
-    # Note: filenames are timestamp-tagged so lexical sort is also acceptable.
-    ( cd "$dir" 2>/dev/null && ls -1tr 2>/dev/null | grep -v '\.tmp$' || true )
+    # Filenames are timestamp-tagged (see write_completion_file), so a
+    # bash glob in lexical order matches mtime order closely enough for
+    # the orchestrator's "oldest first" consumer. Avoiding `ls | grep`
+    # keeps shellcheck SC2010 quiet and dodges non-alphanumeric filename
+    # pitfalls.
+    local f base
+    for f in "$dir"/*; do
+        [[ -e "$f" ]] || continue
+        base="${f##*/}"
+        [[ "$base" == *.tmp ]] && continue
+        printf '%s\n' "$base"
+    done
 }
 
 delete_completion_file() {
@@ -656,7 +662,7 @@ run_continuous_worker_pool_tabs() {
         comp_path="$(_tabs_completions_dir)/${comp_name}"
         [[ -f "$comp_path" ]] || return 1
 
-        local fields wid task_id line_num rc started_at
+        local wid task_id line_num rc started_at
         # Parse into shell vars.
         wid=""
         task_id=""

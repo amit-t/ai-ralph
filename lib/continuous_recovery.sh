@@ -61,6 +61,7 @@ sweep_stale_continuous_state() {
     local reverted=0
     local revert_lines=""   # space-separated line numbers, set form via awk
     local -a revert_log_msgs=()
+    # shellcheck disable=SC2034  # worker_pid is read for column-shape only
     while IFS=$'\t' read -r tag line_num task_id worker_pid; do
         [[ "$tag" == "inflight" ]] || continue
         [[ -z "$line_num" || ! "$line_num" =~ ^[0-9]+$ ]] && continue
