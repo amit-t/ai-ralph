@@ -839,9 +839,10 @@ _workspace_plan_step_a() {
     local context
     context=$(cat "$context_file")
 
-    local prompt_file="$work_dir/${repo_name}.prompt.md"
-    local output_file
-    output_file="$(cd "$work_dir" && pwd)/${repo_name}.out.md"
+    local work_dir_abs
+    work_dir_abs="$(cd "$work_dir" && pwd)"
+    local prompt_file="$work_dir_abs/${repo_name}.prompt.md"
+    local output_file="$work_dir_abs/${repo_name}.out.md"
     local repo_path_abs
     repo_path_abs="$(cd "$repo_path" && pwd)"
 
