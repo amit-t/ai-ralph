@@ -4045,3 +4045,94 @@ EOF
     assert_success
     [[ "$output" == *"Skipped (no context): 1"* ]] || [[ "$output" == *"svc-b"* ]]
 }
+
+# =============================================================================
+# workspace_plan_run_engine: --prompt-file must be absolute for Devin
+# Regression: relative path passed to function broke Devin because the cd into
+# $repo_path happened before Devin resolved --prompt-file. Claude/Codex are
+# insulated (they receive $prompt_content, not the path).
+# =============================================================================
+
+@test "workspace_plan_run_engine resolves relative prompt_file to absolute for devin" {
+    # Build a fake devin shim that asserts --prompt-file is absolute and that
+    # the file actually exists from the post-cd cwd. On success it writes the
+    # required output file so the function's post-flight check passes.
+    mkdir -p shims
+    cat > shims/devin << 'SHIM'
+#!/usr/bin/env bash
+prompt_arg=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --prompt-file) prompt_arg="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+if [[ -z "$prompt_arg" ]]; then
+    echo "shim: missing --prompt-file" >&2
+    exit 2
+fi
+if [[ "$prompt_arg" != /* ]]; then
+    echo "shim: --prompt-file not absolute: $prompt_arg" >&2
+    exit 3
+fi
+if [[ ! -f "$prompt_arg" ]]; then
+    echo "shim: prompt file not found from cwd=$PWD: $prompt_arg" >&2
+    exit 4
+fi
+printf '## tasks\n- shim ok\n' > "$DEVIN_TEST_OUTPUT_FILE"
+exit 0
+SHIM
+    chmod +x shims/devin
+    local devin_abs
+    devin_abs="$(cd shims && pwd)/devin"
+
+    # Workspace layout: repo with .git, work_dir with a relative prompt file.
+    mkdir -p ws/svc-a/.git
+    mkdir -p ws/.ralph/.workspace_plan
+    local prompt_rel="ws/.ralph/.workspace_plan/svc-a.prompt.md"
+    local output_abs
+    output_abs="$(cd ws/.ralph/.workspace_plan && pwd)/svc-a.out.md"
+    local repo_abs
+    repo_abs="$(cd ws/svc-a && pwd)"
+    echo "stub prompt" > "$prompt_rel"
+
+    DEVIN_CMD="$devin_abs" DEVIN_TEST_OUTPUT_FILE="$output_abs" \
+        run workspace_plan_run_engine devin "" normal svc-a "$repo_abs" "$output_abs" "$prompt_rel" false
+    assert_success
+    [[ -f "$output_abs" ]]
+    run cat "$output_abs"
+    [[ "$output" == *"shim ok"* ]]
+}
+
+@test "workspace_plan_run_engine accepts absolute prompt_file for devin (no regression)" {
+    mkdir -p shims
+    cat > shims/devin << 'SHIM'
+#!/usr/bin/env bash
+prompt_arg=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --prompt-file) prompt_arg="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+[[ "$prompt_arg" == /* ]] || { echo "not absolute: $prompt_arg" >&2; exit 3; }
+[[ -f "$prompt_arg" ]]    || { echo "missing: $prompt_arg"      >&2; exit 4; }
+printf '## tasks\n- ok\n' > "$DEVIN_TEST_OUTPUT_FILE"
+SHIM
+    chmod +x shims/devin
+    local devin_abs
+    devin_abs="$(cd shims && pwd)/devin"
+
+    mkdir -p ws/svc-a/.git ws/.ralph/.workspace_plan
+    local wd
+    wd="$(cd ws/.ralph/.workspace_plan && pwd)"
+    local prompt_abs="$wd/svc-a.prompt.md"
+    local output_abs="$wd/svc-a.out.md"
+    local repo_abs
+    repo_abs="$(cd ws/svc-a && pwd)"
+    echo "stub" > "$prompt_abs"
+
+    DEVIN_CMD="$devin_abs" DEVIN_TEST_OUTPUT_FILE="$output_abs" \
+        run workspace_plan_run_engine devin "" normal svc-a "$repo_abs" "$output_abs" "$prompt_abs" false
+    assert_success
+}

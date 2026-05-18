@@ -236,6 +236,16 @@ workspace_plan_run_engine() {
     local prompt_content
     prompt_content=$(cat "$prompt_file")
 
+    # Resolve prompt_file to absolute before cd. Docstring promises absolute,
+    # but Devin's --prompt-file takes the path string at face value post-cd
+    # and breaks if a caller hands us a relative path. Claude/Codex paths
+    # pass $prompt_content (already slurped above) so they are insulated;
+    # only Devin needs the path post-cd. Hardening here defends future
+    # callers too. Portable form (macOS lacks GNU realpath by default).
+    if [[ "$prompt_file" != /* ]]; then
+        prompt_file="$(cd "$(dirname "$prompt_file")" && pwd)/$(basename "$prompt_file")"
+    fi
+
     local _saved_pwd="$PWD"
     cd "$repo_path" || return 1
 
