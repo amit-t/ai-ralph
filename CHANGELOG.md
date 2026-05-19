@@ -2,6 +2,28 @@
 
 All notable changes to ai-ralph are documented here. release-please appends entries on every merge to `main` based on Conventional Commit messages.
 
+## [2.2.0](https://github.com/amit-t/ai-ralph/compare/v2.1.0...v2.2.0) (2026-05-18)
+
+
+### Features
+
+* continuous parallel execution via --parallel N M (proposal V2) ([a1ace5b](https://github.com/amit-t/ai-ralph/commit/a1ace5b09d3a48116b172548e7f6f032e8d73380))
+* continuous parallel execution via --parallel N M (proposal V2) ([7e2da83](https://github.com/amit-t/ai-ralph/commit/7e2da838c543718d6dd01b469de6b319072826d2))
+
+
+### Bug Fixes
+
+* **ci:** silence shellcheck warnings + repair trap-restore tests ([a392804](https://github.com/amit-t/ai-ralph/commit/a3928042b94201ca20d0a38665a016e21e0e74f8))
+* **ci:** silence shellcheck warnings + repair trap-restore tests ([58fb7f2](https://github.com/amit-t/ai-ralph/commit/58fb7f21e248fa81702f9a7e1c5819be2b00ace1))
+* **continuous:** address P0 findings from PR [#21](https://github.com/amit-t/ai-ralph/issues/21) review ([65e174d](https://github.com/amit-t/ai-ralph/commit/65e174ddcadacf7093b907971b48e15aa23c418a))
+* **continuous:** address P1 findings from PR [#21](https://github.com/amit-t/ai-ralph/issues/21) review ([ff25d8f](https://github.com/amit-t/ai-ralph/commit/ff25d8feb97084cd0f25fbaa48b2d845eb51c7ed))
+* **continuous:** address P2 findings from PR [#21](https://github.com/amit-t/ai-ralph/issues/21) review ([689eb3f](https://github.com/amit-t/ai-ralph/commit/689eb3fc0cda947f5840bc3229e00a81f6655943))
+* **gates:** Python/uv-aware quality gates + WORKTREE_GATE_SUBDIRS for monorepos ([7ac8867](https://github.com/amit-t/ai-ralph/commit/7ac88679daa86f5f36ec6dcb3e273f8a00a712df))
+* **task_sources:** preserve slug round-trip when 50-char cap lands on a hyphen ([6361a2b](https://github.com/amit-t/ai-ralph/commit/6361a2bdfeff7de3ca82d8462095ac3073ea4f93))
+* **workspace-plan:** resolve relative prompt_file before cd for Devin engine ([17d1ed6](https://github.com/amit-t/ai-ralph/commit/17d1ed60dec9eee1955a6ed5e5ae1121958d7f13))
+* **workspace-plan:** resolve relative prompt_file before cd for Devin engine ([bee4766](https://github.com/amit-t/ai-ralph/commit/bee47661c93c482a94b8596c34f983b38a7424ca))
+* **workspace-plan:** resolve relative prompt_file before cd for Devin engine ([5f1a419](https://github.com/amit-t/ai-ralph/commit/5f1a4199a27c1bc84d56b9b9de38b2b0b02a3cf7))
+
 ## [2.1.0](https://github.com/amit-t/ai-ralph/compare/v2.0.0...v2.1.0) (2026-05-13)
 
 
