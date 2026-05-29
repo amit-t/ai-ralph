@@ -270,8 +270,16 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
-# Initialize directories
-mkdir -p "$LOG_DIR" "$DOCS_DIR"
+# .ralph working dirs are created by the dispatch guard below, only for an
+# actual run and after argument parsing. This prevents read-only subcommands
+# (--status / --help / --reset-*) and stray invocations from scaffolding a
+# spurious .ralph/ in whatever directory ralph happens to start in.
+_ralph_dir_is_valid_target() {
+    [[ -f ".ralphrc" ]] && return 0
+    [[ -d "$RALPH_DIR" ]] && return 0
+    [[ -f "$RALPH_DIR/fix_plan.md" || -f "$RALPH_DIR/PROMPT.md" ]] && return 0
+    return 1
+}
 
 # Check if tmux is available
 check_tmux_available() {
@@ -3891,6 +3899,40 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     sweep_stale_continuous_state 2>/dev/null || true
     # Reap orphaned completion / heartbeat files from previously dead orchestrators.
     gc_stale_continuous_artifacts 2>/dev/null || true
+
+    # Anchor .ralph to the workspace root when launched by a workspace
+    # dispatcher (it exports WORKSPACE_ROOT). The orchestrator normally already
+    # runs from the workspace root, so this is defensive; workers keep their
+    # worktree-local .ralph and non-workspace runs are unaffected.
+    if [[ "$WORKSPACE_MODE" == "true" && -z "${CONTINUOUS_WORKER_ID:-}" && -n "${WORKSPACE_ROOT:-}" ]]; then
+        RALPH_DIR="${WORKSPACE_ROOT%/}/.ralph"
+        PROMPT_FILE="$RALPH_DIR/PROMPT.md"
+        LOG_DIR="$RALPH_DIR/logs"
+        DOCS_DIR="$RALPH_DIR/docs/generated"
+        STATUS_FILE="$RALPH_DIR/status.json"
+        PROGRESS_FILE="$RALPH_DIR/progress.json"
+        LIVE_LOG_FILE="$RALPH_DIR/live.log"
+        CALL_COUNT_FILE="$RALPH_DIR/.call_count"
+        TIMESTAMP_FILE="$RALPH_DIR/.last_reset"
+        CLAUDE_SESSION_FILE="$RALPH_DIR/.claude_session_id"
+        RALPH_SESSION_FILE="$RALPH_DIR/.ralph_session"
+        RALPH_SESSION_HISTORY_FILE="$RALPH_DIR/.ralph_session_history"
+        EXIT_SIGNALS_FILE="$RALPH_DIR/.exit_signals"
+        RESPONSE_ANALYSIS_FILE="$RALPH_DIR/.response_analysis"
+    fi
+
+    # Refuse to scaffold a stray .ralph/ for a plain (non-workspace, non-worker)
+    # run in a directory that is neither ralph-enabled nor a workspace. This is
+    # what produced spurious .ralph/ stubs when ralph (or a read-only alias like
+    # rp.status) was invoked from a workbench root.
+    if [[ "$WORKSPACE_MODE" != "true" && -z "${CONTINUOUS_WORKER_ID:-}" ]] && ! _ralph_dir_is_valid_target; then
+        echo "Error: '$(pwd)' is not a ralph-enabled directory (no .ralphrc / .ralph / workspace)." >&2
+        echo "       Run 'ralph-enable' here first, or cd into your workspace." >&2
+        exit 1
+    fi
+
+    # Create .ralph working dirs now that we know this is a real run.
+    mkdir -p "$LOG_DIR" "$DOCS_DIR"
 
     # ── Worker-mode dispatch (tab spawned by the tabs orchestrator) ──────────
     # When --continuous-worker-id is set, this process is a worker tab and
