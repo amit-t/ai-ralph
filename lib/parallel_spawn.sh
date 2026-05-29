@@ -90,6 +90,25 @@ check_iterm_available() {
     return 0
 }
 
+# Join a command + argv into a single shell-safe line, each token quoted with
+# printf %q. The workspace task descriptor is "repo|id|line|desc" and routinely
+# contains |, *, ;, (), and spaces; without quoting the tab's shell re-parses
+# those as pipes / globs / separators and the worker command is mangled.
+_ps_quote_cmd() {
+    local out="" tok
+    for tok in "$@"; do
+        printf -v tok '%q' "$tok"
+        out+="$tok "
+    done
+    printf '%s' "${out% }"
+}
+
+# Escape an already-built shell command for embedding inside an AppleScript
+# string literal (write text "..." / keystroke "..."): backslash then quote.
+_ps_applescript_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
 # Spawn agents as iTerm2 tabs (original behavior)
 spawn_iterm_tabs() {
     local count="$1"
@@ -102,6 +121,10 @@ spawn_iterm_tabs() {
         return 1
     fi
 
+    # Shell-quote the worker command, then escape it for the AppleScript string.
+    local as_cmd
+    as_cmd="$(_ps_applescript_escape "cd $(printf '%q' "$cwd") && $(_ps_quote_cmd "${cmd_args[@]}")")"
+
     local i
     for ((i = 1; i <= count; i++)); do
         echo -e "${_PS_BLUE}Spawning agent $i/$count (iTerm2 tab)...${_PS_NC}"
@@ -112,7 +135,7 @@ tell application "iTerm2"
     tell current window
         create tab with default profile
         tell current session
-            write text "cd $(printf '%q' "$cwd") && ${cmd_args[*]}"
+            write text "$as_cmd"
         end tell
     end tell
 end tell
@@ -159,10 +182,10 @@ spawn_ide_terminals() {
     # dimensions — TUI apps (e.g. Devin CLI) panic if they query terminal size
     # before the PTY is ready and get 0 cols/rows.
     local cmd_text
-    cmd_text="sleep 2 && cd $(printf '%q' "$cwd") && ${cmd_args[*]}"
+    cmd_text="sleep 2 && cd $(printf '%q' "$cwd") && $(_ps_quote_cmd "${cmd_args[@]}")"
     # Escape for AppleScript string literal: \ -> \\, " -> \"
     local as_cmd
-    as_cmd=$(printf '%s' "$cmd_text" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    as_cmd=$(_ps_applescript_escape "$cmd_text")
 
     local i
     for ((i = 1; i <= count; i++)); do
