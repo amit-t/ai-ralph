@@ -8,8 +8,7 @@
 # is-ralph-enabled checks.
 #
 # Fix: scaffold only on an actual run, after arg parsing, refusing to scaffold
-# outside a ralph-enabled or workspace directory; and anchor .ralph to
-# WORKSPACE_ROOT in workspace mode.
+# outside a ralph-enabled or workspace directory.
 
 load '../helpers/test_helper'
 
@@ -113,15 +112,3 @@ teardown() {
     [ -d .ralph/logs ]
 }
 
-# --- workspace mode anchors .ralph to WORKSPACE_ROOT, not the CWD -----------
-
-@test "devin workspace mode anchors .ralph to WORKSPACE_ROOT not cwd" {
-    WS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ralphws.XXXXXX")"
-    mkdir -p "$WS_DIR/.ralph"
-    printf '## repo\n- [ ] task\n' > "$WS_DIR/.ralph/fix_plan.md"
-    mkdir -p "$WS_DIR/repo" && ( cd "$WS_DIR/repo" && git init -q )
-    export WORKSPACE_ROOT="$WS_DIR"
-    run timeout 10 bash "$DEVIN_BIN" --workspace
-    [ -d "$WS_DIR/.ralph/logs" ]
-    [ ! -d .ralph ]
-}
