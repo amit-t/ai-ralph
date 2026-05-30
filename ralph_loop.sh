@@ -20,6 +20,7 @@ source "$SCRIPT_DIR/lib/parallel_spawn.sh" || { echo "FATAL: Failed to source li
 source "$SCRIPT_DIR/lib/worktree_manager.sh" || { echo "FATAL: Failed to source lib/worktree_manager.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/pr_manager.sh" || { echo "FATAL: Failed to source lib/pr_manager.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/workspace_manager.sh" || { echo "FATAL: Failed to source lib/workspace_manager.sh" >&2; exit 1; }
+source "$SCRIPT_DIR/lib/workspace_continuous_pr.sh" || { echo "FATAL: Failed to source lib/workspace_continuous_pr.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/worker_pool.sh" || { echo "FATAL: Failed to source lib/worker_pool.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/worker_pool_tabs.sh" || { echo "FATAL: Failed to source lib/worker_pool_tabs.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/continuous_recovery.sh" || { echo "FATAL: Failed to source lib/continuous_recovery.sh" >&2; exit 1; }
@@ -3070,6 +3071,15 @@ _continuous_workspace_executor() {
     local fix_plan="${RALPH_DIR}/fix_plan.md"
 
     if _workspace_execute_task "$repo_name" "$task_desc" "."; then
+        # Row 6 safety net: ensure the per-task branch reached the remote and
+        # a PR exists. The inner helper already attempts this via
+        # workspace_repo_commit_and_pr; this is the executor-level fallback
+        # that catches silent no-ops (subshell state loss, missed preflight,
+        # engine commits landing outside the worktree). Push/PR failure must
+        # NOT block fix-plan completion — the work is committed locally and
+        # the user can salvage manually.
+        _workspace_push_and_pr "$repo_name" "$task_id" "$task_desc" || \
+            log_status "WARN" "[continuous] task ${repo_name}/${task_id} marked complete; push/PR did not finish — see prior log lines"
         mark_workspace_task_complete "$fix_plan" "$line_num"
         return 0
     else
