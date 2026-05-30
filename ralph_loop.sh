@@ -3900,27 +3900,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Reap orphaned completion / heartbeat files from previously dead orchestrators.
     gc_stale_continuous_artifacts 2>/dev/null || true
 
-    # Anchor .ralph to the workspace root when launched by a workspace
-    # dispatcher (it exports WORKSPACE_ROOT). The orchestrator normally already
-    # runs from the workspace root, so this is defensive; workers keep their
-    # worktree-local .ralph and non-workspace runs are unaffected.
-    if [[ "$WORKSPACE_MODE" == "true" && -z "${CONTINUOUS_WORKER_ID:-}" && -n "${WORKSPACE_ROOT:-}" ]]; then
-        RALPH_DIR="${WORKSPACE_ROOT%/}/.ralph"
-        PROMPT_FILE="$RALPH_DIR/PROMPT.md"
-        LOG_DIR="$RALPH_DIR/logs"
-        DOCS_DIR="$RALPH_DIR/docs/generated"
-        STATUS_FILE="$RALPH_DIR/status.json"
-        PROGRESS_FILE="$RALPH_DIR/progress.json"
-        LIVE_LOG_FILE="$RALPH_DIR/live.log"
-        CALL_COUNT_FILE="$RALPH_DIR/.call_count"
-        TIMESTAMP_FILE="$RALPH_DIR/.last_reset"
-        CLAUDE_SESSION_FILE="$RALPH_DIR/.claude_session_id"
-        RALPH_SESSION_FILE="$RALPH_DIR/.ralph_session"
-        RALPH_SESSION_HISTORY_FILE="$RALPH_DIR/.ralph_session_history"
-        EXIT_SIGNALS_FILE="$RALPH_DIR/.exit_signals"
-        RESPONSE_ANALYSIS_FILE="$RALPH_DIR/.response_analysis"
-    fi
-
     # Refuse to scaffold a stray .ralph/ for a plain (non-workspace, non-worker)
     # run in a directory that is neither ralph-enabled nor a workspace. This is
     # what produced spurious .ralph/ stubs when ralph (or a read-only alias like
