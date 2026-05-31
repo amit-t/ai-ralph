@@ -33,6 +33,7 @@ source "$SCRIPT_DIR/lib/worktree_manager.sh"
 source "$RALPH_ROOT/lib/parallel_spawn.sh"
 source "$RALPH_ROOT/lib/pr_manager.sh"
 source "$RALPH_ROOT/lib/workspace_manager.sh"
+source "$RALPH_ROOT/lib/workspace_continuous_pr.sh"
 source "$RALPH_ROOT/lib/worker_pool.sh"
 source "$RALPH_ROOT/lib/worker_pool_tabs.sh"
 source "$RALPH_ROOT/lib/continuous_recovery.sh"
@@ -1814,6 +1815,15 @@ _continuous_workspace_executor() {
     local fix_plan="${RALPH_DIR}/fix_plan.md"
 
     if _workspace_execute_task "$repo_name" "$task_desc" "."; then
+        # Row 6 safety net: ensure the per-task branch reached the remote and
+        # a PR exists. The inner helper already attempts this via
+        # workspace_repo_commit_and_pr; this is the executor-level fallback
+        # that catches silent no-ops (subshell state loss, missed preflight,
+        # engine commits landing outside the worktree). Push/PR failure must
+        # NOT block fix-plan completion — the work is committed locally and
+        # the user can salvage manually.
+        _workspace_push_and_pr "$repo_name" "$task_id" "$task_desc" || \
+            log_status "WARN" "[continuous] task ${repo_name}/${task_id} marked complete; push/PR did not finish — see prior log lines"
         mark_workspace_task_complete "$fix_plan" "$line_num"
         return 0
     else
@@ -2472,24 +2482,6 @@ fi
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     sweep_stale_continuous_state 2>/dev/null || true
     gc_stale_continuous_artifacts 2>/dev/null || true
-
-    # Anchor .ralph to the workspace root when launched by a workspace
-    # dispatcher (it exports WORKSPACE_ROOT). The orchestrator normally already
-    # runs from the workspace root, so this is defensive; workers keep their
-    # worktree-local .ralph and non-workspace runs are unaffected.
-    if [[ "$WORKSPACE_MODE" == "true" && -z "${CONTINUOUS_WORKER_ID:-}" && -n "${WORKSPACE_ROOT:-}" ]]; then
-        RALPH_DIR="${WORKSPACE_ROOT%/}/.ralph"
-        PROMPT_FILE="$RALPH_DIR/PROMPT.md"
-        LOG_DIR="$RALPH_DIR/logs"
-        DOCS_DIR="$RALPH_DIR/docs/generated"
-        STATUS_FILE="$RALPH_DIR/status.json"
-        PROGRESS_FILE="$RALPH_DIR/progress.json"
-        LIVE_LOG_FILE="$RALPH_DIR/live.log"
-        CALL_COUNT_FILE="$RALPH_DIR/.call_count"
-        TIMESTAMP_FILE="$RALPH_DIR/.last_reset"
-        EXIT_SIGNALS_FILE="$RALPH_DIR/.exit_signals"
-        RESPONSE_ANALYSIS_FILE="$RALPH_DIR/.response_analysis"
-    fi
 
     # Refuse to scaffold a stray .ralph/ for a plain (non-workspace, non-worker)
     # run in a directory that is neither ralph-enabled nor a workspace. This is
