@@ -234,6 +234,7 @@ install_shared_libs() {
         "lib/worker_pool.sh"
         "lib/worker_pool_tabs.sh"
         "lib/continuous_recovery.sh"
+        "lib/session_tracking.sh"
     )
 
     for lib in "${shared_libs[@]}"; do
