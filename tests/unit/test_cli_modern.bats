@@ -1826,13 +1826,15 @@ EOF
 }
 
 @test "log_status log-file write is guarded against errors" {
-    # The log-file append should also be guarded for robustness
+    # The log-file append should also be guarded for robustness. The actual
+    # append target is $_RALPH_LOG_FILE_ABS (a cached absolute path), so look
+    # for that line wrapped in a brace group ending with 2>/dev/null.
     local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
 
     local func_body
     func_body=$(sed -n '/^log_status()/,/^}/p' "$script")
 
-    echo "$func_body" | grep 'ralph.log' | grep -q '2>/dev/null'
+    echo "$func_body" | grep '_RALPH_LOG_FILE_ABS' | grep -q '2>/dev/null'
 }
 
 @test "ralph_monitor.sh does not use set -e" {

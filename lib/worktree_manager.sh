@@ -599,7 +599,11 @@ worktree_run_quality_gates() {
 
     echo "QUALITY_GATES: $passed/$total passed, $failed failed" >&2
 
-    # Write gate results to worktree .ralph for reference
+    # Write gate results to worktree .ralph for reference.
+    # Ensure .ralph/ exists first — in workspace continuous mode the per-repo
+    # worktree has no .ralph/ (workspace root owns it), so the bare redirect
+    # would print "No such file or directory" before 2>/dev/null took effect.
+    mkdir -p "$workdir/.ralph" 2>/dev/null
     printf "%b" "$gate_results" > "$workdir/.ralph/.quality_gate_results" 2>/dev/null || true
 
     if [[ $failed -gt 0 ]]; then

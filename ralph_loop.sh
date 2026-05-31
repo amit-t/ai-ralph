@@ -24,6 +24,7 @@ source "$SCRIPT_DIR/lib/workspace_continuous_pr.sh" || { echo "FATAL: Failed to 
 source "$SCRIPT_DIR/lib/worker_pool.sh" || { echo "FATAL: Failed to source lib/worker_pool.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/worker_pool_tabs.sh" || { echo "FATAL: Failed to source lib/worker_pool_tabs.sh" >&2; exit 1; }
 source "$SCRIPT_DIR/lib/continuous_recovery.sh" || { echo "FATAL: Failed to source lib/continuous_recovery.sh" >&2; exit 1; }
+source "$SCRIPT_DIR/lib/session_tracking.sh" || { echo "FATAL: Failed to source lib/session_tracking.sh" >&2; exit 1; }
 
 # Configuration
 # Ralph-specific files live in .ralph/ subfolder
@@ -489,10 +490,27 @@ log_status() {
         "LOOP") color=$PURPLE ;;
     esac
     
+    # Resolve LOG_DIR to an absolute path on first call so subshells that cd
+    # into worktrees keep writing to the workspace-root log file (fixes
+    # ".ralph/logs/ralph.log: No such file or directory" in workspace mode).
+    if [[ -z "${_RALPH_LOG_FILE_ABS:-}" ]]; then
+        local _log_dir_abs
+        if [[ "$LOG_DIR" = /* ]]; then
+            _log_dir_abs="$LOG_DIR"
+        else
+            _log_dir_abs="$PWD/$LOG_DIR"
+        fi
+        mkdir -p "$_log_dir_abs" 2>/dev/null
+        _RALPH_LOG_FILE_ABS="$_log_dir_abs/ralph.log"
+        export _RALPH_LOG_FILE_ABS
+    fi
+
     # Write to stderr so log messages don't interfere with function return values
     # 2>/dev/null suppresses "Input/output error" when tmux pty is broken (Issue #188)
     echo -e "${color}[$timestamp] [$level] $message${NC}" >&2 2>/dev/null
-    echo "[$timestamp] [$level] $message" >> "$LOG_DIR/ralph.log" 2>/dev/null
+    # Wrap in a brace group so 2>/dev/null also suppresses bash's own
+    # redirection-open error if the absolute path becomes unwritable.
+    { echo "[$timestamp] [$level] $message" >> "$_RALPH_LOG_FILE_ABS"; } 2>/dev/null
 }
 
 # Update status JSON for external monitoring
@@ -1199,83 +1217,9 @@ log_session_transition() {
     fi
 }
 
-# Generate a unique session ID using timestamp and random component
-generate_session_id() {
-    local ts
-    ts=$(date +%s)
-    local rand
-    rand=$RANDOM
-    echo "ralph-${ts}-${rand}"
-}
-
-# Initialize session tracking (called at loop start)
-init_session_tracking() {
-    local ts
-    ts=$(get_iso_timestamp)
-
-    # Create session file if it doesn't exist
-    if [[ ! -f "$RALPH_SESSION_FILE" ]]; then
-        local new_session_id
-        new_session_id=$(generate_session_id)
-
-        jq -n \
-            --arg session_id "$new_session_id" \
-            --arg created_at "$ts" \
-            --arg last_used "$ts" \
-            --arg reset_at "" \
-            --arg reset_reason "" \
-            '{
-                session_id: $session_id,
-                created_at: $created_at,
-                last_used: $last_used,
-                reset_at: $reset_at,
-                reset_reason: $reset_reason
-            }' > "$RALPH_SESSION_FILE"
-
-        log_status "INFO" "Initialized session tracking (session: $new_session_id)"
-        return 0
-    fi
-
-    # Validate existing session file
-    if ! jq empty "$RALPH_SESSION_FILE" 2>/dev/null; then
-        log_status "WARN" "Corrupted session file detected, recreating..."
-        local new_session_id
-        new_session_id=$(generate_session_id)
-
-        jq -n \
-            --arg session_id "$new_session_id" \
-            --arg created_at "$ts" \
-            --arg last_used "$ts" \
-            --arg reset_at "$ts" \
-            --arg reset_reason "corrupted_file_recovery" \
-            '{
-                session_id: $session_id,
-                created_at: $created_at,
-                last_used: $last_used,
-                reset_at: $reset_at,
-                reset_reason: $reset_reason
-            }' > "$RALPH_SESSION_FILE"
-    fi
-}
-
-# Update last_used timestamp in session file (called on each loop iteration)
-update_session_last_used() {
-    if [[ ! -f "$RALPH_SESSION_FILE" ]]; then
-        return 0
-    fi
-
-    local ts
-    ts=$(get_iso_timestamp)
-
-    # Update last_used in existing session file
-    local updated
-    updated=$(jq --arg last_used "$ts" '.last_used = $last_used' "$RALPH_SESSION_FILE" 2>/dev/null)
-    local jq_status=$?
-
-    if [[ $jq_status -eq 0 && -n "$updated" ]]; then
-        echo "$updated" > "$RALPH_SESSION_FILE"
-    fi
-}
+# generate_session_id, init_session_tracking, and update_session_last_used
+# now live in lib/session_tracking.sh (sourced at the top of this file) so the
+# devin and codex engine loops can share the same implementation.
 
 # Global array for Claude command arguments (avoids shell injection)
 declare -a CLAUDE_CMD_ARGS=()

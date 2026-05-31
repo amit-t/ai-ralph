@@ -37,6 +37,7 @@ source "$RALPH_ROOT/lib/workspace_continuous_pr.sh"
 source "$RALPH_ROOT/lib/worker_pool.sh"
 source "$RALPH_ROOT/lib/worker_pool_tabs.sh"
 source "$RALPH_ROOT/lib/continuous_recovery.sh"
+source "$RALPH_ROOT/lib/session_tracking.sh"
 
 # Configuration
 RALPH_DIR=".ralph"
@@ -47,6 +48,7 @@ DOCS_DIR="$RALPH_DIR/docs/generated"
 STATUS_FILE="$RALPH_DIR/status.json"
 PROGRESS_FILE="$RALPH_DIR/progress.json"
 LIVE_LOG_FILE="$RALPH_DIR/live.log"
+RALPH_SESSION_FILE="$RALPH_DIR/.ralph_session"   # shared session_tracking.sh state
 CALL_COUNT_FILE="$RALPH_DIR/.call_count"
 TIMESTAMP_FILE="$RALPH_DIR/.last_reset"
 USE_TMUX=false
@@ -309,8 +311,25 @@ log_status() {
         "LOOP") color=$PURPLE ;;
     esac
 
-    echo -e "${color}[$timestamp] [$level] $message${NC}" >&2
-    echo "[$timestamp] [$level] $message" >> "$LOG_DIR/ralph.log"
+    # Resolve LOG_DIR to an absolute path on first call so subshells that cd
+    # into worktrees keep writing to the workspace-root log file (fixes
+    # ".ralph/logs/ralph.log: No such file or directory" in workspace mode).
+    if [[ -z "${_RALPH_LOG_FILE_ABS:-}" ]]; then
+        local _log_dir_abs
+        if [[ "$LOG_DIR" = /* ]]; then
+            _log_dir_abs="$LOG_DIR"
+        else
+            _log_dir_abs="$PWD/$LOG_DIR"
+        fi
+        mkdir -p "$_log_dir_abs" 2>/dev/null
+        _RALPH_LOG_FILE_ABS="$_log_dir_abs/ralph.log"
+        export _RALPH_LOG_FILE_ABS
+    fi
+
+    echo -e "${color}[$timestamp] [$level] $message${NC}" >&2 2>/dev/null
+    # Wrap redirection in a brace group so 2>/dev/null suppresses bash's
+    # own "No such file or directory" if the absolute path is still unwritable.
+    { echo "[$timestamp] [$level] $message" >> "$_RALPH_LOG_FILE_ABS"; } 2>/dev/null
 }
 
 # =============================================================================
