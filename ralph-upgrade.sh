@@ -6,6 +6,11 @@
 #   ralph.upgrade --yes         # skip prompt
 #   ralph.upgrade --rollback    # revert
 #   ralph.upgrade --force       # bypass peer-floor
+#   ralph.upgrade --reinstall   # re-run install even when version.json
+#                                 is unchanged (urgent mid-release fix).
+#                                 Still fetches origin/main and rebases so
+#                                 the clone picks up new commits behind the
+#                                 same version number.
 #   ralph.upgrade --skip-install  # (test only)
 
 set -euo pipefail
@@ -16,6 +21,7 @@ LIB_DIR="${SCRIPT_DIR}/lib"
 YES=false
 ROLLBACK=false
 FORCE=false
+REINSTALL=false
 SKIP_INSTALL=false
 
 while [[ $# -gt 0 ]]; do
@@ -23,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     --yes) YES=true; shift ;;
     --rollback) ROLLBACK=true; shift ;;
     --force) FORCE=true; shift ;;
+    --reinstall) REINSTALL=true; shift ;;
     --skip-install) SKIP_INSTALL=true; shift ;;
     -h|--help) cat <<USAGE
 ralph.upgrade — pull and reinstall ai-ralph.
@@ -45,6 +52,23 @@ if [[ ! -d "$CLONE/.git" ]]; then
   exit 1
 fi
 
+# Chain per-engine installers (devin, codex) when present. Root install.sh
+# only refreshes ~/.ralph/{lib,templates,...} and the Claude bits; engine
+# code lives under ~/.ralph/devin and ~/.ralph/codex and is owned by the
+# engine-specific install scripts.
+_run_engine_installs() {
+  local clone="$1"
+  if [[ -x "$clone/devin/install_devin.sh" ]]; then
+    bash "$clone/devin/install_devin.sh" install || return $?
+  fi
+  if [[ -x "$clone/codex/install_codex.sh" ]]; then
+    bash "$clone/codex/install_codex.sh" install || return $?
+  fi
+  # Explicit success so the final [[ ... ]] test doesn't bubble its non-zero
+  # status out under set -e when an engine installer is absent.
+  return 0
+}
+
 if $ROLLBACK; then
   prior="${WB_UPDATES_CACHE_DIR:-$HOME/.cache/wb-updates}/ralph-prior.json"
   [[ -f "$prior" ]] || { printf "No prior recorded. Nothing to roll back.\n" >&2; exit 1; }
@@ -54,6 +78,7 @@ if $ROLLBACK; then
   git -C "$CLONE" checkout -q "$prior_sha"
   if ! $SKIP_INSTALL && [[ -x "$CLONE/install.sh" ]]; then
     bash "$CLONE/install.sh"
+    _run_engine_installs "$CLONE"
   fi
   _wb_cache_invalidate ralph
   printf "[ralph] rolled back to %s.\n" "$prior_v"
@@ -78,7 +103,22 @@ upstream_v_raw="$(git -C "$CLONE" show origin/main:version.json 2>/dev/null || e
 upstream_v="$(echo "$upstream_v_raw" | jq -r '.version // "0.0.0"')"
 
 if [[ "$(_wb_compare_semver "$local_v" "$upstream_v")" == "eq" ]]; then
-  printf "[ralph] already at %s\n" "$local_v"
+  if ! $REINSTALL; then
+    printf "[ralph] already at %s\n" "$local_v"
+    exit 0
+  fi
+  # --reinstall: fetch + rebase any new commits behind the same version, then
+  # rerun install. Skips the diff confirmation prompt because there's no
+  # version delta to summarise.
+  printf "[ralph] reinstall requested at %s (forcing fetch + install)\n" "$local_v"
+  git -C "$CLONE" pull --rebase -q origin main
+  if ! $SKIP_INSTALL && [[ -x "$CLONE/install.sh" ]]; then
+    bash "$CLONE/install.sh"
+    _run_engine_installs "$CLONE"
+  fi
+  _wb_cache_invalidate ralph
+  _wb_mark_bootstrapped ralph
+  printf "[ralph] reinstalled at %s\n" "$local_v"
   exit 0
 fi
 
@@ -108,6 +148,7 @@ _wb_record_prior ralph
 git -C "$CLONE" pull --rebase -q origin main
 if ! $SKIP_INSTALL && [[ -x "$CLONE/install.sh" ]]; then
   bash "$CLONE/install.sh"
+  _run_engine_installs "$CLONE"
 fi
 _wb_cache_invalidate ralph
 _wb_mark_bootstrapped ralph
