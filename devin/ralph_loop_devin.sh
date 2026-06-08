@@ -93,6 +93,12 @@ VERBOSE_PROGRESS="${VERBOSE_PROGRESS:-false}"
 DEVIN_TIMEOUT_MINUTES="${DEVIN_TIMEOUT_MINUTES:-30}"
 DEVIN_USE_CONTINUE="${DEVIN_USE_CONTINUE:-true}"
 DEVIN_AUTO_EXIT="${DEVIN_AUTO_EXIT:-true}"  # true = use -p flag (auto-exit), false = interactive TUI
+# Default Devin model for the Ralph loop. Hardcoded to sw1.6 (project-level
+# default, not per-individual). Override precedence preserved: --model CLI >
+# DEVIN_MODEL env > .ralphrc.devin > this default. Applied AFTER the env
+# snapshot above so an unset DEVIN_MODEL leaves _env_DEVIN_MODEL empty and
+# does not clobber a .ralphrc.devin override in load_ralphrc.
+DEVIN_MODEL="${DEVIN_MODEL:-sw1.6}"
 
 # Session management
 DEVIN_SESSION_EXPIRY_HOURS="${DEVIN_SESSION_EXPIRY_HOURS:-24}"
@@ -2137,7 +2143,7 @@ Options:
     -v, --verbose           Show detailed progress updates during execution
     -l, --live              Show Devin output in real-time
     -t, --timeout MIN       Set Devin session timeout in minutes (default: $DEVIN_TIMEOUT_MINUTES)
-    --model MODEL           Set Devin model: opus, sonnet, swe, gpt
+    --model MODEL           Set Devin model: sw1.6, opus, sonnet, swe, gpt (default: sw1.6)
     --permission-mode MODE  Set permission mode: auto or dangerous (default: auto)
     --no-continue           Disable session continuity across loops
     --reset-circuit         Reset circuit breaker to CLOSED state

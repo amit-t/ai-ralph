@@ -67,6 +67,10 @@ RALPH_ENGINE="devin"
 MAX_CALLS_PER_HOUR=100
 DEVIN_TIMEOUT_MINUTES=30
 
+# Model selection (project-level default; the loop defaults to sw1.6 when unset).
+# Uncomment to pin a different model for this project.
+# DEVIN_MODEL=sw1.6            # e.g. sw1.6, swe, opus, sonnet, gpt
+
 # Devin-specific settings
 # DEVIN_MAX_ACU=             # Maximum ACU limit per session (empty = no limit)
 # DEVIN_API_TOKEN=           # Set via 'devin configure' or environment variable
