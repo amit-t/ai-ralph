@@ -119,7 +119,8 @@ Options:
     --engine <name>    AI engine: claude (default), codex, devin
     --model <name>     Model override for the planning session (Claude + Devin).
                        Passes --model <name> through to the engine CLI.
-                       Examples: opus, sonnet, claude-opus-4-7, claude-sonnet-4
+                       Devin defaults to sw1.6 when omitted.
+                       Examples: opus, sonnet, claude-opus-4-7, sw1.6, swe
                        Codex engine ignores this flag with a WARN.
     --thinking <level> Planning thinking depth. One of:
                          normal (default)
@@ -722,9 +723,14 @@ run_ai_planning() {
             ;;
         devin)
             local -a devin_flags=("--permission-mode" "dangerous")
+            # Devin defaults to sw1.6 (project-level default, not per-individual);
+            # an explicit --model still wins.
+            local devin_model="${MODEL:-sw1.6}"
+            devin_flags+=("--model" "$devin_model")
             if [[ -n "$MODEL" ]]; then
-                devin_flags+=("--model" "$MODEL")
                 log "PLAN" "Model override: $MODEL"
+            else
+                log "PLAN" "Model default: sw1.6"
             fi
             devin_flags+=("--prompt-file" "$prompt_file")
             log "PLAN" "Launching: $cli_cmd (interactive) ${devin_flags[*]}"

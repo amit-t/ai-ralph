@@ -935,6 +935,7 @@ Ralph uses a multi-layered strategy to prevent Claude from accidentally deleting
 | `test_compress_plan.bats` | 33 | Fix plan compression mode (CLI parsing, find_fix_plan_for_compress, count_plan_items, archive_fix_plan, run_compress_plan engine validation, template validation) |
 | `test_file_plan.bats` | 30 | File-based planning mode (CLI parsing, detect_file_type, find_fix_plan_for_file_plan, run_file_plan engine/file validation, template validation) |
 | `test_workspace_mode.bats` | 194 | Workspace mode (discover_workspace_repos, parse_workspace_fix_plan, pick_workspace_task, get_repo_default_branch, validate_workspace, is_workspace_mode, CLI --workspace flag, PROMPT_WORKSPACE.md template, edge cases) + parallel workspace (get_workspace_parallel_limit, pick_workspace_tasks_parallel, run_workspace_tasks_parallel, --workspace --parallel CLI, parallel edge cases) + per-repo worktree/QG/PR (workspace_repo_worktree_init, workspace_repo_worktree_create, workspace_repo_run_quality_gates, workspace_repo_commit_and_pr, workspace_repo_cleanup, structural integration tests) + Devin/Codex workspace wiring (CLI flag parsing, function definitions, structural ordering, tmux forwarding, cross-engine parity) |
+| `test_devin_default_model.bats` | 9 | Devin default model sw1.6 (loop default, env-snapshot non-clobber, precedence --model > DEVIN_MODEL env > .ralphrc.devin > default, build_devin_command passthrough, workspace_plan_run_engine + plan-path default) |
 
 ### Running Tests
 ```bash

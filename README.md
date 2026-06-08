@@ -18,7 +18,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 
 ### What this fork adds over upstream
 
-- **Devin CLI engine** (`ralph-devin`, `rpd.*` aliases) with cloud session polling, ACU limits, and parallel agent spawning
+- **Devin CLI engine** (`ralph-devin`, `rpd.*` aliases) with cloud session polling, ACU limits, and parallel agent spawning. Defaults to the **sw1.6** model (override with `--model`, `DEVIN_MODEL=`, or `DEVIN_MODEL=` in `.ralphrc.devin`)
 - **Codex CLI engine** (`ralph-codex`, `rpx.*` aliases) with GPT-4/Claude model selection
 - **Single-run architecture** -- each loop iteration is one agent invocation (no inner while-loop)
 - **Git worktree isolation** -- each loop runs on a dedicated branch; changes merge back only after quality gates pass
