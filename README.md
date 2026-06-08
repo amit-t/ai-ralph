@@ -642,8 +642,11 @@ Source: `devin/ALIASES.sh`
 
 #### Model Selection
 
+The Devin loop **defaults to the `sw1.6` model** when you don't pass `--model`. Use these aliases to pin a different one:
+
 | Alias | Expands To | Description |
 |---|---|---|
+| `rpd.sw16` | `ralph-devin --model sw1.6` | Use sw1.6 model (the default) |
 | `rpd.opus` | `ralph-devin --model opus` | Use Opus model |
 | `rpd.sonnet` | `ralph-devin --model sonnet` | Use Sonnet model |
 | `rpd.swe` | `ralph-devin --model swe` | Use SWE model |
@@ -1030,7 +1033,7 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 ### Devin-Specific Options
 
 ```
---model MODEL           Model: opus, sonnet, swe, gpt
+--model MODEL           Model: sw1.6 (default), opus, sonnet, swe, gpt
 --permission-mode MODE  Permission mode: auto, dangerous
 --max-loops NUM         Stop after N loops (0 = unlimited)
 --no-worktree           Disable git worktree isolation
@@ -1130,6 +1133,10 @@ DEVIN_TIMEOUT_MINUTES=30
 DEVIN_MAX_ACU=100
 DEVIN_POLL_INTERVAL=15
 DEVIN_USE_CONTINUE=true
+
+# Model (project-level; the loop defaults to sw1.6 when unset).
+# Precedence: --model CLI > DEVIN_MODEL env > this file > sw1.6 default.
+# DEVIN_MODEL=sw1.6   # e.g. sw1.6, swe, opus, sonnet, gpt
 
 # Worktree isolation
 WORKTREE_ENABLED=true
@@ -1549,7 +1556,7 @@ Uninstalling one engine does not affect the others.
 
 **Devin CLI Engine**
 - Cloud session polling with ACU limits
-- Opus, Sonnet, SWE, and GPT model selection
+- Defaults to the **sw1.6** model; sw1.6, Opus, Sonnet, SWE, and GPT model selection
 - Permission modes (auto, dangerous)
 
 ### In Progress

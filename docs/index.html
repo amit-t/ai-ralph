@@ -1607,6 +1607,43 @@
       <ul class="change-list">
         <li class="change-item" data-type="feat" data-has-detail><span
             class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
+            class="change-text"><span class="change-scope">devin:</span> Devin engine now defaults to the
+            <code>sw1.6</code> model &mdash; every <code>ralph-devin</code> loop and
+            <code>ralph-plan --engine devin</code> run picks it up automatically, no flag needed</span><span
+            class="change-hash">PR #45</span>
+          <div class="change-detail">
+            <div class="change-detail-inner">
+              <h4>What it does</h4>
+              <ul>
+                <li>Applies to every Devin invocation path: the main loop
+                  (<code>devin/ralph_loop_devin.sh</code>), the single-repo planner (<code>ralph_plan.sh</code>),
+                  and the workspace/multi-repo planner (<code>lib/workspace_plan.sh</code>)</li>
+                <li>Project-level default, not per-individual. Override precedence is preserved:
+                  <code>--model</code> CLI &gt; <code>DEVIN_MODEL</code> env &gt; <code>.ralphrc.devin</code> &gt;
+                  <code>sw1.6</code></li>
+                <li>The loop default is applied after the env snapshot, so an unset <code>DEVIN_MODEL</code> never
+                  clobbers a <code>.ralphrc.devin</code> override</li>
+                <li>The three <code>.ralphrc.devin</code> generators now ship a documented (commented)
+                  <code>DEVIN_MODEL=</code> knob; new <code>rpd.sw16</code> / <code>rpd.plan.sw16</code> aliases</li>
+              </ul>
+              <h4>Usage</h4>
+              <pre>ralph-devin                      # runs on sw1.6 (default)
+rpd.sw16                         # explicit sw1.6
+ralph-devin --model opus         # override for one run
+# .ralphrc.devin: DEVIN_MODEL=swe   # pin a different model per project</pre>
+              <h4>Upgrade</h4>
+              <pre>ralph.upgrade                    # pull main + reinstall (chains the Devin installer)</pre>
+              <h4>New files</h4>
+              <ul>
+                <li><code>tests/unit/test_devin_default_model.bats</code> &mdash; 9 tests (loop default,
+                  env-snapshot non-clobber, full precedence chain, <code>build_devin_command</code> passthrough,
+                  both plan-path defaults + override)</li>
+              </ul>
+            </div>
+          </div>
+        </li>
+        <li class="change-item" data-type="feat" data-has-detail><span
+            class="change-type type-feat">feat</span><span class="change-toggle">&#9654;</span><span
             class="change-text"><span class="change-scope">planning:</span> Workspace planning mode &mdash;
             <code>ralph-plan --workspace</code> drives the selected engine per child repo sequentially and merges tasks
             into <code>.ralph/fix_plan.md</code> while preserving existing <code>[~]</code> / <code>[x]</code>
@@ -1857,6 +1894,7 @@ rpx.ws.p 3    # Codex alias</code></pre>
               <pre>ralph-plan --model opus                                  # Claude + Opus
 ralph-plan --thinking ultra                              # ultrathink + --effort max
 ralph-plan --model opus --thinking ultra --yolo --superpowers  # deepest Claude planning
+ralph-plan --engine devin                                # Devin planning on sw1.6 (default)
 ralph-plan --engine devin --model claude-opus-4.6        # Devin + Anthropic model
 
 # Aliases (Claude)

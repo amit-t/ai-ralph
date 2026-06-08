@@ -11,8 +11,16 @@ The command:
 1. Verifies your Ralph clone is on `main` and has no uncommitted changes. It refuses to run otherwise (exit code 2). Pass `--force` only if you understand what you are bypassing.
 2. Records the prior commit so you can roll back in one step.
 3. Runs `git pull --ff-only` against `origin`.
-4. Re-runs `install.sh` so any new commands, library files, and shell wrappers land in `~/.local/bin` and `~/.local/share/wb-versioncheck/`. Pass `--skip-install` to skip this step if you only want the source updated.
+4. Re-runs `install.sh` so any new commands, library files, and shell wrappers land in `~/.local/bin` and `~/.local/share/wb-versioncheck/`, then chains the per-engine installers (`devin/install_devin.sh`, `codex/install_codex.sh`) when present so engine code under `~/.ralph/devin` and `~/.ralph/codex` is refreshed too. Pass `--skip-install` to skip this step if you only want the source updated.
 5. Refuses to upgrade if the new version requires peers (for example, a specific ai-devkit version) you do not have installed (exit code 3). Pass `--force` to bypass at your own risk.
+
+Because step 4 chains the Devin installer, **a Devin-engine change like the `sw1.6` default ships with a normal `ralph.upgrade`** — no separate Devin reinstall needed.
+
+If an urgent fix lands behind the *same* `version.json` version, `ralph.upgrade` would normally report "already at X" and stop. Use `--reinstall` to force a fetch + rebase of new commits behind that version and re-run the installers:
+
+```bash
+ralph.upgrade --reinstall
+```
 
 To roll back to the version you were on before the last upgrade:
 
