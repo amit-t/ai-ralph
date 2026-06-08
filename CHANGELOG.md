@@ -2,6 +2,36 @@
 
 All notable changes to ai-ralph are documented here. release-please appends entries on every merge to `main` based on Conventional Commit messages.
 
+## [2.3.0](https://github.com/amit-t/ai-ralph/compare/v2.2.0...v2.3.0) (2026-06-08)
+
+
+### Features
+
+* **devin:** default Devin engine to sw1.6 model ([fc34a2b](https://github.com/amit-t/ai-ralph/commit/fc34a2be41aa77c75749a81b834c5fada7349ce5))
+* **devin:** default Devin engine to sw1.6 model ([7f0cb98](https://github.com/amit-t/ai-ralph/commit/7f0cb988252df86bafaa3fdccca6843733e8b847))
+
+
+### Bug Fixes
+
+* **continuous-tabs:** cure 3 bugs surfaced by wb.ralph-dispatch workspace mode ([094887c](https://github.com/amit-t/ai-ralph/commit/094887ccccde297f304612371bd74882cdd87659))
+* **continuous-tabs:** cure init_session_tracking + log path + quality_gate_results bugs in workspace mode ([eca2b56](https://github.com/amit-t/ai-ralph/commit/eca2b569195d46eb7ceb75ffb753a19ef3a2a74b))
+* **continuous-tabs:** cure init_session_tracking + log path + quality_gate_results bugs in workspace mode ([c9ed53f](https://github.com/amit-t/ai-ralph/commit/c9ed53f97ba0dcb2797ac8fff063a31b90286551))
+* **continuous:** add workspace push+PR safety net for all engines ([9d4f57f](https://github.com/amit-t/ai-ralph/commit/9d4f57f2415151c611b19d474cba523320b0bf8b))
+* **continuous:** add workspace push+PR safety net for all engines ([3b968da](https://github.com/amit-t/ai-ralph/commit/3b968dac2d3fb1269ed72ce7536edad2aa37b9d2))
+* **continuous:** add workspace push+PR safety net for all engines (dev) ([d8170d7](https://github.com/amit-t/ai-ralph/commit/d8170d7e1877fb93fe61dda7edfdba6320eea1c9))
+* **loop:** drop workspace anchor (Row 1 regression on ${main_dir}/${LOG_DIR}) ([37a8392](https://github.com/amit-t/ai-ralph/commit/37a839259e95190a8c048441237b02283fda6f0d))
+* **loop:** drop workspace anchor (Row 1 regression on ${main_dir}/${LOG_DIR}) ([922da23](https://github.com/amit-t/ai-ralph/commit/922da238fb1e6a679f21a9d9e5e0526db1ddd3bc))
+* **loop:** drop workspace anchor (Row 1 regression on ${main_dir}/${LOG_DIR}) ([503a5db](https://github.com/amit-t/ai-ralph/commit/503a5db8edff6a79dc46fed5107a306d7959321d))
+* **loop:** drop workspace anchor (Row 1 regression on ${main_dir}/${LOG_DIR}) ([887fd46](https://github.com/amit-t/ai-ralph/commit/887fd46f703edf7e8e64aa4393fd4a457e21a78d))
+* **loop:** scaffold .ralph only on a real run, anchor to workspace root ([3c17d39](https://github.com/amit-t/ai-ralph/commit/3c17d39b88d15f67bbebeda4a8edb99cfcc57ab8))
+* **loop:** scaffold .ralph only on a real run, anchor to workspace root ([e123006](https://github.com/amit-t/ai-ralph/commit/e123006e8e37c28be48c997ed03c869a9004b26d))
+* **loop:** scaffold .ralph only on a real run, anchor to workspace root ([105d560](https://github.com/amit-t/ai-ralph/commit/105d560254e755936dec64817223c3d1faea9f06))
+* **loop:** scaffold .ralph only on a real run, anchor to workspace root ([549363a](https://github.com/amit-t/ai-ralph/commit/549363a44743cd6a8b8cb61f4890beb5b52f7de4))
+* **parallel-spawn:** shell-quote worker command args for tab spawn ([5a0c511](https://github.com/amit-t/ai-ralph/commit/5a0c511263992f96fde6fb6617931632f61506db))
+* **parallel-spawn:** shell-quote worker command args for tab spawn ([d0b159a](https://github.com/amit-t/ai-ralph/commit/d0b159ae459a1efa0df1e54ab811b5043e793e56))
+* **parallel-spawn:** shell-quote worker command args for tab spawn ([46d41d8](https://github.com/amit-t/ai-ralph/commit/46d41d8bcd5a00d454e14aa42ec0dd327919c7ef))
+* **parallel-spawn:** shell-quote worker command args for tab spawn ([937e99d](https://github.com/amit-t/ai-ralph/commit/937e99dac5fe739084d56f14af8f7a7258f5acc0))
+
 ## [2.2.0](https://github.com/amit-t/ai-ralph/compare/v2.1.0...v2.2.0) (2026-05-18)
 
 
