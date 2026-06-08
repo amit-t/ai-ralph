@@ -2,6 +2,12 @@
 
 All notable changes to ai-ralph are documented here. release-please appends entries on every merge to `main` based on Conventional Commit messages.
 
+## Unreleased
+
+### Features
+
+* **devin:** default the Devin engine to the `sw1.6` model. Every `ralph-devin` loop and `ralph-plan --engine devin` run (single-repo and workspace) now uses `sw1.6` when no model is given. Project-level default, not per-individual; override precedence `--model` CLI > `DEVIN_MODEL` env > `.ralphrc.devin` > `sw1.6`. Adds `rpd.sw16` / `rpd.plan.sw16` aliases, a documented `DEVIN_MODEL` knob in the `.ralphrc.devin` generators, and `tests/unit/test_devin_default_model.bats` (9 tests). Upgrade with `ralph.upgrade`.
+
 ## [2.2.0](https://github.com/amit-t/ai-ralph/compare/v2.1.0...v2.2.0) (2026-05-18)
 
 
