@@ -9,28 +9,21 @@ The user's own fork is **`amit-t/ai-ralph`**.
 
 **Never target the upstream `frankbria/ralph-claude-code`.** Always pass `--repo` explicitly — without it, `gh pr create` defaults to the upstream fork.
 
-The repo has two remotes, each on a different GitHub account:
+The repo has a single remote:
 
 | Remote | URL | gh account | Repo slug |
 |---|---|---|---|
 | `origin` | `github.com-at:amit-t/ai-ralph` | `amit-t` | `amit-t/ai-ralph` |
-| `inv` | `github.com-atv:Invenco-Cloud-Systems-ICS/ai-ralph` | `amit-tiwari_vnt` | `Invenco-Cloud-Systems-ICS/ai-ralph` |
 
-Both remotes have `main` and `dev` branches.
+`origin` has `main` and `dev` branches.
 
-When the user asks for "PRs to both remotes" (or "to main and dev on both remotes"), open **4 PRs**: `origin/main`, `origin/dev`, `inv/main`, `inv/dev`. Push the branch to both remotes first, then switch `gh` accounts as needed — each remote's PRs must be opened while that remote's `gh` account is active:
+When the user asks for "PRs to main and dev", open **2 PRs** against `origin`: `origin/main`, `origin/dev`. Push the branch to `origin` first, then create the PRs on the `amit-t` account:
 
 ```bash
-# Push once to each remote
+# Push to origin
 git push origin <branch>
-git push inv <branch>
 
-# ICS PRs — needs amit-tiwari_vnt
-gh auth switch --user amit-tiwari_vnt
-gh pr create --repo Invenco-Cloud-Systems-ICS/ai-ralph --base main --head <branch> ...
-gh pr create --repo Invenco-Cloud-Systems-ICS/ai-ralph --base dev  --head <branch> ...
-
-# amit-t PRs — switch back
+# amit-t PRs
 gh auth switch --user amit-t
 gh pr create --repo amit-t/ai-ralph --base main --head <branch> ...
 gh pr create --repo amit-t/ai-ralph --base dev  --head <branch> ...

@@ -20,7 +20,7 @@ Optional args (free-form, parse from the user's message):
 Run these in parallel:
 
 ```bash
-# Recent merged PRs (use the right account — amit-t for origin, amit-tiwari_vnt for inv)
+# Recent merged PRs (use the amit-t account for origin)
 gh pr list --repo amit-t/ai-ralph --state merged --limit 20 \
   --json number,title,mergedAt,body,files
 
@@ -30,8 +30,6 @@ git log -1 --format='%H %ad' --date=short -- README.md
 # Recent commits for context
 git log --oneline --since="<derived date>" | head -40
 ```
-
-If `gh pr list` 404s on the ICS remote, switch accounts: `gh auth switch --user amit-tiwari_vnt`.
 
 ## Step 2 — Classify each PR
 

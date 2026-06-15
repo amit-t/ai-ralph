@@ -1086,16 +1086,15 @@ These standards ensure:
 | Remote | URL | gh account | Repo slug |
 |---|---|---|---|
 | `origin` | `github.com-at:amit-t/ai-ralph` | `amit-t` | `amit-t/ai-ralph` |
-| `inv` | `github.com-atv:Invenco-Cloud-Systems-ICS/ai-ralph` | `amit-tiwari_vnt` | `Invenco-Cloud-Systems-ICS/ai-ralph` |
 | `upstream` | `frankbria/ralph-claude-code` | — | never target for PRs |
 
-Both `origin` and `inv` have `main` and `dev` branches.
+`origin` has `main` and `dev` branches.
 
 ### PR rules
 
 - Always pass `--repo` to `gh pr create`. Without it, it defaults to the upstream fork.
-- "PRs to both remotes" / "to main and dev on both remotes" → open **4 PRs**: `origin/main`, `origin/dev`, `inv/main`, `inv/dev`.
-- Switch `gh` accounts before creating PRs for each remote: `amit-tiwari_vnt` for `inv`, `amit-t` for `origin`.
+- "PRs to main and dev" → open **2 PRs** against `origin`: `origin/main`, `origin/dev`.
+- Use the `amit-t` account for all PRs.
 - Single-PR requests with no remote specified default to `amit-t/ai-ralph` on `amit-t`.
 
 ### Worktrees

@@ -54,14 +54,12 @@ After all 5 are green:
 - One commit per test fix is preferred (5 commits total). Use Conventional Commits format:
   - `fix(test): unstale test 118 — validate_claude_command grep target moved to lib/cli_modern.sh` (example).
   - `fix(rate-limit): default to wait in unattended mode (test 103)` (example for production-code class 1).
-- Push to both remotes: `origin` (amit-t) and `inv` (Invenco-Cloud-Systems-ICS).
-- Open 4 PRs, all with the same title `fix: green up 5 pre-existing red bats tests`:
+- Push to `origin` (amit-t).
+- Open 2 PRs, both with the same title `fix: green up 5 pre-existing red bats tests`:
   - `amit-t/ai-ralph` base `main`
   - `amit-t/ai-ralph` base `dev`
-  - `Invenco-Cloud-Systems-ICS/ai-ralph` base `main`
-  - `Invenco-Cloud-Systems-ICS/ai-ralph` base `dev`
-- For amit-t PRs use `gh auth switch -u amit-t` first. For Invenco PRs use `gh auth switch -u amit-tiwari_vnt`.
-- If `dev` has diverged from `main`, merge `origin/dev` into the feature branch before opening the dev-targeted PR. Same for `inv/main` and `inv/dev`. (See recent PR history: `git log --merges --oneline -- main dev` for the established pattern.)
+- For all PRs use `gh auth switch -u amit-t` first.
+- If `dev` has diverged from `main`, merge `origin/dev` into the feature branch before opening the dev-targeted PR. (See recent PR history: `git log --merges --oneline -- main dev` for the established pattern.)
 - Do **not** admin-merge. The whole point is to get the suite green so admin-merge stops being needed. Wait for CI to confirm green, then ask for human review or merge normally.
 
 ## PR body template

@@ -39,7 +39,7 @@ This plan does not depend on ai-devkit being merged first. The lib copy is self-
   "check_ttl_hours": 12,
   "channel": "stable",
   "requires": {},
-  "changelog_url": "https://github.com/Invenco-Cloud-Systems-ICS/ai-ralph/blob/main/CHANGELOG.md"
+  "changelog_url": "https://github.com/amit-t/ai-ralph/blob/main/CHANGELOG.md"
 }
 ```
 
@@ -134,7 +134,7 @@ ls -la src/ 2>/dev/null
   "check_ttl_hours": 12,
   "channel": "stable",
   "requires": {},
-  "changelog_url": "https://github.com/Invenco-Cloud-Systems-ICS/ai-ralph/blob/main/CHANGELOG.md"
+  "changelog_url": "https://github.com/amit-t/ai-ralph/blob/main/CHANGELOG.md"
 }
 ```
 
