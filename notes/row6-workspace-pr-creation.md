@@ -108,19 +108,15 @@ After a workspace task succeeds and is committed to its per-task branch, the exe
 
 ### 4.1 Setup
 
-1. **Sync remotes** (per saved dual-remote workflow):
+1. **Sync the remote:**
    ```bash
    git fetch --all --prune --no-tags
    ```
-   Confirm `local main`, `origin/main`, `inv/main` heads. Note any divergence (origin/inv release-please diverge intentionally — **never force-align**).
+   Confirm `local main` and `origin/main` heads.
 
-2. **Branch off the freshest base.** Usually `inv/main` is upstream-of-record (workbench installer points to Invenco). Verify which is fresher:
+2. **Branch off `origin/main`:**
    ```bash
-   git rev-list --left-right --count origin/main...inv/main
-   ```
-   Base your working branch off whichever has the latest content:
-   ```bash
-   git checkout -b fix/workspace-pr-creation inv/main
+   git checkout -b fix/workspace-pr-creation origin/main
    ```
 
 ### 4.2 Code changes
@@ -269,35 +265,24 @@ Use the same mock pattern from `tests/unit/test_parallel_spawn_quoting.bats` (st
 
 ---
 
-## 6. Multi-remote PR workflow (mandatory)
+## 6. PR workflow
 
-ai-ralph is dual-homed. PRs go to **both** remotes. From the saved workflow memory:
+PRs go to `origin` (amit-t).
 
 | Remote | URL | gh account | SSH host |
 |---|---|---|---|
 | `origin` | `amit-t/ai-ralph` | `amit-t` (active by default) | `github.com-at` |
-| `inv` | `Invenco-Cloud-Systems-ICS/ai-ralph` | `amit-tiwari_vnt` | `github.com-atv` |
 
 Sequence:
 
-1. Branch off `inv/main` → implement → test → commit on `fix/workspace-pr-creation`.
-2. `git push -u inv fix/workspace-pr-creation` (SSH host `github.com-atv` handles auth — no gh switch needed for git push).
-3. **Switch gh account for the inv PR:**
+1. Branch off `origin/main` → implement → test → commit on `fix/workspace-pr-creation`.
+2. `git push -u origin fix/workspace-pr-creation`.
+3. Create the PR:
    ```bash
-   gh auth switch -u amit-tiwari_vnt
-   gh pr create --repo Invenco-Cloud-Systems-ICS/ai-ralph --base main \
-       --head fix/workspace-pr-creation --title "..." --body "..."
    gh auth switch -u amit-t
-   ```
-4. Cherry-pick onto origin/main:
-   ```bash
-   git checkout -b fix/workspace-pr-creation-origin origin/main
-   git cherry-pick <fix-commit-sha>
-   git push -u origin HEAD:fix/workspace-pr-creation
    gh pr create --repo amit-t/ai-ralph --base main \
        --head fix/workspace-pr-creation --title "..." --body "..."
    ```
-5. **Never force-align** divergent tags or release-please histories between origin and inv. Fetch with `--no-tags` if a tag clobber blocks a fetch (`v2.2.0` and similar diverge intentionally).
 
 ---
 
@@ -310,7 +295,7 @@ Sequence:
 - [ ] `shellcheck -S warning -x` clean (no new warnings).
 - [ ] New `tests/unit/test_workspace_pr_creation.bats` added, all tests pass.
 - [ ] Full unit suite green (no regressions).
-- [ ] Two PRs open: one against `Invenco-Cloud-Systems-ICS/ai-ralph`, one against `amit-t/ai-ralph` — both with the same fix.
+- [ ] PR open against `amit-t/ai-ralph` with the fix.
 - [ ] PR bodies cross-reference each other and link back to this doc.
 - [ ] Commit message follows Conventional Commits (`fix(loop): ...` or `feat(loop): ...`) — release-please reads these.
 
