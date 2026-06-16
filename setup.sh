@@ -19,9 +19,9 @@ LIB_DIR=""
 if [[ -d "../templates" ]]; then
     TEMPLATES_DIR="../templates"
     LIB_DIR="../lib"
-elif [[ -d "$HOME/.ralph/templates" ]]; then
-    TEMPLATES_DIR="$HOME/.ralph/templates"
-    LIB_DIR="$HOME/.ralph/lib"
+elif [[ -d "${RALPH_HOME:-$HOME/.ralph}/templates" ]]; then
+    TEMPLATES_DIR="${RALPH_HOME:-$HOME/.ralph}/templates"
+    LIB_DIR="${RALPH_HOME:-$HOME/.ralph}/lib"
 else
     echo "❌ Error: Templates directory not found."
     echo "   Expected at: ../templates or ~/.ralph/templates"

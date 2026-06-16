@@ -78,6 +78,8 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 
 Ralph has a **base install** (Claude Code engine) plus **optional engine installs** for Devin and Codex.
 
+> **This fork installs `per.`-prefixed commands.** It ships a `.ralph-prefix` file containing `per.`, so every command below is installed as `per.ralph`, `per.ralph-devin`, `per.rpc`, … under `~/.per.ralph`, leaving the stock `ralph`/`~/.ralph` namespace free for another devkit on the same machine. See [Side-by-side installs](#side-by-side-installs-command-name-prefix). The tables below show base names — read them with the `per.` prefix in front.
+
 ### Step 1 -- Clone this repo
 
 ```bash
@@ -147,6 +149,41 @@ If you have the aliases loaded, you can reinstall everything with:
 
 ```bash
 rp.install   # runs install.sh + devin/install_devin.sh + codex/install_codex.sh
+```
+
+### Side-by-side installs (command-name prefix)
+
+Two ai-ralph devkits (e.g. a personal fork and a company fork) can install on the **same machine without colliding**. A command-name prefix namespaces both the binaries and the home directory.
+
+**How the prefix resolves** (highest wins):
+
+1. `RALPH_CMD_PREFIX` environment variable (an explicit empty value forces *no* prefix).
+2. A `.ralph-prefix` file at the clone root (this fork ships one containing `per.`).
+3. Empty — stock `ralph` / `~/.ralph`.
+
+| Prefix | Commands | Home | Aliases |
+|---|---|---|---|
+| _(empty)_ | `ralph`, `ralph-devin`, `ralph.upgrade` | `~/.ralph` | `rpc`, `rpd`, `rpx` |
+| `per.` | `per.ralph`, `per.ralph-devin`, `per.ralph.upgrade` | `~/.per.ralph` | `per.rpc`, `per.rpd`, `per.rpx` |
+
+The prefix flows through everything: installed wrappers, `~/.<prefix>ralph` home, `uninstall.sh` (removes only the prefixed set), the update banner (`per.ralph.upgrade`), and the alias files (which read `RALPH_CMD_PREFIX` when sourced).
+
+```bash
+# This fork — installs per.* automatically (reads .ralph-prefix)
+./install.sh
+
+# Force a stock install from this clone (ignore .ralph-prefix)
+RALPH_CMD_PREFIX= ./install.sh
+
+# Use a custom prefix
+RALPH_CMD_PREFIX=work. ./install.sh   # -> work.ralph, ~/.work.ralph
+```
+
+For the alias files to match a prefixed install, export the same value before sourcing them (the installer also appends `export RALPH_CMD_PREFIX=…` to your `~/.zprofile`/`~/.bash_profile` for prefixed installs):
+
+```bash
+export RALPH_CMD_PREFIX=per.
+source /path/to/ai-ralph/ALIASES.sh        # -> per.rpc, per.ralph.setup, …
 ```
 
 ### Load aliases

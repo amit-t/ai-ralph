@@ -13,11 +13,23 @@
 set -e
 
 # Configuration
-INSTALL_DIR="$HOME/.local/bin"
-RALPH_HOME="$HOME/.ralph"
-CODEX_HOME="$RALPH_HOME/codex"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RALPH_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Command prefix — lets a fork install side-by-side with the stock devkit.
+# Resolution order: RALPH_CMD_PREFIX env > .ralph-prefix file at repo root > "".
+# Empty (default) => `ralph-codex`, `~/.ralph`. The personal fork ships
+# .ralph-prefix=per. => `per.ralph-codex`, `~/.per.ralph`, so it never collides
+# with the company devkit's plain `ralph-codex` install.
+if [[ -z "${RALPH_CMD_PREFIX+x}" && -f "$RALPH_ROOT/.ralph-prefix" ]]; then
+    RALPH_CMD_PREFIX="$(tr -d '[:space:]' < "$RALPH_ROOT/.ralph-prefix")"
+fi
+RALPH_CMD_PREFIX="${RALPH_CMD_PREFIX:-}"
+
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+# Home dir is namespaced by prefix: per. -> ~/.per.ralph ; empty -> ~/.ralph
+RALPH_HOME="${RALPH_HOME:-$HOME/.${RALPH_CMD_PREFIX}ralph}"
+CODEX_HOME="$RALPH_HOME/codex"
 
 # Colors
 RED='\033[0;31m'
@@ -126,91 +138,99 @@ install_scripts() {
     chmod +x "$CODEX_HOME/"*.sh
     chmod +x "$CODEX_HOME/lib/"*.sh
 
+    # Command-name prefix and resolved home baked into each wrapper. Heredocs are
+    # unquoted so $P / $RALPH_HOME / $CODEX_HOME / $RALPH_CMD_PREFIX expand now
+    # (install time); runtime vars ($@, $RALPH_HOME-in-body, etc.) are escaped \.
+    local P="$RALPH_CMD_PREFIX"
+
     # Create the main ralph-codex command
-    cat > "$INSTALL_DIR/ralph-codex" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-codex" << EOF
 #!/bin/bash
 # Ralph for Codex CLI - Main Command
 
-RALPH_HOME="$HOME/.ralph"
-CODEX_HOME="$RALPH_HOME/codex"
+export RALPH_CMD_PREFIX="$RALPH_CMD_PREFIX"
+export RALPH_CLONE="$SCRIPT_DIR"
+export RALPH_HOME="$RALPH_HOME"
+export CODEX_HOME="$CODEX_HOME"
 
-exec "$CODEX_HOME/ralph_loop_codex.sh" "$@"
+exec "\$CODEX_HOME/ralph_loop_codex.sh" "\$@"
 EOF
 
     # Create ralph-codex-monitor command
-    cat > "$INSTALL_DIR/ralph-codex-monitor" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-codex-monitor" << EOF
 #!/bin/bash
 # Ralph Codex Monitor - Global Command
 
-RALPH_HOME="$HOME/.ralph"
-CODEX_HOME="$RALPH_HOME/codex"
+export RALPH_HOME="$RALPH_HOME"
+export CODEX_HOME="$CODEX_HOME"
 
-exec "$CODEX_HOME/ralph_monitor_codex.sh" "$@"
+exec "\$CODEX_HOME/ralph_monitor_codex.sh" "\$@"
 EOF
 
     # Create ralph-codex-setup command
-    cat > "$INSTALL_DIR/ralph-codex-setup" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-codex-setup" << EOF
 #!/bin/bash
 # Ralph Codex Project Setup - Global Command
 
-RALPH_HOME="$HOME/.ralph"
-CODEX_HOME="$RALPH_HOME/codex"
+export RALPH_HOME="$RALPH_HOME"
+export CODEX_HOME="$CODEX_HOME"
 
-exec "$CODEX_HOME/setup_codex.sh" "$@"
+exec "\$CODEX_HOME/setup_codex.sh" "\$@"
 EOF
 
     # Create ralph-codex-import command
-    cat > "$INSTALL_DIR/ralph-codex-import" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-codex-import" << EOF
 #!/bin/bash
 # Ralph Codex PRD Import - Global Command
 
-RALPH_HOME="$HOME/.ralph"
-CODEX_HOME="$RALPH_HOME/codex"
+export RALPH_HOME="$RALPH_HOME"
+export CODEX_HOME="$CODEX_HOME"
 
-exec "$CODEX_HOME/ralph_import_codex.sh" "$@"
+exec "\$CODEX_HOME/ralph_import_codex.sh" "\$@"
 EOF
 
     # Create ralph-codex-enable command
-    cat > "$INSTALL_DIR/ralph-codex-enable" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-codex-enable" << EOF
 #!/bin/bash
 # Ralph Codex Enable - Interactive Wizard
 
-RALPH_HOME="$HOME/.ralph"
-CODEX_HOME="$RALPH_HOME/codex"
+export RALPH_HOME="$RALPH_HOME"
+export CODEX_HOME="$CODEX_HOME"
 
-exec "$CODEX_HOME/ralph_enable_codex.sh" "$@"
+exec "\$CODEX_HOME/ralph_enable_codex.sh" "\$@"
 EOF
 
     # Create ralph-codex-enable-ci command
-    cat > "$INSTALL_DIR/ralph-codex-enable-ci" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-codex-enable-ci" << EOF
 #!/bin/bash
 # Ralph Codex Enable CI - Non-Interactive Version
 
-RALPH_HOME="$HOME/.ralph"
-CODEX_HOME="$RALPH_HOME/codex"
+export RALPH_HOME="$RALPH_HOME"
+export CODEX_HOME="$CODEX_HOME"
 
-exec "$CODEX_HOME/ralph_enable_ci_codex.sh" "$@"
+exec "\$CODEX_HOME/ralph_enable_ci_codex.sh" "\$@"
 EOF
 
     # Create ralph-codex-plan command (Planning Mode - uses codex engine)
-    cat > "$INSTALL_DIR/ralph-codex-plan" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-codex-plan" << EOF
 #!/bin/bash
 # Ralph Codex Planning Mode - PRD-driven fix_plan.md builder
 # Uses shared ralph_plan.sh with --engine codex
 
-RALPH_HOME="$HOME/.ralph"
+export RALPH_HOME="$RALPH_HOME"
+export CODEX_HOME="$CODEX_HOME"
 
-exec "$RALPH_HOME/ralph_plan.sh" --engine codex "$@"
+exec "\$RALPH_HOME/ralph_plan.sh" --engine codex "\$@"
 EOF
 
     # Make all commands executable
-    chmod +x "$INSTALL_DIR/ralph-codex"
-    chmod +x "$INSTALL_DIR/ralph-codex-monitor"
-    chmod +x "$INSTALL_DIR/ralph-codex-setup"
-    chmod +x "$INSTALL_DIR/ralph-codex-import"
-    chmod +x "$INSTALL_DIR/ralph-codex-enable"
-    chmod +x "$INSTALL_DIR/ralph-codex-enable-ci"
-    chmod +x "$INSTALL_DIR/ralph-codex-plan"
+    chmod +x "$INSTALL_DIR/${P}ralph-codex"
+    chmod +x "$INSTALL_DIR/${P}ralph-codex-monitor"
+    chmod +x "$INSTALL_DIR/${P}ralph-codex-setup"
+    chmod +x "$INSTALL_DIR/${P}ralph-codex-import"
+    chmod +x "$INSTALL_DIR/${P}ralph-codex-enable"
+    chmod +x "$INSTALL_DIR/${P}ralph-codex-enable-ci"
+    chmod +x "$INSTALL_DIR/${P}ralph-codex-plan"
 
     log "SUCCESS" "Ralph Codex scripts installed to $INSTALL_DIR"
 }
@@ -287,21 +307,23 @@ main() {
     echo ""
     log "SUCCESS" "Ralph for Codex CLI installed successfully!"
     echo ""
+    local P="$RALPH_CMD_PREFIX"
+    [[ -n "$P" ]] && echo "Command prefix: '$P' (home: $RALPH_HOME)" && echo ""
     echo "Codex-specific commands available:"
-    echo "  ralph-codex --monitor         # Start Ralph loop with Codex + monitoring"
-    echo "  ralph-codex --help            # Show Ralph Codex options"
-    echo "  ralph-codex-setup my-project  # Create new Ralph+Codex project"
-    echo "  ralph-codex-enable            # Enable Ralph+Codex in existing project"
-    echo "  ralph-codex-enable-ci         # Non-interactive enable for CI/CD"
-    echo "  ralph-codex-import prd.md     # Convert PRD to Ralph+Codex project"
-    echo "  ralph-codex-plan              # Planning mode - build fix_plan from PRDs & beads"
-    echo "  ralph-codex-monitor           # Manual monitoring dashboard"
+    echo "  ${P}ralph-codex --monitor         # Start Ralph loop with Codex + monitoring"
+    echo "  ${P}ralph-codex --help            # Show Ralph Codex options"
+    echo "  ${P}ralph-codex-setup my-project  # Create new Ralph+Codex project"
+    echo "  ${P}ralph-codex-enable            # Enable Ralph+Codex in existing project"
+    echo "  ${P}ralph-codex-enable-ci         # Non-interactive enable for CI/CD"
+    echo "  ${P}ralph-codex-import prd.md     # Convert PRD to Ralph+Codex project"
+    echo "  ${P}ralph-codex-plan              # Planning mode - build fix_plan from PRDs & beads"
+    echo "  ${P}ralph-codex-monitor           # Manual monitoring dashboard"
     echo ""
     echo "Quick start:"
-    echo "  1. ralph-codex-setup my-awesome-project"
+    echo "  1. ${P}ralph-codex-setup my-awesome-project"
     echo "  2. cd my-awesome-project"
     echo "  3. # Edit .ralph/PROMPT.md with your requirements"
-    echo "  4. ralph-codex --monitor"
+    echo "  4. ${P}ralph-codex --monitor"
     echo ""
 
     if ! command -v codex &>/dev/null; then
@@ -322,13 +344,14 @@ case "${1:-install}" in
         ;;
     uninstall)
         log "INFO" "Uninstalling Ralph Codex..."
-        rm -f "$INSTALL_DIR/ralph-codex"
-        rm -f "$INSTALL_DIR/ralph-codex-monitor"
-        rm -f "$INSTALL_DIR/ralph-codex-setup"
-        rm -f "$INSTALL_DIR/ralph-codex-import"
-        rm -f "$INSTALL_DIR/ralph-codex-enable"
-        rm -f "$INSTALL_DIR/ralph-codex-enable-ci"
-        rm -f "$INSTALL_DIR/ralph-codex-plan"
+        P="$RALPH_CMD_PREFIX"
+        rm -f "$INSTALL_DIR/${P}ralph-codex"
+        rm -f "$INSTALL_DIR/${P}ralph-codex-monitor"
+        rm -f "$INSTALL_DIR/${P}ralph-codex-setup"
+        rm -f "$INSTALL_DIR/${P}ralph-codex-import"
+        rm -f "$INSTALL_DIR/${P}ralph-codex-enable"
+        rm -f "$INSTALL_DIR/${P}ralph-codex-enable-ci"
+        rm -f "$INSTALL_DIR/${P}ralph-codex-plan"
         rm -rf "$CODEX_HOME"
         log "SUCCESS" "Ralph for Codex CLI uninstalled"
         ;;

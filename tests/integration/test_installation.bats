@@ -132,6 +132,25 @@ EOF
 portable_timeout() { timeout "$@"; }
 EOF
 
+    # Versioning libs distributed by install_versioning()
+    cat > "$MOCK_SOURCE_DIR/lib/version-check.sh" << 'EOF'
+#!/bin/bash
+# Mock version-check.sh
+_wb_versioncheck() { :; }
+EOF
+
+    cat > "$MOCK_SOURCE_DIR/lib/bootstrap-detection.sh" << 'EOF'
+#!/bin/bash
+# Mock bootstrap-detection.sh
+EOF
+
+    # ralph-upgrade.sh is chmod'd + wrapped by install_versioning()
+    cat > "$MOCK_SOURCE_DIR/ralph-upgrade.sh" << 'EOF'
+#!/bin/bash
+# Mock ralph-upgrade.sh
+echo "Ralph upgrade running"
+EOF
+
     chmod +x "$MOCK_SOURCE_DIR"/*.sh
     chmod +x "$MOCK_SOURCE_DIR/lib"/*.sh
 }
@@ -606,4 +625,54 @@ EOF
 
     # Verify output contains success message
     [[ "$output" =~ "installed" ]] || [[ "$output" =~ "SUCCESS" ]] || [[ "$output" =~ "success" ]]
+}
+
+# =============================================================================
+# Test: Command-name prefix (RALPH_CMD_PREFIX) — side-by-side fork installs
+# =============================================================================
+
+@test "install.sh honors RALPH_CMD_PREFIX for command names" {
+    export RALPH_CMD_PREFIX="per."
+    run run_install
+    assert_success
+
+    # Prefixed binaries exist
+    assert_file_exists "$TEST_INSTALL_DIR/per.ralph"
+    assert_file_exists "$TEST_INSTALL_DIR/per.ralph-setup"
+    assert_file_exists "$TEST_INSTALL_DIR/per.ralph-plan"
+    assert_file_exists "$TEST_INSTALL_DIR/per.ralph.upgrade"
+
+    # Unprefixed names must NOT be created under a prefixed install
+    [[ ! -e "$TEST_INSTALL_DIR/ralph" ]]
+    [[ ! -e "$TEST_INSTALL_DIR/ralph-setup" ]]
+}
+
+@test "install.sh uses prefixed home dir ~/.per.ralph" {
+    export RALPH_CMD_PREFIX="per."
+    run run_install
+    assert_success
+
+    assert_dir_exists "$TEST_HOME/.per.ralph"
+    assert_file_exists "$TEST_HOME/.per.ralph/ralph_loop.sh"
+    # Stock home must not be created
+    [[ ! -d "$TEST_HOME/.ralph" ]]
+}
+
+@test "prefixed ralph wrapper bakes prefixed RALPH_HOME" {
+    export RALPH_CMD_PREFIX="per."
+    run run_install
+    assert_success
+
+    grep -q "export RALPH_HOME=\"$TEST_HOME/.per.ralph\"" "$TEST_INSTALL_DIR/per.ralph"
+    grep -q 'export RALPH_CMD_PREFIX="per."' "$TEST_INSTALL_DIR/per.ralph"
+}
+
+@test "default install (no prefix) is unchanged" {
+    run run_install
+    assert_success
+
+    assert_file_exists "$TEST_INSTALL_DIR/ralph"
+    [[ ! -e "$TEST_INSTALL_DIR/per.ralph" ]]
+    assert_dir_exists "$TEST_HOME/.ralph"
+    [[ ! -d "$TEST_HOME/.per.ralph" ]]
 }

@@ -45,40 +45,40 @@ setup() {
 # =============================================================================
 
 @test "rpc.p signature accepts optional M" {
-    grep -q '^rpc\.p()' "$CLAUDE_ALIASES"
+    grep -q 'rpc\.p()' "$CLAUDE_ALIASES"
     # The function body must contain --parallel "$1" and pass $2 if present.
-    grep '^rpc\.p()' "$CLAUDE_ALIASES" | grep -q -- '--parallel'
-    grep '^rpc\.p()' "$CLAUDE_ALIASES" | grep -qE '\$\{?2\}?'
+    grep 'rpc\.p()' "$CLAUDE_ALIASES" | grep -q -- '--parallel'
+    grep 'rpc\.p()' "$CLAUDE_ALIASES" | grep -qE '\$\{?2\}?'
 }
 
 @test "rpc.ws.p signature accepts optional M" {
-    grep -q '^rpc\.ws\.p()' "$CLAUDE_ALIASES"
-    grep '^rpc\.ws\.p()' "$CLAUDE_ALIASES" | grep -q -- '--parallel'
-    grep '^rpc\.ws\.p()' "$CLAUDE_ALIASES" | grep -qE '\$\{?2\}?'
+    grep -q 'rpc\.ws\.p()' "$CLAUDE_ALIASES"
+    grep 'rpc\.ws\.p()' "$CLAUDE_ALIASES" | grep -q -- '--parallel'
+    grep 'rpc\.ws\.p()' "$CLAUDE_ALIASES" | grep -qE '\$\{?2\}?'
 }
 
 @test "rpd.p signature accepts optional M" {
-    grep -q '^rpd\.p()' "$DEVIN_ALIASES"
-    grep '^rpd\.p()' "$DEVIN_ALIASES" | grep -q -- '--parallel'
-    grep '^rpd\.p()' "$DEVIN_ALIASES" | grep -qE '\$\{?2\}?'
+    grep -q 'rpd\.p()' "$DEVIN_ALIASES"
+    grep 'rpd\.p()' "$DEVIN_ALIASES" | grep -q -- '--parallel'
+    grep 'rpd\.p()' "$DEVIN_ALIASES" | grep -qE '\$\{?2\}?'
 }
 
 @test "rpd.ws.p signature accepts optional M" {
-    grep -q '^rpd\.ws\.p()' "$DEVIN_ALIASES"
-    grep '^rpd\.ws\.p()' "$DEVIN_ALIASES" | grep -q -- '--parallel'
-    grep '^rpd\.ws\.p()' "$DEVIN_ALIASES" | grep -qE '\$\{?2\}?'
+    grep -q 'rpd\.ws\.p()' "$DEVIN_ALIASES"
+    grep 'rpd\.ws\.p()' "$DEVIN_ALIASES" | grep -q -- '--parallel'
+    grep 'rpd\.ws\.p()' "$DEVIN_ALIASES" | grep -qE '\$\{?2\}?'
 }
 
 @test "rpx.p signature accepts optional M" {
-    grep -q '^rpx\.p()' "$CODEX_ALIASES"
-    grep '^rpx\.p()' "$CODEX_ALIASES" | grep -q -- '--parallel'
-    grep '^rpx\.p()' "$CODEX_ALIASES" | grep -qE '\$\{?2\}?'
+    grep -q 'rpx\.p()' "$CODEX_ALIASES"
+    grep 'rpx\.p()' "$CODEX_ALIASES" | grep -q -- '--parallel'
+    grep 'rpx\.p()' "$CODEX_ALIASES" | grep -qE '\$\{?2\}?'
 }
 
 @test "rpx.ws.p signature accepts optional M" {
-    grep -q '^rpx\.ws\.p()' "$CODEX_ALIASES"
-    grep '^rpx\.ws\.p()' "$CODEX_ALIASES" | grep -q -- '--parallel'
-    grep '^rpx\.ws\.p()' "$CODEX_ALIASES" | grep -qE '\$\{?2\}?'
+    grep -q 'rpx\.ws\.p()' "$CODEX_ALIASES"
+    grep 'rpx\.ws\.p()' "$CODEX_ALIASES" | grep -q -- '--parallel'
+    grep 'rpx\.ws\.p()' "$CODEX_ALIASES" | grep -qE '\$\{?2\}?'
 }
 
 # =============================================================================
