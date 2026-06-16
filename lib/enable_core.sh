@@ -466,9 +466,9 @@ detect_task_sources() {
 #   Returns 1 if not found
 #
 get_templates_dir() {
-    # Check global installation first
-    if [[ -d "$HOME/.ralph/templates" ]]; then
-        echo "$HOME/.ralph/templates"
+    # Check global installation first (honors RALPH_HOME for prefixed installs)
+    if [[ -d "${RALPH_HOME:-$HOME/.ralph}/templates" ]]; then
+        echo "${RALPH_HOME:-$HOME/.ralph}/templates"
         return 0
     fi
 

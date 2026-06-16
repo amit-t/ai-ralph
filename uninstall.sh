@@ -4,8 +4,30 @@
 set -e
 
 # Configuration
-INSTALL_DIR="$HOME/.local/bin"
-RALPH_HOME="$HOME/.ralph"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Command prefix (mirrors install.sh): env > .ralph-prefix file > "".
+if [[ -z "${RALPH_CMD_PREFIX+x}" && -f "$SCRIPT_DIR/.ralph-prefix" ]]; then
+    RALPH_CMD_PREFIX="$(tr -d '[:space:]' < "$SCRIPT_DIR/.ralph-prefix")"
+fi
+RALPH_CMD_PREFIX="${RALPH_CMD_PREFIX:-}"
+
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+RALPH_HOME="${RALPH_HOME:-$HOME/.${RALPH_CMD_PREFIX}ralph}"
+
+# Full set of installed command basenames (prefixed).
+RALPH_CMDS=(
+    "${RALPH_CMD_PREFIX}ralph"
+    "${RALPH_CMD_PREFIX}ralph-monitor"
+    "${RALPH_CMD_PREFIX}ralph-setup"
+    "${RALPH_CMD_PREFIX}ralph-import"
+    "${RALPH_CMD_PREFIX}ralph-migrate"
+    "${RALPH_CMD_PREFIX}ralph-enable"
+    "${RALPH_CMD_PREFIX}ralph-enable-ci"
+    "${RALPH_CMD_PREFIX}ralph-plan"
+    "${RALPH_CMD_PREFIX}ralph-check-beads"
+    "${RALPH_CMD_PREFIX}ralph.upgrade"
+)
 
 # Colors
 RED='\033[0;31m'
@@ -43,7 +65,7 @@ check_installation() {
     local installed=false
 
     # Check for any of the Ralph commands
-    for cmd in ralph ralph-monitor ralph-setup ralph-import; do
+    for cmd in "${RALPH_CMDS[@]}"; do
         if [ -f "$INSTALL_DIR/$cmd" ]; then
             installed=true
             break
@@ -58,7 +80,7 @@ check_installation() {
     if [ "$installed" = false ]; then
         log "WARN" "Ralph does not appear to be installed"
         echo "Checked locations:"
-        echo "  - $INSTALL_DIR/{ralph,ralph-monitor,ralph-setup,ralph-import}"
+        echo "  - $INSTALL_DIR/${RALPH_CMD_PREFIX}ralph*"
         echo "  - $RALPH_HOME"
         exit 0
     fi
@@ -75,7 +97,7 @@ show_removal_plan() {
 
     # Commands
     echo "Commands in $INSTALL_DIR:"
-    for cmd in ralph ralph-monitor ralph-setup ralph-import; do
+    for cmd in "${RALPH_CMDS[@]}"; do
         if [ -f "$INSTALL_DIR/$cmd" ]; then
             echo "  - $cmd"
         fi
@@ -118,7 +140,7 @@ remove_commands() {
     log "INFO" "Removing Ralph commands..."
 
     local removed=0
-    for cmd in ralph ralph-monitor ralph-setup ralph-import; do
+    for cmd in "${RALPH_CMDS[@]}"; do
         if [ -f "$INSTALL_DIR/$cmd" ]; then
             rm -f "$INSTALL_DIR/$cmd"
             removed=$((removed + 1))
