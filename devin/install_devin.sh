@@ -13,11 +13,22 @@
 set -e
 
 # Configuration
-INSTALL_DIR="$HOME/.local/bin"
-RALPH_HOME="$HOME/.ralph"
-DEVIN_HOME="$RALPH_HOME/devin"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RALPH_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Command prefix — lets a fork install side-by-side with the stock devkit.
+# Resolution order: RALPH_CMD_PREFIX env > .ralph-prefix file at repo root > "".
+# Empty (default) => `ralph-devin`, `~/.ralph`. The personal fork ships
+# .ralph-prefix=per. => `per.ralph-devin`, `~/.per.ralph`.
+if [[ -z "${RALPH_CMD_PREFIX+x}" && -f "$RALPH_ROOT/.ralph-prefix" ]]; then
+    RALPH_CMD_PREFIX="$(tr -d '[:space:]' < "$RALPH_ROOT/.ralph-prefix")"
+fi
+RALPH_CMD_PREFIX="${RALPH_CMD_PREFIX:-}"
+
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+# Home dir is namespaced by prefix: per. -> ~/.per.ralph ; empty -> ~/.ralph
+RALPH_HOME="${RALPH_HOME:-$HOME/.${RALPH_CMD_PREFIX}ralph}"
+DEVIN_HOME="$RALPH_HOME/devin"
 
 # Colors
 RED='\033[0;31m'
@@ -126,91 +137,98 @@ install_scripts() {
     chmod +x "$DEVIN_HOME/"*.sh
     chmod +x "$DEVIN_HOME/lib/"*.sh
 
+    # Command-name prefix and resolved homes baked into each wrapper. Heredocs are
+    # unquoted so $P / $RALPH_HOME / $DEVIN_HOME expand now (install time); runtime
+    # vars ($@, $BASH_SOURCE, etc.) are escaped with \. RALPH_HOME/DEVIN_HOME are
+    # exported so child scripts inherit the prefixed paths.
+    local P="$RALPH_CMD_PREFIX"
+
     # Create the main ralph-devin command
-    cat > "$INSTALL_DIR/ralph-devin" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-devin" << EOF
 #!/bin/bash
 # Ralph for Devin CLI - Main Command
 
-RALPH_HOME="$HOME/.ralph"
-DEVIN_HOME="$RALPH_HOME/devin"
+export RALPH_HOME="$RALPH_HOME"
+export DEVIN_HOME="$DEVIN_HOME"
 
-exec "$DEVIN_HOME/ralph_loop_devin.sh" "$@"
+exec "\$DEVIN_HOME/ralph_loop_devin.sh" "\$@"
 EOF
 
     # Create ralph-devin-monitor command
-    cat > "$INSTALL_DIR/ralph-devin-monitor" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-devin-monitor" << EOF
 #!/bin/bash
 # Ralph Devin Monitor - Global Command
 
-RALPH_HOME="$HOME/.ralph"
-DEVIN_HOME="$RALPH_HOME/devin"
+export RALPH_HOME="$RALPH_HOME"
+export DEVIN_HOME="$DEVIN_HOME"
 
-exec "$DEVIN_HOME/ralph_monitor_devin.sh" "$@"
+exec "\$DEVIN_HOME/ralph_monitor_devin.sh" "\$@"
 EOF
 
     # Create ralph-devin-setup command
-    cat > "$INSTALL_DIR/ralph-devin-setup" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-devin-setup" << EOF
 #!/bin/bash
 # Ralph Devin Project Setup - Global Command
 
-RALPH_HOME="$HOME/.ralph"
-DEVIN_HOME="$RALPH_HOME/devin"
+export RALPH_HOME="$RALPH_HOME"
+export DEVIN_HOME="$DEVIN_HOME"
 
-exec "$DEVIN_HOME/setup_devin.sh" "$@"
+exec "\$DEVIN_HOME/setup_devin.sh" "\$@"
 EOF
 
     # Create ralph-devin-import command
-    cat > "$INSTALL_DIR/ralph-devin-import" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-devin-import" << EOF
 #!/bin/bash
 # Ralph Devin PRD Import - Global Command
 
-RALPH_HOME="$HOME/.ralph"
-DEVIN_HOME="$RALPH_HOME/devin"
+export RALPH_HOME="$RALPH_HOME"
+export DEVIN_HOME="$DEVIN_HOME"
 
-exec "$DEVIN_HOME/ralph_import_devin.sh" "$@"
+exec "\$DEVIN_HOME/ralph_import_devin.sh" "\$@"
 EOF
 
     # Create ralph-devin-enable command
-    cat > "$INSTALL_DIR/ralph-devin-enable" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-devin-enable" << EOF
 #!/bin/bash
 # Ralph Devin Enable - Interactive Wizard
 
-RALPH_HOME="$HOME/.ralph"
-DEVIN_HOME="$RALPH_HOME/devin"
+export RALPH_HOME="$RALPH_HOME"
+export DEVIN_HOME="$DEVIN_HOME"
 
-exec "$DEVIN_HOME/ralph_enable_devin.sh" "$@"
+exec "\$DEVIN_HOME/ralph_enable_devin.sh" "\$@"
 EOF
 
     # Create ralph-devin-enable-ci command
-    cat > "$INSTALL_DIR/ralph-devin-enable-ci" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-devin-enable-ci" << EOF
 #!/bin/bash
 # Ralph Devin Enable CI - Non-Interactive Version
 
-RALPH_HOME="$HOME/.ralph"
-DEVIN_HOME="$RALPH_HOME/devin"
+export RALPH_HOME="$RALPH_HOME"
+export DEVIN_HOME="$DEVIN_HOME"
 
-exec "$DEVIN_HOME/ralph_enable_ci_devin.sh" "$@"
+exec "\$DEVIN_HOME/ralph_enable_ci_devin.sh" "\$@"
 EOF
 
     # Create ralph-devin-plan command (Planning Mode - uses devin engine)
-    cat > "$INSTALL_DIR/ralph-devin-plan" << 'EOF'
+    cat > "$INSTALL_DIR/${P}ralph-devin-plan" << EOF
 #!/bin/bash
 # Ralph Devin Planning Mode - PRD-driven fix_plan.md builder
 # Uses shared ralph_plan.sh with --engine devin
 
-RALPH_HOME="$HOME/.ralph"
+export RALPH_HOME="$RALPH_HOME"
+export DEVIN_HOME="$DEVIN_HOME"
 
-exec "$RALPH_HOME/ralph_plan.sh" --engine devin "$@"
+exec "\$RALPH_HOME/ralph_plan.sh" --engine devin "\$@"
 EOF
 
     # Make all commands executable
-    chmod +x "$INSTALL_DIR/ralph-devin"
-    chmod +x "$INSTALL_DIR/ralph-devin-monitor"
-    chmod +x "$INSTALL_DIR/ralph-devin-setup"
-    chmod +x "$INSTALL_DIR/ralph-devin-import"
-    chmod +x "$INSTALL_DIR/ralph-devin-enable"
-    chmod +x "$INSTALL_DIR/ralph-devin-enable-ci"
-    chmod +x "$INSTALL_DIR/ralph-devin-plan"
+    chmod +x "$INSTALL_DIR/${P}ralph-devin"
+    chmod +x "$INSTALL_DIR/${P}ralph-devin-monitor"
+    chmod +x "$INSTALL_DIR/${P}ralph-devin-setup"
+    chmod +x "$INSTALL_DIR/${P}ralph-devin-import"
+    chmod +x "$INSTALL_DIR/${P}ralph-devin-enable"
+    chmod +x "$INSTALL_DIR/${P}ralph-devin-enable-ci"
+    chmod +x "$INSTALL_DIR/${P}ralph-devin-plan"
 
     log "SUCCESS" "Ralph Devin scripts installed to $INSTALL_DIR"
 }
@@ -287,21 +305,23 @@ main() {
     echo ""
     log "SUCCESS" "Ralph for Devin CLI installed successfully!"
     echo ""
+    local P="$RALPH_CMD_PREFIX"
+    [[ -n "$P" ]] && echo "Command prefix: '$P' (home: $DEVIN_HOME)" && echo ""
     echo "Devin-specific commands available:"
-    echo "  ralph-devin --monitor         # Start Ralph loop with Devin + monitoring"
-    echo "  ralph-devin --help            # Show Ralph Devin options"
-    echo "  ralph-devin-setup my-project  # Create new Ralph+Devin project"
-    echo "  ralph-devin-enable            # Enable Ralph+Devin in existing project"
-    echo "  ralph-devin-enable-ci         # Non-interactive enable for CI/CD"
-    echo "  ralph-devin-import prd.md     # Convert PRD to Ralph+Devin project"
-    echo "  ralph-devin-plan              # Planning mode - build fix_plan from PRDs & beads"
-    echo "  ralph-devin-monitor           # Manual monitoring dashboard"
+    echo "  ${P}ralph-devin --monitor         # Start Ralph loop with Devin + monitoring"
+    echo "  ${P}ralph-devin --help            # Show Ralph Devin options"
+    echo "  ${P}ralph-devin-setup my-project  # Create new Ralph+Devin project"
+    echo "  ${P}ralph-devin-enable            # Enable Ralph+Devin in existing project"
+    echo "  ${P}ralph-devin-enable-ci         # Non-interactive enable for CI/CD"
+    echo "  ${P}ralph-devin-import prd.md     # Convert PRD to Ralph+Devin project"
+    echo "  ${P}ralph-devin-plan              # Planning mode - build fix_plan from PRDs & beads"
+    echo "  ${P}ralph-devin-monitor           # Manual monitoring dashboard"
     echo ""
     echo "Quick start:"
-    echo "  1. ralph-devin-setup my-awesome-project"
+    echo "  1. ${P}ralph-devin-setup my-awesome-project"
     echo "  2. cd my-awesome-project"
     echo "  3. # Edit .ralph/PROMPT.md with your requirements"
-    echo "  4. ralph-devin --monitor"
+    echo "  4. ${P}ralph-devin --monitor"
     echo ""
 
     if ! command -v devin &>/dev/null; then
@@ -322,13 +342,14 @@ case "${1:-install}" in
         ;;
     uninstall)
         log "INFO" "Uninstalling Ralph Devin..."
-        rm -f "$INSTALL_DIR/ralph-devin"
-        rm -f "$INSTALL_DIR/ralph-devin-monitor"
-        rm -f "$INSTALL_DIR/ralph-devin-setup"
-        rm -f "$INSTALL_DIR/ralph-devin-import"
-        rm -f "$INSTALL_DIR/ralph-devin-enable"
-        rm -f "$INSTALL_DIR/ralph-devin-enable-ci"
-        rm -f "$INSTALL_DIR/ralph-devin-plan"
+        P="$RALPH_CMD_PREFIX"
+        rm -f "$INSTALL_DIR/${P}ralph-devin"
+        rm -f "$INSTALL_DIR/${P}ralph-devin-monitor"
+        rm -f "$INSTALL_DIR/${P}ralph-devin-setup"
+        rm -f "$INSTALL_DIR/${P}ralph-devin-import"
+        rm -f "$INSTALL_DIR/${P}ralph-devin-enable"
+        rm -f "$INSTALL_DIR/${P}ralph-devin-enable-ci"
+        rm -f "$INSTALL_DIR/${P}ralph-devin-plan"
         rm -rf "$DEVIN_HOME"
         log "SUCCESS" "Ralph for Devin CLI uninstalled"
         ;;

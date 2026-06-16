@@ -154,11 +154,13 @@ _wb_cache_invalidate() {
 _wb_render_banner() {
   local tool="$1" local_v="$2" latest="$3" changelog="$4"
   local upgrade_cmd
+  # Prefixed forks (RALPH_CMD_PREFIX=per.) install per.ralph.upgrade, etc.
+  local pfx="${RALPH_CMD_PREFIX:-}"
   case "$tool" in
     devkit) upgrade_cmd="devkit.upgrade" ;;
-    ralph)  upgrade_cmd="ralph.upgrade"  ;;
+    ralph)  upgrade_cmd="${pfx}ralph.upgrade"  ;;
     wb)     upgrade_cmd="wb.upgrade"     ;;
-    *)      upgrade_cmd="${tool}.upgrade" ;;
+    *)      upgrade_cmd="${pfx}${tool}.upgrade" ;;
   esac
   printf "[%s v%s] update %s available. Run %s. Changelog: %s\n" \
     "$tool" "$local_v" "$latest" "$upgrade_cmd" "$changelog"

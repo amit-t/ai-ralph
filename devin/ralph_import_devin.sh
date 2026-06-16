@@ -252,8 +252,8 @@ fi
 # Ensure required files exist with defaults
 if [[ ! -f "$PROJECT_NAME/.ralph/PROMPT.md" ]]; then
     # Copy from templates
-    if [[ -f "$HOME/.ralph/templates/PROMPT.md" ]]; then
-        cp "$HOME/.ralph/templates/PROMPT.md" "$PROJECT_NAME/.ralph/PROMPT.md"
+    if [[ -f "${RALPH_HOME:-$HOME/.ralph}/templates/PROMPT.md" ]]; then
+        cp "${RALPH_HOME:-$HOME/.ralph}/templates/PROMPT.md" "$PROJECT_NAME/.ralph/PROMPT.md"
     else
         echo "# $PROJECT_NAME" > "$PROJECT_NAME/.ralph/PROMPT.md"
         echo "" >> "$PROJECT_NAME/.ralph/PROMPT.md"
@@ -263,8 +263,8 @@ if [[ ! -f "$PROJECT_NAME/.ralph/PROMPT.md" ]]; then
 fi
 
 if [[ ! -f "$PROJECT_NAME/.ralph/fix_plan.md" ]]; then
-    if [[ -f "$HOME/.ralph/templates/fix_plan.md" ]]; then
-        cp "$HOME/.ralph/templates/fix_plan.md" "$PROJECT_NAME/.ralph/fix_plan.md"
+    if [[ -f "${RALPH_HOME:-$HOME/.ralph}/templates/fix_plan.md" ]]; then
+        cp "${RALPH_HOME:-$HOME/.ralph}/templates/fix_plan.md" "$PROJECT_NAME/.ralph/fix_plan.md"
     else
         echo "# Fix Plan" > "$PROJECT_NAME/.ralph/fix_plan.md"
         echo "" >> "$PROJECT_NAME/.ralph/fix_plan.md"
@@ -274,8 +274,8 @@ if [[ ! -f "$PROJECT_NAME/.ralph/fix_plan.md" ]]; then
 fi
 
 if [[ ! -f "$PROJECT_NAME/.ralph/AGENT.md" ]]; then
-    if [[ -f "$HOME/.ralph/templates/AGENT.md" ]]; then
-        cp "$HOME/.ralph/templates/AGENT.md" "$PROJECT_NAME/.ralph/AGENT.md"
+    if [[ -f "${RALPH_HOME:-$HOME/.ralph}/templates/AGENT.md" ]]; then
+        cp "${RALPH_HOME:-$HOME/.ralph}/templates/AGENT.md" "$PROJECT_NAME/.ralph/AGENT.md"
     fi
 fi
 

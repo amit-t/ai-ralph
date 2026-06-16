@@ -8,9 +8,29 @@
 set -e
 
 # Configuration
-INSTALL_DIR="$HOME/.local/bin"
-RALPH_HOME="$HOME/.ralph"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RALPH_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Command prefix (mirrors install_devin.sh): env > .ralph-prefix file > "".
+if [[ -z "${RALPH_CMD_PREFIX+x}" && -f "$RALPH_ROOT/.ralph-prefix" ]]; then
+    RALPH_CMD_PREFIX="$(tr -d '[:space:]' < "$RALPH_ROOT/.ralph-prefix")"
+fi
+RALPH_CMD_PREFIX="${RALPH_CMD_PREFIX:-}"
+
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+RALPH_HOME="${RALPH_HOME:-$HOME/.${RALPH_CMD_PREFIX}ralph}"
 DEVIN_HOME="$RALPH_HOME/devin"
+
+# Full set of installed Devin command basenames (prefixed).
+RALPH_CMDS=(
+    "${RALPH_CMD_PREFIX}ralph-devin"
+    "${RALPH_CMD_PREFIX}ralph-devin-monitor"
+    "${RALPH_CMD_PREFIX}ralph-devin-setup"
+    "${RALPH_CMD_PREFIX}ralph-devin-import"
+    "${RALPH_CMD_PREFIX}ralph-devin-enable"
+    "${RALPH_CMD_PREFIX}ralph-devin-enable-ci"
+    "${RALPH_CMD_PREFIX}ralph-devin-plan"
+)
 
 # Colors
 RED='\033[0;31m'
@@ -38,7 +58,7 @@ log() {
 check_installation() {
     local installed=false
 
-    for cmd in ralph-devin ralph-devin-monitor ralph-devin-setup ralph-devin-import ralph-devin-enable ralph-devin-enable-ci; do
+    for cmd in "${RALPH_CMDS[@]}"; do
         if [[ -f "$INSTALL_DIR/$cmd" ]]; then
             installed=true
             break
@@ -52,7 +72,7 @@ check_installation() {
     if [[ "$installed" == "false" ]]; then
         log "WARN" "Ralph Devin does not appear to be installed"
         echo "Checked locations:"
-        echo "  - $INSTALL_DIR/ralph-devin*"
+        echo "  - $INSTALL_DIR/${RALPH_CMD_PREFIX}ralph-devin*"
         echo "  - $DEVIN_HOME"
         exit 0
     fi
@@ -65,7 +85,7 @@ show_removal_plan() {
     echo ""
 
     echo "Commands in $INSTALL_DIR:"
-    for cmd in ralph-devin ralph-devin-monitor ralph-devin-setup ralph-devin-import ralph-devin-enable ralph-devin-enable-ci; do
+    for cmd in "${RALPH_CMDS[@]}"; do
         if [[ -f "$INSTALL_DIR/$cmd" ]]; then
             echo "  - $cmd"
         fi
@@ -102,7 +122,7 @@ remove_commands() {
     log "INFO" "Removing Ralph Devin commands..."
 
     local removed=0
-    for cmd in ralph-devin ralph-devin-monitor ralph-devin-setup ralph-devin-import ralph-devin-enable ralph-devin-enable-ci; do
+    for cmd in "${RALPH_CMDS[@]}"; do
         if [[ -f "$INSTALL_DIR/$cmd" ]]; then
             rm -f "$INSTALL_DIR/$cmd"
             removed=$((removed + 1))
