@@ -350,6 +350,72 @@ get_past_timestamp() {
 }
 
 # =============================================================================
+# PERMISSION DENIAL + PROGRESS TESTS
+# =============================================================================
+
+@test "permission denials with STATUS COMPLETE do not open circuit breaker" {
+    create_closed_state
+    export CB_PERMISSION_DENIAL_THRESHOLD=2
+
+    jq '.consecutive_permission_denials = 1' "$CB_STATE_FILE" > "$CB_STATE_FILE.tmp"
+    mv "$CB_STATE_FILE.tmp" "$CB_STATE_FILE"
+
+    cat > "$RESPONSE_ANALYSIS_FILE" << 'EOF'
+{
+  "analysis": {
+    "has_permission_denials": true,
+    "permission_denial_count": 3,
+    "has_completion_signal": true,
+    "exit_signal": false,
+    "files_modified": 0,
+    "asking_questions": false
+  }
+}
+EOF
+
+    run record_loop_result 2 0 "false" 1000
+    assert_success
+
+    local state denials
+    state=$(jq -r '.state' "$CB_STATE_FILE")
+    denials=$(jq -r '.consecutive_permission_denials' "$CB_STATE_FILE")
+    [[ "$state" == "CLOSED" ]]
+    [[ "$denials" == "0" ]]
+}
+
+@test "permission denials with reported file modifications reset denial counter" {
+    create_closed_state
+    export CB_PERMISSION_DENIAL_THRESHOLD=2
+
+    jq '.consecutive_permission_denials = 1' "$CB_STATE_FILE" > "$CB_STATE_FILE.tmp"
+    mv "$CB_STATE_FILE.tmp" "$CB_STATE_FILE"
+
+    cat > "$RESPONSE_ANALYSIS_FILE" << 'EOF'
+{
+  "analysis": {
+    "has_permission_denials": true,
+    "permission_denial_count": 2,
+    "has_completion_signal": false,
+    "exit_signal": false,
+    "files_modified": 4,
+    "asking_questions": false
+  }
+}
+EOF
+
+    run record_loop_result 3 0 "false" 1000
+    assert_success
+
+    local state denials last_progress
+    state=$(jq -r '.state' "$CB_STATE_FILE")
+    denials=$(jq -r '.consecutive_permission_denials' "$CB_STATE_FILE")
+    last_progress=$(jq -r '.last_progress_loop' "$CB_STATE_FILE")
+    [[ "$state" == "CLOSED" ]]
+    [[ "$denials" == "0" ]]
+    [[ "$last_progress" == "3" ]]
+}
+
+# =============================================================================
 # parse_iso_to_epoch TESTS
 # =============================================================================
 
@@ -441,6 +507,33 @@ TUEOF
     [[ "$output" == *"--auto-reset-circuit"* ]]
 
     # Cleanup
+    cd /
+    rm -rf "$CLI_TEST_DIR"
+}
+
+@test "--reset-circuit-breaker flag resets circuit breaker" {
+    local RALPH_SCRIPT="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+
+    local CLI_TEST_DIR
+    CLI_TEST_DIR="$(mktemp -d)"
+    cd "$CLI_TEST_DIR"
+
+    export RALPH_DIR=".ralph"
+    mkdir -p "$RALPH_DIR" lib
+
+    cat > lib/date_utils.sh << 'DUEOF'
+get_iso_timestamp() { date -Iseconds 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S'; }
+DUEOF
+
+    cat > lib/circuit_breaker.sh << 'CBEOF'
+reset_circuit_breaker() { echo "Circuit breaker reset: $1"; }
+CBEOF
+
+    run bash "$RALPH_SCRIPT" --reset-circuit-breaker
+
+    assert_success
+    [[ "$output" == *"Circuit breaker reset: Manual reset via command line"* ]]
+
     cd /
     rm -rf "$CLI_TEST_DIR"
 }

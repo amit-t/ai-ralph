@@ -739,6 +739,13 @@ CLAUDE_OUTPUT_FORMAT="json"
 # Add project-specific tools as needed (e.g., Bash(cargo *), Bash(go *))
 ALLOWED_TOOLS="${allowed_tools}"
 
+# Headless permission bypass for trusted, isolated worktrees.
+# Default false. Set true for unattended workspace workers that need pipes,
+# redirects, command substitution, env prefixes, or heredoc commits.
+DANGEROUSLY_SKIP_PERMISSIONS=false
+# Alternative Claude CLI form:
+# CLAUDE_PERMISSION_MODE="bypassPermissions"
+
 # Session management
 SESSION_CONTINUITY=true
 SESSION_EXPIRY_HOURS=24
@@ -1102,6 +1109,13 @@ CLAUDE_OUTPUT_FORMAT="json"
 
 # Tool permissions (broad set — each repo may use different languages)
 ALLOWED_TOOLS="Write,Read,Edit,Bash(git *),Bash(which *),Bash(bd *),Bash(cd *),Bash(npm *),Bash(pnpm *),Bash(yarn *),Bash(bun *),Bash(npx *),Bash(node *),Bash(python *),Bash(pip *),Bash(uv *),Bash(pytest *),Bash(cargo *),Bash(go *)"
+
+# Headless permission bypass for trusted, isolated worktrees.
+# Default false. Set true for unattended workspace workers that need pipes,
+# redirects, command substitution, env prefixes, or heredoc commits.
+DANGEROUSLY_SKIP_PERMISSIONS=false
+# Alternative Claude CLI form:
+# CLAUDE_PERMISSION_MODE="bypassPermissions"
 
 # Session management
 SESSION_CONTINUITY=true

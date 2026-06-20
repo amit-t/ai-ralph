@@ -380,6 +380,8 @@ build_ralph_cmd_for_test() {
     local CLAUDE_ALLOWED_TOOLS="${6:-Write,Read,Edit,Bash(git *),Bash(which *),Bash(bd *),Bash(cd *),Bash(npm *),Bash(pnpm *),Bash(yarn *),Bash(bun *)}"
     local CLAUDE_USE_CONTINUE="${7:-true}"
     local CLAUDE_SESSION_EXPIRY_HOURS="${8:-24}"
+    local DANGEROUSLY_SKIP_PERMISSIONS="${9:-false}"
+    local CLAUDE_PERMISSION_MODE="${10:-}"
     local RALPH_DIR=".ralph"
 
     # Forward --calls if non-default
@@ -405,6 +407,13 @@ build_ralph_cmd_for_test() {
     # Forward --allowed-tools if non-default
     if [[ "$CLAUDE_ALLOWED_TOOLS" != "Write,Read,Edit,Bash(git *),Bash(which *),Bash(bd *),Bash(cd *),Bash(npm *),Bash(pnpm *),Bash(yarn *),Bash(bun *)" ]]; then
         ralph_cmd="$ralph_cmd --allowed-tools '$CLAUDE_ALLOWED_TOOLS'"
+    fi
+    # Forward permission bypass flags
+    if [[ "$DANGEROUSLY_SKIP_PERMISSIONS" == "true" ]]; then
+        ralph_cmd="$ralph_cmd --dangerously-skip-permissions"
+    fi
+    if [[ -n "$CLAUDE_PERMISSION_MODE" ]]; then
+        ralph_cmd="$ralph_cmd --permission-mode '$CLAUDE_PERMISSION_MODE'"
     fi
     # Forward --no-continue if session continuity disabled
     if [[ "$CLAUDE_USE_CONTINUE" == "false" ]]; then
@@ -448,13 +457,25 @@ build_ralph_cmd_for_test() {
     [[ "$result" == *"--session-expiry 48"* ]]
 }
 
+@test "monitor forwards --dangerously-skip-permissions parameter" {
+    local result=$(build_ralph_cmd_for_test 100 ".ralph/PROMPT.md" "json" "false" "15" "Write,Bash(git *),Read" "true" "24" "true")
+    [[ "$result" == *"--dangerously-skip-permissions"* ]]
+}
+
+@test "monitor forwards --permission-mode parameter" {
+    local result=$(build_ralph_cmd_for_test 100 ".ralph/PROMPT.md" "json" "false" "15" "Write,Bash(git *),Read" "true" "24" "false" "bypassPermissions")
+    [[ "$result" == *"--permission-mode 'bypassPermissions'"* ]]
+}
+
 @test "monitor forwards multiple parameters together" {
-    local result=$(build_ralph_cmd_for_test 50 ".ralph/PROMPT.md" "text" "true" "30" "Read,Write" "false" "12")
+    local result=$(build_ralph_cmd_for_test 50 ".ralph/PROMPT.md" "text" "true" "30" "Read,Write" "false" "12" "true" "bypassPermissions")
     [[ "$result" == *"--calls 50"* ]]
     [[ "$result" == *"--output-format text"* ]]
     [[ "$result" == *"--verbose"* ]]
     [[ "$result" == *"--timeout 30"* ]]
     [[ "$result" == *"--allowed-tools 'Read,Write'"* ]]
+    [[ "$result" == *"--dangerously-skip-permissions"* ]]
+    [[ "$result" == *"--permission-mode 'bypassPermissions'"* ]]
     [[ "$result" == *"--no-continue"* ]]
     [[ "$result" == *"--session-expiry 12"* ]]
 }

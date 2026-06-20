@@ -246,6 +246,7 @@ WT_DIR2=$(mktemp -d)
     git config user.email "test@test.com"
     git config user.name "Test"
     echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for existing PR path" >> work.txt
 )
 _WT_CURRENT_PATH="$WT_DIR2"
 _WT_CURRENT_BRANCH="ralph-claude/T-1-1234"
@@ -278,6 +279,7 @@ WT_DIR3=$(mktemp -d)
     git config user.email "test@test.com"
     git config user.name "Test"
     echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for gh failure path" >> work.txt
 )
 _WT_CURRENT_PATH="$WT_DIR3"
 _WT_CURRENT_BRANCH="ralph-claude/T-1-fail"
@@ -305,6 +307,7 @@ WT_DIR4=$(mktemp -d)
     git config user.email "test@test.com"
     git config user.name "Test"
     echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for label path" >> work.txt
 )
 _WT_CURRENT_PATH="$WT_DIR4"
 _WT_CURRENT_BRANCH="ralph-claude/T-1-gates"
@@ -448,6 +451,7 @@ CMP_DIR=$(mktemp -d)
     git config user.email "test@test.com"
     git config user.name "Test"
     echo "work" > work.txt && git add . && git commit -q -m "init"
+    echo "source diff for compare URL path" >> work.txt
     git remote add origin "https://github.com/owner/ralph-test.git"
 )
 _WT_CURRENT_PATH="$CMP_DIR"

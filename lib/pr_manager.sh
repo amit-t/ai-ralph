@@ -102,6 +102,58 @@ _pr_print_compare_url() {
     return 0
 }
 
+# ── _pr_require_committable_source_diff ──────────────────────────────────────
+# Blocks empty / artifact-only PR branches. Ralph may write .ralph artifacts such
+# as .ralph/.quality_gate_results after an agent run; those files are not proof
+# of source work and must not be pushed as a phantom PR.
+_pr_resolve_base_ref() {
+    local base_branch="${1:-main}"
+
+    if git rev-parse --verify --quiet "$base_branch" >/dev/null 2>&1; then
+        echo "$base_branch"
+        return 0
+    fi
+    if git rev-parse --verify --quiet "origin/$base_branch" >/dev/null 2>&1; then
+        echo "origin/$base_branch"
+        return 0
+    fi
+    if git rev-parse --verify --quiet "refs/remotes/origin/$base_branch" >/dev/null 2>&1; then
+        echo "refs/remotes/origin/$base_branch"
+        return 0
+    fi
+
+    return 1
+}
+
+_pr_has_committable_source_diff() {
+    local base_branch="${1:-main}"
+    local base_ref diff_names
+
+    if base_ref=$(_pr_resolve_base_ref "$base_branch"); then
+        diff_names=$(git diff --name-only "$base_ref...HEAD" -- . ':(exclude).ralph/**' 2>/dev/null || true)
+    else
+        # Last-resort guard for tests or unusual repos without a local base ref:
+        # still rejects artifact-only HEAD commits.
+        diff_names=$(git diff-tree --no-commit-id --name-only -r HEAD -- . ':(exclude).ralph/**' 2>/dev/null || true)
+    fi
+
+    [[ -n "$diff_names" ]]
+}
+
+_pr_require_committable_source_diff() {
+    local base_branch="${1:-main}"
+    local branch_name="$2"
+
+    if _pr_has_committable_source_diff "$base_branch"; then
+        return 0
+    fi
+
+    local message="worker produced no committable source diff; check for denied commit commands (branch: ${branch_name:-unknown}, base: $base_branch)"
+    echo "$message" >&2
+    log_status "ERROR" "$message"
+    return 1
+}
+
 # ── pr_preflight_check ────────────────────────────────────────────────────────
 # Check git remote, gh CLI, gh auth. Sets RALPH_PR_PUSH_CAPABLE and
 # RALPH_PR_GH_CAPABLE. Always returns 0.
@@ -326,6 +378,16 @@ worktree_commit_and_pr() {
     local commit_result=$?
     if [[ $commit_result -ne 0 ]]; then return 1; fi
 
+    # ── Step 1b: Ensure branch contains real source diff before push/PR ─────
+    if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
+        (
+            cd "$_WT_CURRENT_PATH" || exit 1
+            _pr_require_committable_source_diff "$base_branch" "$_WT_CURRENT_BRANCH"
+        )
+        local diff_result=$?
+        if [[ $diff_result -ne 0 ]]; then return 1; fi
+    fi
+
     # ── Step 2: Push branch ──────────────────────────────────────────────────
     if [[ "$RALPH_PR_PUSH_CAPABLE" != "true" ]]; then
         log_status "WARN" "Push skipped — no git remote. Branch: $_WT_CURRENT_BRANCH"
@@ -453,6 +515,14 @@ worktree_fallback_branch_pr() {
                       | sed 's@^refs/remotes/origin/@@')
     fi
     [[ -z "$base_branch" ]] && base_branch="main"
+
+    # ── Step 4b: Ensure branch contains real source diff before push/PR ─────
+    if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
+        if ! _pr_require_committable_source_diff "$base_branch" "$FALLBACK_BRANCH"; then
+            [[ -n "$original_branch" ]] && git checkout "$original_branch" >/dev/null 2>&1 || true
+            return 1
+        fi
+    fi
 
     # ── Step 5: Push ─────────────────────────────────────────────────────────
     if [[ "$RALPH_PR_PUSH_CAPABLE" != "true" ]]; then

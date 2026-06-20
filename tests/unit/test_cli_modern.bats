@@ -483,6 +483,36 @@ EOF
     [[ "$output" == *"no-continue"* ]] || skip "--no-continue help not yet added"
 }
 
+@test "show_help includes explicit permission bypass options" {
+    run bash "${BATS_TEST_DIRNAME}/../../ralph_loop.sh" --help
+
+    assert_success
+    [[ "$output" == *"--dangerously-skip-permissions"* ]]
+    [[ "$output" == *"--permission-mode MODE"* ]]
+}
+
+@test "ralph_loop captures permission bypass env vars before defaults" {
+    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+
+    run grep '_env_DANGEROUSLY_SKIP_PERMISSIONS=' "$script"
+    assert_success
+    [[ "$output" == *'${DANGEROUSLY_SKIP_PERMISSIONS:-}'* ]]
+
+    run grep '_env_CLAUDE_PERMISSION_MODE=' "$script"
+    assert_success
+    [[ "$output" == *'${CLAUDE_PERMISSION_MODE:-}'* ]]
+}
+
+@test "build_claude_command can add permission bypass flags" {
+    local script="${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+
+    run grep -A16 'DANGEROUSLY_SKIP_PERMISSIONS.*true' "$script"
+    assert_success
+    [[ "$output" == *"--dangerously-skip-permissions"* ]]
+    [[ "$output" == *"--permission-mode"* ]]
+    [[ "$output" == *"bypassPermissions"* ]]
+}
+
 # =============================================================================
 # BUILD_CLAUDE_COMMAND TESTS (TDD)
 # Tests for the fix of --prompt-file -> -p flag
