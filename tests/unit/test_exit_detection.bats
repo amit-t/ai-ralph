@@ -687,6 +687,15 @@ should_exit_gracefully_with_denials() {
     if [[ -f "$RESPONSE_ANALYSIS_FILE" ]]; then
         local has_permission_denials=$(jq -r '.analysis.has_permission_denials // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
         if [[ "$has_permission_denials" == "true" ]]; then
+            local has_completion_signal exit_signal files_modified
+            has_completion_signal=$(jq -r '.analysis.has_completion_signal // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
+            exit_signal=$(jq -r '.analysis.exit_signal // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
+            files_modified=$(jq -r '.analysis.files_modified // 0' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "0")
+            files_modified=$((files_modified + 0))
+            if [[ "$has_completion_signal" == "true" || "$exit_signal" == "true" || $files_modified -gt 0 ]]; then
+                echo ""
+                return 1
+            fi
             echo "permission_denied"
             return 0
         fi
@@ -746,6 +755,27 @@ EOF
 
     result=$(should_exit_gracefully_with_denials)
     assert_equal "$result" "permission_denied"
+}
+
+@test "should_exit_gracefully continues when permission denials include completion signal" {
+    echo '{"test_only_loops": [], "done_signals": [], "completion_indicators": []}' > "$EXIT_SIGNALS_FILE"
+
+    cat > "$RESPONSE_ANALYSIS_FILE" << 'EOF'
+{
+    "loop_number": 1,
+    "analysis": {
+        "has_completion_signal": true,
+        "exit_signal": false,
+        "files_modified": 0,
+        "has_permission_denials": true,
+        "permission_denial_count": 2,
+        "denied_commands": ["pnpm verify | tail -3"]
+    }
+}
+EOF
+
+    result=$(should_exit_gracefully_with_denials || true)
+    assert_equal "$result" ""
 }
 
 # Test 37: No exit when no permission denials

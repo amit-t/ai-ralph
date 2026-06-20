@@ -204,18 +204,6 @@ record_loop_result() {
         ralph_files_modified=$((ralph_files_modified + 0))
     fi
 
-    # Track permission denials (Issue #101)
-    local has_permission_denials="false"
-    if [[ -f "$response_analysis_file" ]]; then
-        has_permission_denials=$(jq -r '.analysis.has_permission_denials // false' "$response_analysis_file" 2>/dev/null || echo "false")
-    fi
-
-    if [[ "$has_permission_denials" == "true" ]]; then
-        consecutive_permission_denials=$((consecutive_permission_denials + 1))
-    else
-        consecutive_permission_denials=0
-    fi
-
     # Check if Claude is asking questions (Issue #190 Bug 2)
     local asking_questions="false"
     if [[ -f "$response_analysis_file" ]]; then
@@ -245,6 +233,22 @@ record_loop_result() {
         has_progress=false
     else
         consecutive_no_progress=$((consecutive_no_progress + 1))
+    fi
+
+    # Track permission denials (Issue #101), but do not punish successful work.
+    # Headless Claude can complete a task while also reporting denied shell
+    # attempts (pipes, redirects, env prefixes, heredocs). If progress or
+    # completion is proven, reset this counter so the worker can continue to
+    # quality gates and PR creation instead of stranding committed work.
+    local has_permission_denials="false"
+    if [[ -f "$response_analysis_file" ]]; then
+        has_permission_denials=$(jq -r '.analysis.has_permission_denials // false' "$response_analysis_file" 2>/dev/null || echo "false")
+    fi
+
+    if [[ "$has_permission_denials" == "true" && "$has_progress" != "true" ]]; then
+        consecutive_permission_denials=$((consecutive_permission_denials + 1))
+    else
+        consecutive_permission_denials=0
     fi
 
     # Detect same error repetition

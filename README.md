@@ -1060,6 +1060,7 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 --reset-circuit         Reset circuit breaker
 --circuit-status        Show circuit breaker status
 --auto-reset-circuit    Auto-reset circuit breaker on startup
+--reset-circuit-breaker Alias for --reset-circuit
 --reset-session         Reset session state
 --task NUM|ID           Execute a specific task by number (1-based) or bold ID (e.g. R05)
 --qg                    Quality-gate fix mode: run gates, loop AI until gates pass or MAX_QG_RETRIES hit
@@ -1102,6 +1103,9 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 --model MODEL           Model: opus, sonnet
 --output-format FORMAT  Output format: json, text
 --allowed-tools TOOLS   Restrict allowed tools
+--dangerously-skip-permissions
+                        Bypass Claude permission prompts for trusted isolated workers
+--permission-mode MODE  Pass Claude permission mode (e.g. bypassPermissions)
 --yolo                  Skip all permission checks (plan mode)
 --superpowers           Load superpowers plugin (plan mode)
 ```

@@ -74,6 +74,8 @@ _env_MAX_CALLS_PER_HOUR="${MAX_CALLS_PER_HOUR:-}"
 _env_CLAUDE_TIMEOUT_MINUTES="${CLAUDE_TIMEOUT_MINUTES:-}"
 _env_CLAUDE_OUTPUT_FORMAT="${CLAUDE_OUTPUT_FORMAT:-}"
 _env_CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-}"
+_env_DANGEROUSLY_SKIP_PERMISSIONS="${DANGEROUSLY_SKIP_PERMISSIONS:-}"
+_env_CLAUDE_PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-}"
 _env_CLAUDE_USE_CONTINUE="${CLAUDE_USE_CONTINUE:-}"
 _env_CLAUDE_SESSION_EXPIRY_HOURS="${CLAUDE_SESSION_EXPIRY_HOURS:-}"
 _env_VERBOSE_PROGRESS="${VERBOSE_PROGRESS:-}"
@@ -84,6 +86,8 @@ _env_WORKTREE_MERGE_STRATEGY="${WORKTREE_MERGE_STRATEGY:-}"
 _env_WORKTREE_QUALITY_GATES="${WORKTREE_QUALITY_GATES:-}"
 _env_CLAUDE_CODE_CMD="${CLAUDE_CODE_CMD:-}"
 _env_CLAUDE_AUTO_UPDATE="${CLAUDE_AUTO_UPDATE:-}"
+_DANGEROUSLY_SKIP_PERMISSIONS_FROM_CLI=false
+_CLAUDE_PERMISSION_MODE_FROM_CLI=false
 
 # Now set defaults (only if not already set by environment)
 MAX_CALLS_PER_HOUR="${MAX_CALLS_PER_HOUR:-100}"
@@ -93,6 +97,8 @@ CLAUDE_TIMEOUT_MINUTES="${CLAUDE_TIMEOUT_MINUTES:-15}"
 # Modern Claude CLI configuration (Phase 1.1)
 CLAUDE_OUTPUT_FORMAT="${CLAUDE_OUTPUT_FORMAT:-json}"
 CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-Write,Read,Edit,Bash(git *),Bash(which *),Bash(bd *),Bash(cd *),Bash(npm *),Bash(pnpm *),Bash(yarn *),Bash(bun *),Bash(pytest)}"
+DANGEROUSLY_SKIP_PERMISSIONS="${DANGEROUSLY_SKIP_PERMISSIONS:-false}"
+CLAUDE_PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-}"
 CLAUDE_USE_CONTINUE="${CLAUDE_USE_CONTINUE:-true}"
 CLAUDE_SESSION_FILE="$RALPH_DIR/.claude_session_id" # Session ID persistence file
 CLAUDE_MIN_VERSION="2.0.76"              # Minimum required Claude CLI version
@@ -153,6 +159,8 @@ RALPHRC_LOADED=false
 #   - CLAUDE_TIMEOUT_MINUTES
 #   - CLAUDE_OUTPUT_FORMAT
 #   - ALLOWED_TOOLS (mapped to CLAUDE_ALLOWED_TOOLS)
+#   - DANGEROUSLY_SKIP_PERMISSIONS
+#   - CLAUDE_PERMISSION_MODE
 #   - SESSION_CONTINUITY (mapped to CLAUDE_USE_CONTINUE)
 #   - SESSION_EXPIRY_HOURS (mapped to CLAUDE_SESSION_EXPIRY_HOURS)
 #   - CB_NO_PROGRESS_THRESHOLD
@@ -166,6 +174,9 @@ load_ralphrc() {
     if [[ ! -f "$RALPHRC_FILE" ]]; then
         return 0
     fi
+
+    local _cli_DANGEROUSLY_SKIP_PERMISSIONS="$DANGEROUSLY_SKIP_PERMISSIONS"
+    local _cli_CLAUDE_PERMISSION_MODE="$CLAUDE_PERMISSION_MODE"
 
     # Source .ralphrc (this may override default values)
     # shellcheck source=/dev/null
@@ -192,6 +203,16 @@ load_ralphrc() {
     [[ -n "$_env_CLAUDE_TIMEOUT_MINUTES" ]] && CLAUDE_TIMEOUT_MINUTES="$_env_CLAUDE_TIMEOUT_MINUTES"
     [[ -n "$_env_CLAUDE_OUTPUT_FORMAT" ]] && CLAUDE_OUTPUT_FORMAT="$_env_CLAUDE_OUTPUT_FORMAT"
     [[ -n "$_env_CLAUDE_ALLOWED_TOOLS" ]] && CLAUDE_ALLOWED_TOOLS="$_env_CLAUDE_ALLOWED_TOOLS"
+    if [[ "$_DANGEROUSLY_SKIP_PERMISSIONS_FROM_CLI" == "true" ]]; then
+        DANGEROUSLY_SKIP_PERMISSIONS="$_cli_DANGEROUSLY_SKIP_PERMISSIONS"
+    elif [[ -n "$_env_DANGEROUSLY_SKIP_PERMISSIONS" ]]; then
+        DANGEROUSLY_SKIP_PERMISSIONS="$_env_DANGEROUSLY_SKIP_PERMISSIONS"
+    fi
+    if [[ "$_CLAUDE_PERMISSION_MODE_FROM_CLI" == "true" ]]; then
+        CLAUDE_PERMISSION_MODE="$_cli_CLAUDE_PERMISSION_MODE"
+    elif [[ -n "$_env_CLAUDE_PERMISSION_MODE" ]]; then
+        CLAUDE_PERMISSION_MODE="$_env_CLAUDE_PERMISSION_MODE"
+    fi
     [[ -n "$_env_CLAUDE_USE_CONTINUE" ]] && CLAUDE_USE_CONTINUE="$_env_CLAUDE_USE_CONTINUE"
     [[ -n "$_env_CLAUDE_SESSION_EXPIRY_HOURS" ]] && CLAUDE_SESSION_EXPIRY_HOURS="$_env_CLAUDE_SESSION_EXPIRY_HOURS"
     [[ -n "$_env_VERBOSE_PROGRESS" ]] && VERBOSE_PROGRESS="$_env_VERBOSE_PROGRESS"
@@ -375,6 +396,13 @@ setup_tmux_session() {
     # Forward --allowed-tools if non-default
     if [[ "$CLAUDE_ALLOWED_TOOLS" != "Write,Read,Edit,Bash(git *),Bash(which *),Bash(bd *),Bash(cd *),Bash(npm *),Bash(pnpm *),Bash(yarn *),Bash(bun *),Bash(pytest)" ]]; then
         ralph_cmd="$ralph_cmd --allowed-tools '$CLAUDE_ALLOWED_TOOLS'"
+    fi
+    # Forward permission bypass flags
+    if [[ "$DANGEROUSLY_SKIP_PERMISSIONS" == "true" ]]; then
+        ralph_cmd="$ralph_cmd --dangerously-skip-permissions"
+    fi
+    if [[ -n "$CLAUDE_PERMISSION_MODE" ]]; then
+        ralph_cmd="$ralph_cmd --permission-mode '$CLAUDE_PERMISSION_MODE'"
     fi
     # Forward --no-continue if session continuity disabled
     if [[ "$CLAUDE_USE_CONTINUE" == "false" ]]; then
@@ -693,6 +721,15 @@ should_exit_gracefully() {
         local has_permission_denials
         has_permission_denials=$(jq -r '.analysis.has_permission_denials // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
         if [[ "$has_permission_denials" == "true" ]]; then
+            local has_completion_signal exit_signal files_modified
+            has_completion_signal=$(jq -r '.analysis.has_completion_signal // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
+            exit_signal=$(jq -r '.analysis.exit_signal // false' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "false")
+            files_modified=$(jq -r '.analysis.files_modified // 0' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "0")
+            files_modified=$((files_modified + 0))
+            if [[ "$has_completion_signal" == "true" || "$exit_signal" == "true" || $files_modified -gt 0 ]]; then
+                log_status "WARN" "Permission denials detected, but task reported progress/completion; continuing to preserve completed work"
+                return 1
+            fi
             local denied_count
             denied_count=$(jq -r '.analysis.permission_denial_count // 0' "$RESPONSE_ANALYSIS_FILE" 2>/dev/null || echo "0")
             local denied_cmds
@@ -1240,10 +1277,10 @@ build_claude_command() {
     local session_id=$3
     local worktree_directive="${4:-}"
 
-    # Reset global array
-    # Note: We do NOT use --dangerously-skip-permissions here. Tool permissions
-    # are controlled via --allowedTools from CLAUDE_ALLOWED_TOOLS in .ralphrc.
-    # This preserves the permission denial circuit breaker (Issue #101).
+    # Reset global array. By default tool permissions are controlled via
+    # --allowedTools from CLAUDE_ALLOWED_TOOLS in .ralphrc. Headless workers may
+    # explicitly opt into bypass mode for isolated worktrees via
+    # DANGEROUSLY_SKIP_PERMISSIONS=true or CLAUDE_PERMISSION_MODE=bypassPermissions.
     CLAUDE_CMD_ARGS=("$CLAUDE_CODE_CMD")
 
     # Check if prompt file exists
@@ -1255,6 +1292,13 @@ build_claude_command() {
     # Add output format flag
     if [[ "$CLAUDE_OUTPUT_FORMAT" == "json" ]]; then
         CLAUDE_CMD_ARGS+=("--output-format" "json")
+    fi
+
+    if [[ "$DANGEROUSLY_SKIP_PERMISSIONS" == "true" ]]; then
+        CLAUDE_CMD_ARGS+=("--dangerously-skip-permissions")
+    elif [[ -n "$CLAUDE_PERMISSION_MODE" ]]; then
+        # Example: CLAUDE_PERMISSION_MODE=bypassPermissions
+        CLAUDE_CMD_ARGS+=("--permission-mode" "$CLAUDE_PERMISSION_MODE")
     fi
 
     # Add allowed tools (each tool as separate array element)
@@ -3397,6 +3441,7 @@ Options:
     -l, --live              Show Claude Code output in real-time (auto-switches to JSON output)
     -t, --timeout MIN       Set Claude Code execution timeout in minutes (default: $CLAUDE_TIMEOUT_MINUTES)
     --reset-circuit         Reset circuit breaker to CLOSED state
+    --reset-circuit-breaker Alias for --reset-circuit
     --circuit-status        Show circuit breaker status and exit
     --auto-reset-circuit    Auto-reset circuit breaker on startup (bypasses cooldown)
     --reset-session         Reset session state and exit (clears session continuity)
@@ -3411,6 +3456,9 @@ Modern CLI Options:
     --output-format FORMAT  Set Claude output format: json or text (default: $CLAUDE_OUTPUT_FORMAT)
                             Note: --live mode requires JSON and will auto-switch
     --allowed-tools TOOLS   Comma-separated list of allowed tools (default: $CLAUDE_ALLOWED_TOOLS)
+    --dangerously-skip-permissions
+                            Pass Claude --dangerously-skip-permissions for trusted isolated workers
+    --permission-mode MODE  Pass Claude --permission-mode MODE (for example: bypassPermissions)
     --no-continue           Disable session continuity across loops
     --session-expiry HOURS  Set session expiration time in hours (default: $CLAUDE_SESSION_EXPIRY_HOURS)
 
@@ -3559,7 +3607,7 @@ while [[ $# -gt 0 ]]; do
             fi
             shift 2
             ;;
-        --reset-circuit)
+        --reset-circuit|--reset-circuit-breaker)
             # Source the circuit breaker library
             SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
             source "$SCRIPT_DIR/lib/circuit_breaker.sh"
@@ -3597,6 +3645,20 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             CLAUDE_ALLOWED_TOOLS="$2"
+            shift 2
+            ;;
+        --dangerously-skip-permissions)
+            DANGEROUSLY_SKIP_PERMISSIONS=true
+            _DANGEROUSLY_SKIP_PERMISSIONS_FROM_CLI=true
+            shift
+            ;;
+        --permission-mode)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: --permission-mode requires MODE"
+                exit 1
+            fi
+            CLAUDE_PERMISSION_MODE="$2"
+            _CLAUDE_PERMISSION_MODE_FROM_CLI=true
             shift 2
             ;;
         --no-continue)
