@@ -43,6 +43,14 @@ detect_terminal_env() {
         return 0
     fi
 
+    # cmux (https://cmux.io) — TERM_PROGRAM is ghostty, but it exports
+    # CMUX_WORKSPACE_ID/CMUX_SURFACE_ID and drives panes via the `cmux` CLI.
+    # Checked after iTerm/IDE so explicit signals win when both are present.
+    if [[ -n "${CMUX_WORKSPACE_ID:-}" ]]; then
+        echo "cmux"
+        return 0
+    fi
+
     # Fallback: unknown terminal
     echo "other"
     return 0
@@ -150,6 +158,79 @@ APPLESCRIPT
     echo ""
     echo -e "${_PS_GREEN}All $count agents spawned as iTerm2 tabs.${_PS_NC}"
     echo -e "${_PS_YELLOW}Tip: Use Cmd+Shift+] / Cmd+Shift+[ to switch between tabs.${_PS_NC}"
+
+    return 0
+}
+
+# Spawn agents as cmux panes (https://cmux.io).
+# cmux exposes a `cmux` CLI: `new-split <dir>` opens a pane and prints
+# "OK surface:<n> workspace:<n>" on stdout; `send` types text into a surface
+# and `send-key ... Enter` submits it. One pane is opened per worker, each
+# running the given command. On ANY cmux failure (CLI missing, split error,
+# send error) the remaining workers fall back to spawn_background_agents so
+# behavior never regresses to "no visible panes, silent background".
+spawn_cmux_panes() {
+    local count="$1"
+    shift
+    local cmd_args=("$@")
+    local cwd
+    cwd="$(pwd)"
+
+    # Preflight: cmux CLI present and a workspace id available. If not, the
+    # whole batch goes to background (no panes were opened, so no double-spawn).
+    if [[ -z "${CMUX_WORKSPACE_ID:-}" ]] || ! command -v cmux >/dev/null 2>&1; then
+        echo -e "${_PS_YELLOW}cmux CLI/workspace unavailable, falling back to background processes...${_PS_NC}"
+        spawn_background_agents "$count" "${cmd_args[@]}"
+        return $?
+    fi
+
+    local workspace="$CMUX_WORKSPACE_ID"
+    local from_surface="${CMUX_SURFACE_ID:-}"
+
+    # The full worker command line typed into each pane's shell.
+    local worker_cmd
+    worker_cmd="cd $(printf '%q' "$cwd") && $(_ps_quote_cmd "${cmd_args[@]}")"
+
+    local i
+    for ((i = 1; i <= count; i++)); do
+        echo -e "${_PS_BLUE}Spawning agent $i/$count (cmux pane)...${_PS_NC}"
+
+        # Open a new pane below the source surface, unfocused.
+        local split_cmd=(cmux new-split down --workspace "$workspace" --focus false)
+        [[ -n "$from_surface" ]] && split_cmd+=(--surface "$from_surface")
+
+        local split_out new_surface
+        if ! split_out="$("${split_cmd[@]}" 2>/dev/null)"; then
+            echo -e "${_PS_YELLOW}cmux new-split failed; falling back to background for remaining workers...${_PS_NC}"
+            spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
+            return $?
+        fi
+
+        # stdout: "OK surface:124 workspace:41" — grab the surface ref token.
+        new_surface="$(printf '%s\n' "$split_out" | grep -oE 'surface:[0-9A-Za-z]+' | head -n1)"
+        if [[ -z "$new_surface" ]]; then
+            echo -e "${_PS_YELLOW}cmux new-split returned no surface ref; falling back to background for remaining workers...${_PS_NC}"
+            spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
+            return $?
+        fi
+
+        # Type the command into the new surface, then submit with Enter.
+        if ! cmux send --workspace "$workspace" --surface "$new_surface" -- "$worker_cmd" >/dev/null 2>&1 \
+           || ! cmux send-key --workspace "$workspace" --surface "$new_surface" Enter >/dev/null 2>&1; then
+            echo -e "${_PS_YELLOW}cmux send failed; falling back to background for remaining workers...${_PS_NC}"
+            spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
+            return $?
+        fi
+
+        # Small delay between spawns to avoid overwhelming cmux.
+        if [[ $i -lt $count ]]; then
+            sleep 0.5
+        fi
+    done
+
+    echo ""
+    echo -e "${_PS_GREEN}All $count agents spawned as cmux panes.${_PS_NC}"
+    echo -e "${_PS_YELLOW}Tip: cmux shows each worker in its own pane in the current workspace.${_PS_NC}"
 
     return 0
 }
@@ -341,6 +422,9 @@ spawn_parallel_agents() {
     case "$term_env" in
         iterm)
             spawn_iterm_tabs "$count" "${cmd_args[@]}"
+            ;;
+        cmux)
+            spawn_cmux_panes "$count" "${cmd_args[@]}"
             ;;
         ide)
             # Try IDE terminal tabs; fall back to background on failure

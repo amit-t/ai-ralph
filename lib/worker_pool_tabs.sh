@@ -902,6 +902,7 @@ tabs_supported_by_terminal() {
         env=$(detect_terminal_env)
         case "$env" in
             iterm) return 0 ;;
+            cmux) return 0 ;;
             ide)
                 # IDE only counts as supported if we can detect the app
                 # name (Windsurf / Cursor / VS Code). Otherwise fall back.

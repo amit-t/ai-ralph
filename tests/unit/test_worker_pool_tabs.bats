@@ -256,10 +256,134 @@ teardown() {
     unset TERM_PROGRAM
     unset VSCODE_PID
     unset TERMINAL_EMULATOR
+    unset CMUX_WORKSPACE_ID
     [[ -f "${BATS_TEST_DIRNAME}/../../lib/parallel_spawn.sh" ]] && \
         source "${BATS_TEST_DIRNAME}/../../lib/parallel_spawn.sh"
     run tabs_supported_by_terminal
     [[ "$status" -eq 1 ]]
+}
+
+@test "tabs_supported_by_terminal returns 0 under cmux env" {
+    unset RALPH_DISABLE_TABS
+    unset TERM_PROGRAM
+    unset VSCODE_PID
+    unset TERMINAL_EMULATOR
+    export CMUX_WORKSPACE_ID="ws-test"
+    [[ -f "${BATS_TEST_DIRNAME}/../../lib/parallel_spawn.sh" ]] && \
+        source "${BATS_TEST_DIRNAME}/../../lib/parallel_spawn.sh"
+    run tabs_supported_by_terminal
+    [[ "$status" -eq 0 ]]
+}
+
+# =============================================================================
+# detect_terminal_env — cmux branch
+# =============================================================================
+
+_load_parallel_spawn() {
+    [[ -f "${BATS_TEST_DIRNAME}/../../lib/parallel_spawn.sh" ]] && \
+        source "${BATS_TEST_DIRNAME}/../../lib/parallel_spawn.sh"
+}
+
+@test "detect_terminal_env returns cmux when CMUX_WORKSPACE_ID is set" {
+    unset TERM_PROGRAM VSCODE_PID TERMINAL_EMULATOR
+    export CMUX_WORKSPACE_ID="ws-test"
+    _load_parallel_spawn
+    run detect_terminal_env
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == "cmux" ]]
+}
+
+@test "detect_terminal_env returns other when CMUX_WORKSPACE_ID is unset" {
+    unset TERM_PROGRAM VSCODE_PID TERMINAL_EMULATOR CMUX_WORKSPACE_ID
+    _load_parallel_spawn
+    run detect_terminal_env
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == "other" ]]
+}
+
+@test "detect_terminal_env returns other when CMUX_WORKSPACE_ID is empty" {
+    unset TERM_PROGRAM VSCODE_PID TERMINAL_EMULATOR
+    export CMUX_WORKSPACE_ID=""
+    _load_parallel_spawn
+    run detect_terminal_env
+    [[ "$output" == "other" ]]
+}
+
+@test "detect_terminal_env: explicit iTerm2 wins over cmux" {
+    unset VSCODE_PID TERMINAL_EMULATOR
+    export TERM_PROGRAM="iTerm.app"
+    export CMUX_WORKSPACE_ID="ws-test"
+    _load_parallel_spawn
+    run detect_terminal_env
+    [[ "$output" == "iterm" ]]
+}
+
+@test "detect_terminal_env: IDE wins over cmux" {
+    unset TERMINAL_EMULATOR
+    export TERM_PROGRAM="vscode"
+    export CMUX_WORKSPACE_ID="ws-test"
+    _load_parallel_spawn
+    run detect_terminal_env
+    [[ "$output" == "ide" ]]
+}
+
+# =============================================================================
+# spawn_cmux_panes
+# =============================================================================
+
+@test "spawn_cmux_panes drives cmux new-split/send/send-key per worker" {
+    _load_parallel_spawn
+    local bin="${TEST_DIR}/fakebin"
+    mkdir -p "$bin"
+    export CMUX_CALLS="${TEST_DIR}/cmux_calls.log"
+    : > "$CMUX_CALLS"
+    cat > "${bin}/cmux" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$CMUX_CALLS"
+case "$1" in
+    new-split) echo "OK surface:999 workspace:1" ;;
+esac
+exit 0
+FAKE
+    chmod +x "${bin}/cmux"
+    PATH="${bin}:${PATH}" CMUX_WORKSPACE_ID="ws-test" CMUX_SURFACE_ID="surface:1" \
+        run spawn_cmux_panes 2 echo hello
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"cmux pane"* ]]
+    # two panes opened
+    [[ "$(grep -c '^new-split' "$CMUX_CALLS")" -eq 2 ]]
+    # command sent to the new surface, not the source surface
+    grep -q 'send .*surface:999.*echo hello' "$CMUX_CALLS"
+    grep -q 'send-key .*surface:999 Enter' "$CMUX_CALLS"
+}
+
+@test "spawn_cmux_panes falls back to background when cmux missing" {
+    _load_parallel_spawn
+    local bin="${TEST_DIR}/emptybin"
+    mkdir -p "$bin"
+    # PATH with no cmux at all
+    PATH="$bin" CMUX_WORKSPACE_ID="ws-test" \
+        run spawn_cmux_panes 1 true
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"background"* ]]
+}
+
+@test "spawn_cmux_panes falls back to background when new-split fails" {
+    _load_parallel_spawn
+    local bin="${TEST_DIR}/failbin"
+    mkdir -p "$bin"
+    cat > "${bin}/cmux" <<'FAKE'
+#!/usr/bin/env bash
+case "$1" in
+    new-split) exit 3 ;;
+esac
+exit 0
+FAKE
+    chmod +x "${bin}/cmux"
+    PATH="${bin}:/usr/bin:/bin" CMUX_WORKSPACE_ID="ws-test" \
+        run spawn_cmux_panes 1 true
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"background"* ]]
 }
 
 # =============================================================================
