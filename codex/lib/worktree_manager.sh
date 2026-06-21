@@ -730,12 +730,15 @@ worktree_auto_commit() {
     (
         cd "$workdir" || return 1
 
-        # Check for uncommitted changes
-        if [[ -z "$(git status --porcelain 2>/dev/null)" ]]; then
+        # Check for uncommitted changes. Exclude .ralph/ so ralph internal
+        # state (e.g. .ralph/.quality_gate_results) never becomes a standalone
+        # commit — in PR_ENABLED=false merge mode this commit lands on the base
+        # branch, so the exclusion keeps ralph state off main.
+        if [[ -z "$(git status --porcelain -- . ':(exclude).ralph/**' 2>/dev/null)" ]]; then
             return 0
         fi
 
-        git add -A 2>/dev/null
+        git add -A -- . ':(exclude).ralph/**' 2>/dev/null
         git commit -m "$message" 2>/dev/null
     )
 }

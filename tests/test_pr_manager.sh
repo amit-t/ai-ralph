@@ -32,6 +32,12 @@ log_status() { :; }
 
 source "$SCRIPT_DIR/../lib/pr_manager.sh"
 
+# Keep remote-ref confirmation instant in tests (no real remote to poll).
+# shellcheck disable=SC2034 # read by _pr_confirm_remote_branch via env import
+PR_LS_REMOTE_RETRIES=1
+# shellcheck disable=SC2034 # read by _pr_confirm_remote_branch via env import
+PR_LS_REMOTE_DELAY=0
+
 # ── pr_preflight_check: no remote → both flags false ─────────────────────────
 result=$(
     git() { return 1; }   # all git calls fail — simulates no remote
@@ -473,6 +479,112 @@ contains_url=$(echo "$cmp_out" | grep -c "github.com/owner/ralph-test/compare" |
 run_test "GH_CAPABLE=false prints compare URL" "1" "$contains_url"
 RALPH_PR_PUSH_CAPABLE="false"
 rm -rf "$CMP_DIR"
+
+# ── Fix A: pushed non-empty branch reliably becomes an open PR ────────────────
+# Real git + a real bare origin exercise push / ls-remote / rev-list; only gh is
+# mocked. Proves gh pr create runs from the repo dir with explicit --head.
+ORIGIN_A=$(mktemp -d); git init --bare -q "$ORIGIN_A"
+REPO_A=$(mktemp -d)
+(
+    cd "$REPO_A" || exit
+    git init -q; git config user.email t@t.com; git config user.name T
+    git remote add origin "$ORIGIN_A"
+    echo base > base.txt; git add .; git commit -q -m init
+    git branch -M main; git push -q -u origin main
+    git checkout -q -b "ralph-claude/T-A"
+    echo feature > feat.txt; git add .; git commit -q -m "real feature work"
+)
+_WT_CURRENT_PATH="$REPO_A"; _WT_CURRENT_BRANCH="ralph-claude/T-A"; _WT_MAIN_DIR="$REPO_A"
+RALPH_PR_PUSH_CAPABLE="true"; RALPH_PR_GH_CAPABLE="true"; PR_ENABLED="true"
+# shellcheck disable=SC2034 # consumed via env import
+PR_BASE_BRANCH="main"
+# gh pr create runs inside $(...) (a subshell), so record to a file — variable
+# writes inside the mock would not survive back to the parent shell.
+GH_MARKER_A=$(mktemp); : > "$GH_MARKER_A"
+gh() {
+    case "$1 $2" in
+        "pr view") return 1 ;;                       # no existing PR
+        "pr create")
+            shift 2; local head=""
+            while [[ $# -gt 0 ]]; do [[ "$1" == "--head" ]] && head="$2"; shift; done
+            printf 'created head=%s\n' "$head" > "$GH_MARKER_A"
+            echo "https://github.com/owner/repo/pull/1"; return 0 ;;
+        *) return 0 ;;
+    esac
+}
+worktree_commit_and_pr "T-A" "Add feature" "true" "1" >/dev/null 2>&1
+rc_a=$?
+run_test "Fix A: pushed non-empty branch creates a PR" \
+    "1" "$(grep -c '^created' "$GH_MARKER_A")"
+run_test "Fix A: gh pr create uses explicit --head BRANCH" \
+    "created head=ralph-claude/T-A" "$(cat "$GH_MARKER_A")"
+run_test "Fix A: worktree_commit_and_pr returns 0" "0" "$rc_a"
+on_origin_a=$(git -C "$REPO_A" ls-remote --heads origin "ralph-claude/T-A" | wc -l | tr -d ' ')
+run_test "Fix A: branch present on origin" "1" "$on_origin_a"
+unset -f gh
+RALPH_PR_PUSH_CAPABLE="false"; RALPH_PR_GH_CAPABLE="false"
+rm -rf "$ORIGIN_A" "$REPO_A" "$GH_MARKER_A"
+
+# ── Fix B: stale same-named remote branch does not block push/PR ──────────────
+# Push an old branch to origin, then diverge locally so a plain push would be
+# rejected non-fast-forward. force-with-lease (ralph-owned branch) must succeed.
+ORIGIN_B=$(mktemp -d); git init --bare -q "$ORIGIN_B"
+REPO_B=$(mktemp -d)
+(
+    cd "$REPO_B" || exit
+    git init -q; git config user.email t@t.com; git config user.name T
+    git remote add origin "$ORIGIN_B"
+    echo base > base.txt; git add .; git commit -q -m init
+    git branch -M main; git push -q -u origin main
+    # Stale remote branch
+    git checkout -q -b "ralph-claude/T-B"
+    echo old > feat.txt; git add .; git commit -q -m "old work"
+    git push -q -u origin "ralph-claude/T-B"
+    # Diverge: recreate the branch from main with different content
+    git checkout -q main
+    git branch -qD "ralph-claude/T-B"
+    git checkout -q -b "ralph-claude/T-B"
+    echo new > feat.txt; git add .; git commit -q -m "new work"
+)
+_WT_CURRENT_PATH="$REPO_B"; _WT_CURRENT_BRANCH="ralph-claude/T-B"; _WT_MAIN_DIR="$REPO_B"
+RALPH_PR_PUSH_CAPABLE="true"; RALPH_PR_GH_CAPABLE="true"; PR_ENABLED="true"
+# shellcheck disable=SC2034 # consumed via env import
+PR_BASE_BRANCH="main"
+GH_MARKER_B=$(mktemp); : > "$GH_MARKER_B"
+gh() {
+    case "$1 $2" in
+        "pr view") return 1 ;;
+        "pr create") echo created > "$GH_MARKER_B"; echo "https://github.com/owner/repo/pull/2"; return 0 ;;
+        *) return 0 ;;
+    esac
+}
+worktree_commit_and_pr "T-B" "Diverge" "true" "2" >/dev/null 2>&1
+rc_b=$?
+run_test "Fix B: push succeeds despite stale remote branch" "0" "$rc_b"
+run_test "Fix B: PR still created after force-with-lease" "1" "$(grep -c created "$GH_MARKER_B")"
+git -C "$REPO_B" fetch -q origin
+remote_feat_b=$(git -C "$REPO_B" show "origin/ralph-claude/T-B:feat.txt" 2>/dev/null)
+run_test "Fix B: origin branch overwritten with new content" "new" "$remote_feat_b"
+unset -f gh
+RALPH_PR_PUSH_CAPABLE="false"; RALPH_PR_GH_CAPABLE="false"
+rm -rf "$ORIGIN_B" "$REPO_B" "$GH_MARKER_B"
+
+# ── Fix D: a .ralph-only change must not produce a commit ──────────────────────
+DDIR=$(mktemp -d)
+(
+    cd "$DDIR" || exit
+    git init -q; git config user.email t@t.com; git config user.name T
+    echo real > app.txt; git add .; git commit -q -m "real work"
+)
+_WT_CURRENT_PATH="$DDIR"; _WT_CURRENT_BRANCH="ralph-claude/T-D"; _WT_MAIN_DIR="$DDIR"
+RALPH_PR_PUSH_CAPABLE="false"; RALPH_PR_GH_CAPABLE="false"; PR_ENABLED="true"
+mkdir -p "$DDIR/.ralph"; echo "PASS: lint" > "$DDIR/.ralph/.quality_gate_results"
+before_d=$(cd "$DDIR" && git rev-list --count HEAD)
+worktree_commit_and_pr "T-D" "noop" "true" "9" >/dev/null 2>&1
+after_d=$(cd "$DDIR" && git rev-list --count HEAD)
+run_test "Fix D: ralph-only change produces no commit" "$before_d" "$after_d"
+RALPH_PR_PUSH_CAPABLE="false"; RALPH_PR_GH_CAPABLE="false"
+rm -rf "$DDIR"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
