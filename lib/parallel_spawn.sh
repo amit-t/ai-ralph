@@ -162,13 +162,129 @@ APPLESCRIPT
     return 0
 }
 
-# Spawn agents as cmux panes (https://cmux.io).
-# cmux exposes a `cmux` CLI: `new-split <dir>` opens a pane and prints
-# "OK surface:<n> workspace:<n>" on stdout; `send` types text into a surface
-# and `send-key ... Enter` submits it. One pane is opened per worker, each
-# running the given command. On ANY cmux failure (CLI missing, split error,
-# send error) the remaining workers fall back to spawn_background_agents so
-# behavior never regresses to "no visible panes, silent background".
+# =============================================================================
+# cmux tabbed layout helpers (https://cmux.io)
+# =============================================================================
+# Opening one `new-split down` pane per worker stacked 10-20 panes on top of
+# each other until none were legible. Instead we open ONE pane to the RIGHT of
+# the dispatch surface and add each worker as a *tab* — a new surface in that
+# pane. cmux renders multiple surfaces in a pane as a horizontal tab strip, so
+# 20 workers become 20 switchable tabs in a single right-hand pane.
+#
+# Layout is selectable via RALPH_CMUX_LAYOUT:
+#   tabs  (default) — one right pane, one tab per worker
+#   panes           — legacy behavior, one `new-split down` pane per worker
+#
+# Continuous mode calls spawn_cmux_panes once per worker (independent processes),
+# so "which pane is the right pane" is shared through a per-workspace state file
+# guarded by a mkdir lock — otherwise concurrent workers each open their own
+# right pane and we are back to a wall of panes.
+
+# Path of the per-workspace right-pane state file. RALPH_CMUX_STATE_DIR overrides
+# the directory (used by tests); defaults to $TMPDIR.
+_cmux_state_file() {
+    local ws="${1:-${CMUX_WORKSPACE_ID:-default}}"
+    local dir="${RALPH_CMUX_STATE_DIR:-${TMPDIR:-/tmp}}"
+    printf '%s/ralph_cmux_rightpane_%s' "${dir%/}" "${ws//[^A-Za-z0-9]/_}"
+}
+
+# Acquire/release a per-state mkdir lock (mkdir is atomic on POSIX filesystems).
+# Best-effort: after ~5s we proceed anyway rather than deadlock the whole run.
+_cmux_lock() {
+    local lock="$1.lock" waited=0
+    until mkdir "$lock" 2>/dev/null; do
+        sleep 0.1
+        waited=$((waited + 1))
+        [[ $waited -ge 50 ]] && return 0
+    done
+    return 0
+}
+_cmux_unlock() {
+    rmdir "$1.lock" 2>/dev/null || true
+}
+
+# Echo "pane:<n>" of the workspace's right pane, creating it once if missing or
+# stale (closed by the user). Records the split's initial surface in
+# <state>.firstsurface so the first caller can reuse it instead of opening a
+# redundant blank tab. MUST be called with the lock held. Returns non-zero on
+# any cmux failure.
+_cmux_ensure_right_pane() {
+    local workspace="$1" from_surface="$2"
+    local state; state="$(_cmux_state_file "$workspace")"
+
+    local pane=""
+    if [[ -f "$state" ]]; then
+        pane="$(cat "$state" 2>/dev/null)"
+        # Drop a stored ref whose pane no longer exists (user closed it).
+        if [[ -n "$pane" ]] && ! cmux list-panes --workspace "$workspace" 2>/dev/null \
+              | grep -qw "$pane"; then
+            pane=""
+            rm -f "${state}.firstsurface" 2>/dev/null || true
+        fi
+    fi
+
+    if [[ -z "$pane" ]]; then
+        # new-split prints only the new surface ref, not its pane, so diff the
+        # pane list before/after to learn which pane the split created.
+        local before after split_out split_surface
+        before="$(cmux list-panes --workspace "$workspace" 2>/dev/null \
+                  | grep -oE 'pane:[0-9]+' | sort -u)"
+        local split_cmd=(cmux new-split right --workspace "$workspace" --focus false)
+        [[ -n "$from_surface" ]] && split_cmd+=(--surface "$from_surface")
+        split_out="$("${split_cmd[@]}" 2>/dev/null)" || return 1
+        after="$(cmux list-panes --workspace "$workspace" 2>/dev/null \
+                 | grep -oE 'pane:[0-9]+' | sort -u)"
+        pane="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") \
+                | grep -oE 'pane:[0-9]+' | head -n1)"
+        [[ -z "$pane" ]] && return 1
+        printf '%s\n' "$pane" > "$state"
+        split_surface="$(printf '%s\n' "$split_out" | grep -oE 'surface:[0-9]+' | head -n1)"
+        [[ -n "$split_surface" ]] && printf '%s\n' "$split_surface" > "${state}.firstsurface"
+    fi
+
+    printf '%s\n' "$pane"
+}
+
+# Echo the surface ref of a fresh tab in the workspace's right pane. Reuses the
+# right pane's initial surface for the first tab, then opens a new surface per
+# subsequent tab. Lock-guarded so concurrent continuous workers cooperate.
+# Returns non-zero on any cmux failure.
+_cmux_acquire_tab_surface() {
+    local workspace="$1" from_surface="$2"
+    local state; state="$(_cmux_state_file "$workspace")"
+    local pane surface=""
+
+    _cmux_lock "$state"
+    if ! pane="$(_cmux_ensure_right_pane "$workspace" "$from_surface")"; then
+        _cmux_unlock "$state"
+        return 1
+    fi
+
+    if [[ -s "${state}.firstsurface" ]]; then
+        surface="$(cat "${state}.firstsurface" 2>/dev/null)"
+        rm -f "${state}.firstsurface" 2>/dev/null || true
+    else
+        local out
+        if ! out="$(cmux new-surface --pane "$pane" --workspace "$workspace" --focus false 2>/dev/null)"; then
+            _cmux_unlock "$state"
+            return 1
+        fi
+        surface="$(printf '%s\n' "$out" | grep -oE 'surface:[0-9]+' | head -n1)"
+    fi
+    _cmux_unlock "$state"
+
+    [[ -n "$surface" ]] || return 1
+    printf '%s\n' "$surface"
+}
+
+# Spawn agents into cmux (https://cmux.io).
+#   tabs  (default) — one right-side pane, one tab (surface) per worker
+#   panes           — legacy, one `new-split down` pane per worker
+# Each worker's tab is optionally renamed to RALPH_CMUX_TAB_LABEL (or "ralph N"
+# for an unlabeled batch) so 10-20 concurrent workers stay distinguishable. On
+# ANY cmux failure (CLI missing, split/surface/send error) the remaining workers
+# fall back to spawn_background_agents so behavior never regresses to "no visible
+# panes, silent background".
 spawn_cmux_panes() {
     local count="$1"
     shift
@@ -186,37 +302,54 @@ spawn_cmux_panes() {
 
     local workspace="$CMUX_WORKSPACE_ID"
     local from_surface="${CMUX_SURFACE_ID:-}"
+    local layout="${RALPH_CMUX_LAYOUT:-tabs}"
 
-    # The full worker command line typed into each pane's shell.
+    # The full worker command line typed into each surface's shell.
     local worker_cmd
     worker_cmd="cd $(printf '%q' "$cwd") && $(_ps_quote_cmd "${cmd_args[@]}")"
 
     local i
     for ((i = 1; i <= count; i++)); do
-        echo -e "${_PS_BLUE}Spawning agent $i/$count (cmux pane)...${_PS_NC}"
+        local target_surface=""
 
-        # Open a new pane below the source surface, unfocused.
-        local split_cmd=(cmux new-split down --workspace "$workspace" --focus false)
-        [[ -n "$from_surface" ]] && split_cmd+=(--surface "$from_surface")
+        if [[ "$layout" == "panes" ]]; then
+            # Legacy: one pane below the dispatch surface per worker.
+            echo -e "${_PS_BLUE}Spawning agent $i/$count (cmux pane)...${_PS_NC}"
+            local split_cmd=(cmux new-split down --workspace "$workspace" --focus false)
+            [[ -n "$from_surface" ]] && split_cmd+=(--surface "$from_surface")
+            local split_out
+            if ! split_out="$("${split_cmd[@]}" 2>/dev/null)"; then
+                echo -e "${_PS_YELLOW}cmux new-split failed; falling back to background for remaining workers...${_PS_NC}"
+                spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
+                return $?
+            fi
+            target_surface="$(printf '%s\n' "$split_out" | grep -oE 'surface:[0-9A-Za-z]+' | head -n1)"
+        else
+            # Default: one tab (surface) in the shared right-side pane per worker.
+            echo -e "${_PS_BLUE}Spawning agent $i/$count (cmux tab)...${_PS_NC}"
+            if ! target_surface="$(_cmux_acquire_tab_surface "$workspace" "$from_surface")"; then
+                echo -e "${_PS_YELLOW}cmux tab creation failed; falling back to background for remaining workers...${_PS_NC}"
+                spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
+                return $?
+            fi
+        fi
 
-        local split_out new_surface
-        if ! split_out="$("${split_cmd[@]}" 2>/dev/null)"; then
-            echo -e "${_PS_YELLOW}cmux new-split failed; falling back to background for remaining workers...${_PS_NC}"
+        if [[ -z "$target_surface" ]]; then
+            echo -e "${_PS_YELLOW}cmux returned no surface ref; falling back to background for remaining workers...${_PS_NC}"
             spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
             return $?
         fi
 
-        # stdout: "OK surface:124 workspace:41" — grab the surface ref token.
-        new_surface="$(printf '%s\n' "$split_out" | grep -oE 'surface:[0-9A-Za-z]+' | head -n1)"
-        if [[ -z "$new_surface" ]]; then
-            echo -e "${_PS_YELLOW}cmux new-split returned no surface ref; falling back to background for remaining workers...${_PS_NC}"
-            spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
-            return $?
+        # Label the tab/pane so concurrent workers stay distinguishable.
+        local label="${RALPH_CMUX_TAB_LABEL:-}"
+        [[ -z "$label" && "$count" -gt 1 ]] && label="ralph $i"
+        if [[ -n "$label" ]]; then
+            cmux rename-tab --workspace "$workspace" --surface "$target_surface" -- "$label" >/dev/null 2>&1 || true
         fi
 
-        # Type the command into the new surface, then submit with Enter.
-        if ! cmux send --workspace "$workspace" --surface "$new_surface" -- "$worker_cmd" >/dev/null 2>&1 \
-           || ! cmux send-key --workspace "$workspace" --surface "$new_surface" Enter >/dev/null 2>&1; then
+        # Type the command into the target surface, then submit with Enter.
+        if ! cmux send --workspace "$workspace" --surface "$target_surface" -- "$worker_cmd" >/dev/null 2>&1 \
+           || ! cmux send-key --workspace "$workspace" --surface "$target_surface" Enter >/dev/null 2>&1; then
             echo -e "${_PS_YELLOW}cmux send failed; falling back to background for remaining workers...${_PS_NC}"
             spawn_background_agents "$(( count - (i - 1) ))" "${cmd_args[@]}"
             return $?
@@ -229,8 +362,13 @@ spawn_cmux_panes() {
     done
 
     echo ""
-    echo -e "${_PS_GREEN}All $count agents spawned as cmux panes.${_PS_NC}"
-    echo -e "${_PS_YELLOW}Tip: cmux shows each worker in its own pane in the current workspace.${_PS_NC}"
+    if [[ "$layout" == "panes" ]]; then
+        echo -e "${_PS_GREEN}All $count agents spawned as cmux panes.${_PS_NC}"
+        echo -e "${_PS_YELLOW}Tip: cmux shows each worker in its own pane in the current workspace.${_PS_NC}"
+    else
+        echo -e "${_PS_GREEN}All $count agents spawned as cmux tabs in one right-side pane.${_PS_NC}"
+        echo -e "${_PS_YELLOW}Tip: each worker is a tab in the right pane — click the tab strip to switch.${_PS_NC}"
+    fi
 
     return 0
 }

@@ -331,7 +331,9 @@ _load_parallel_spawn() {
 # spawn_cmux_panes
 # =============================================================================
 
-@test "spawn_cmux_panes drives cmux new-split/send/send-key per worker" {
+# Legacy pane-per-worker layout (RALPH_CMUX_LAYOUT=panes). The default tabbed
+# layout is covered in test_cmux_tabs.bats.
+@test "spawn_cmux_panes (layout=panes) drives cmux new-split/send/send-key per worker" {
     _load_parallel_spawn
     local bin="${TEST_DIR}/fakebin"
     mkdir -p "$bin"
@@ -347,7 +349,7 @@ exit 0
 FAKE
     chmod +x "${bin}/cmux"
     PATH="${bin}:${PATH}" CMUX_WORKSPACE_ID="ws-test" CMUX_SURFACE_ID="surface:1" \
-        run spawn_cmux_panes 2 echo hello
+        RALPH_CMUX_LAYOUT="panes" run spawn_cmux_panes 2 echo hello
     [[ "$status" -eq 0 ]]
     [[ "$output" == *"cmux pane"* ]]
     # two panes opened
