@@ -154,6 +154,74 @@ _pr_require_committable_source_diff() {
     return 1
 }
 
+# ── _pr_confirm_remote_branch ─────────────────────────────────────────────────
+# After a push, the branch ref can take a moment to become visible on the remote.
+# gh pr create then fails with "Head sha cannot be blank" / "No commits between".
+# Poll `git ls-remote` until the ref appears. Must run from inside the repo dir.
+# Args: $1=branch
+# Env:  PR_LS_REMOTE_RETRIES (default 5), PR_LS_REMOTE_DELAY seconds (default 2)
+# Returns 0 if confirmed; 1 if not confirmed after exhausting retries (caller
+# still proceeds — gh surfaces the authoritative error).
+_pr_confirm_remote_branch() {
+    local branch="$1"
+    local max="${PR_LS_REMOTE_RETRIES:-5}"
+    local delay="${PR_LS_REMOTE_DELAY:-2}"
+    local attempt=1
+    while (( attempt <= max )); do
+        if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            return 0
+        fi
+        (( attempt < max )) && [[ "$delay" != "0" ]] && sleep "$delay"
+        (( attempt++ ))
+    done
+    log_status "WARN" "Remote ref refs/heads/$branch not visible after $max attempt(s); proceeding to gh pr create"
+    return 1
+}
+
+# ── _pr_commits_ahead ─────────────────────────────────────────────────────────
+# Number of commits BRANCH has beyond origin/BASE. Empty string if origin/BASE is
+# unknown (never fetched) — callers must treat empty as "unknown", NOT zero, so a
+# missing base ref never blocks PR creation. Must run from inside the repo dir.
+# Args: $1=base_branch  $2=branch
+_pr_commits_ahead() {
+    local base="$1" branch="$2"
+    git rev-list --count "origin/${base}..${branch}" 2>/dev/null
+}
+
+# ── _pr_rebase_onto_base ──────────────────────────────────────────────────────
+# Rebase the branch checked out in the CURRENT working tree onto origin/BASE so a
+# base that advanced mid-run does not leave the branch behind / unmergeable.
+# Must run from inside the working tree that holds the branch.
+# Args: $1=base_branch
+# Prints one of: CHANGED (tip moved), UNCHANGED, SKIPPED (no remote base ref).
+# Returns 1 on rebase conflict (after aborting the rebase) so the caller stops
+# rather than pushing an unmergeable branch.
+_pr_rebase_onto_base() {
+    local base_branch="$1"
+
+    if ! git fetch origin "$base_branch" >/dev/null 2>&1; then
+        echo "SKIPPED"; return 0
+    fi
+    if ! git rev-parse --verify --quiet "refs/remotes/origin/$base_branch" >/dev/null 2>&1; then
+        echo "SKIPPED"; return 0
+    fi
+
+    local before after
+    before=$(git rev-parse HEAD 2>/dev/null)
+    if ! git rebase "origin/$base_branch" >/dev/null 2>&1; then
+        git rebase --abort >/dev/null 2>&1 || true
+        return 1
+    fi
+    after=$(git rev-parse HEAD 2>/dev/null)
+
+    if [[ "$before" != "$after" ]]; then
+        echo "CHANGED"
+    else
+        echo "UNCHANGED"
+    fi
+    return 0
+}
+
 # ── pr_preflight_check ────────────────────────────────────────────────────────
 # Check git remote, gh CLI, gh auth. Sets RALPH_PR_PUSH_CAPABLE and
 # RALPH_PR_GH_CAPABLE. Always returns 0.
@@ -359,11 +427,15 @@ worktree_commit_and_pr() {
     log_status "INFO" "PR base branch: $base_branch"
 
     # ── Step 1: Auto-commit in worktree ──────────────────────────────────────
+    # Exclude .ralph/ from the auto-commit: ralph internal state (e.g.
+    # .ralph/.quality_gate_results) is not source work and must never become a
+    # commit of its own on top of already-committed real work, nor ride along in
+    # a PR. If nothing but .ralph/ changed, skip the commit entirely.
     (
         cd "$_WT_CURRENT_PATH" || { log_status "ERROR" "Cannot cd to worktree: $_WT_CURRENT_PATH"; exit 1; }
-        if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
-            if ! git add -A; then
-                log_status "ERROR" "git add -A failed in worktree $_WT_CURRENT_PATH"
+        if [[ -n "$(git status --porcelain -- . ':(exclude).ralph/**' 2>/dev/null)" ]]; then
+            if ! git add -A -- . ':(exclude).ralph/**'; then
+                log_status "ERROR" "git add failed in worktree $_WT_CURRENT_PATH"
                 exit 1
             fi
             if ! git commit -m "ralph-${RALPH_ENGINE:-ralph}: auto-commit run #${loop_count}"; then
@@ -372,7 +444,7 @@ worktree_commit_and_pr() {
             fi
             log_status "INFO" "Changes committed to $_WT_CURRENT_BRANCH"
         else
-            log_status "INFO" "Nothing to commit in worktree — proceeding to push"
+            log_status "INFO" "Nothing but ralph internal state to commit — proceeding to push"
         fi
     )
     local commit_result=$?
@@ -388,15 +460,60 @@ worktree_commit_and_pr() {
         if [[ $diff_result -ne 0 ]]; then return 1; fi
     fi
 
+    # ── Step 1c: Rebase onto advanced base ───────────────────────────────────
+    # If an earlier task merged into the base while this run was working, rebase
+    # the branch onto the new base so it stays mergeable. The branch is checked
+    # out in the worktree, so the rebase must run there. On conflict, stop rather
+    # than push an unmergeable branch. If the rebase moved the tip, re-run the
+    # quality gates against the new base.
+    if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
+        local rebase_status
+        rebase_status=$(
+            cd "$_WT_CURRENT_PATH" || exit 2
+            _pr_rebase_onto_base "$base_branch"
+        )
+        local rebase_rc=$?
+        if [[ $rebase_rc -ne 0 ]]; then
+            log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch conflicted — stopping; resolve and re-run"
+            return 1
+        fi
+        if [[ "$rebase_status" == "CHANGED" ]]; then
+            log_status "INFO" "Rebased $_WT_CURRENT_BRANCH onto advanced origin/$base_branch — re-running quality gates"
+            if declare -F worktree_run_quality_gates >/dev/null 2>&1; then
+                if worktree_run_quality_gates; then
+                    gate_passed="true"
+                else
+                    gate_passed="false"
+                    log_status "WARN" "Quality gates failed after rebase onto origin/$base_branch"
+                fi
+            fi
+        fi
+    fi
+
     # ── Step 2: Push branch ──────────────────────────────────────────────────
     if [[ "$RALPH_PR_PUSH_CAPABLE" != "true" ]]; then
         log_status "WARN" "Push skipped — no git remote. Branch: $_WT_CURRENT_BRANCH"
     else
         (
             cd "$_WT_MAIN_DIR" || exit 1
-            if ! git push origin "$_WT_CURRENT_BRANCH" --set-upstream; then
-                log_status "ERROR" "Push failed for $_WT_CURRENT_BRANCH — check credentials/remote"
-                exit 1
+            # Fix B: a stale same-named remote branch from a previous dispatch
+            # causes a non-fast-forward rejection. For ralph-owned branches only
+            # (ralph-*/...) we own the branch, so fetch its remote tip to give
+            # --force-with-lease an accurate view, then force-with-lease. This
+            # overwrites our own stale branch while preserving any open PR, and
+            # refuses if someone else advanced it. The base branch is never
+            # force-pushed (only the feature branch is ever pushed here).
+            if [[ "$_WT_CURRENT_BRANCH" == ralph-*/* ]]; then
+                git fetch origin "$_WT_CURRENT_BRANCH" >/dev/null 2>&1 || true
+                if ! git push origin "$_WT_CURRENT_BRANCH" --set-upstream --force-with-lease; then
+                    log_status "ERROR" "Push failed for $_WT_CURRENT_BRANCH — check credentials/remote"
+                    exit 1
+                fi
+            else
+                if ! git push origin "$_WT_CURRENT_BRANCH" --set-upstream; then
+                    log_status "ERROR" "Push failed for $_WT_CURRENT_BRANCH — check credentials/remote"
+                    exit 1
+                fi
             fi
             log_status "SUCCESS" "Branch pushed: $_WT_CURRENT_BRANCH"
         )
@@ -405,12 +522,36 @@ worktree_commit_and_pr() {
     fi
 
     # ── Step 3: Create PR ────────────────────────────────────────────────────
+    # All gh calls MUST run from inside the repo that holds the branch
+    # (_WT_MAIN_DIR, where the push happened). Run from ralph's ambient cwd and
+    # gh resolves --head against the wrong repo → blank head sha. Use pushd/popd
+    # (not a subshell) so a mocked gh in tests can still set caller-side vars.
     if [[ "$RALPH_PR_GH_CAPABLE" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
+        if ! pushd "$_WT_MAIN_DIR" >/dev/null 2>&1; then
+            log_status "ERROR" "Cannot enter repo dir for PR: $_WT_MAIN_DIR"
+            return 1
+        fi
+
         local existing_pr
         existing_pr=$(gh pr view "$_WT_CURRENT_BRANCH" --json url --jq '.url' 2>/dev/null)
         if [[ -n "$existing_pr" ]]; then
             log_status "INFO" "PR already exists for $_WT_CURRENT_BRANCH: $existing_pr. Skipping creation."
         else
+            # Confirm the pushed branch is visible on origin before asking gh to
+            # open a PR (absorbs remote propagation lag).
+            _pr_confirm_remote_branch "$_WT_CURRENT_BRANCH" || true
+
+            # Never call gh with zero commits — that is the "No commits between"
+            # GraphQL failure. Skip cleanly. Empty count = base ref unknown =
+            # proceed (let gh decide).
+            local commits_ahead
+            commits_ahead=$(_pr_commits_ahead "$base_branch" "$_WT_CURRENT_BRANCH")
+            if [[ "$commits_ahead" == "0" ]]; then
+                log_status "WARN" "No commits to PR for $_WT_CURRENT_BRANCH (origin/$base_branch..$_WT_CURRENT_BRANCH empty) — skipping PR creation"
+                popd >/dev/null 2>&1 || true
+                return 0
+            fi
+
             local pr_title pr_body
             pr_title=$(pr_build_title "$task_id" "$task_name")
             pr_body=$(pr_build_description "$task_id" "$task_name" "$_WT_CURRENT_BRANCH" \
@@ -422,22 +563,27 @@ worktree_commit_and_pr() {
 
             local pr_url
             if ! pr_url=$(gh pr create "${gh_args[@]}" 2>&1); then
-                log_status "ERROR" "PR creation failed: $pr_url"
+                # Surface gh's stderr verbatim and keep the pushed branch so it
+                # can be PR'd by hand.
+                log_status "ERROR" "PR creation failed for $_WT_CURRENT_BRANCH: $pr_url"
+                log_status "ERROR" "Branch is pushed — open by hand: gh pr create --head $_WT_CURRENT_BRANCH --base $base_branch"
+                popd >/dev/null 2>&1 || true
                 return 1
             fi
             log_status "SUCCESS" "PR created: $pr_url"
         fi
 
+        # ── Step 4: Add failure label (still inside repo dir) ─────────────────
+        if [[ "$gate_passed" == "false" ]]; then
+            _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
+            gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
+                || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
+        fi
+
+        popd >/dev/null 2>&1 || true
     else
         log_status "INFO" "gh not available — branch pushed: $_WT_CURRENT_BRANCH"
         _pr_print_compare_url "$_WT_CURRENT_BRANCH" "$base_branch"
-    fi
-
-    # ── Step 4: Add failure label ────────────────────────────────────────────
-    if [[ "$gate_passed" == "false" && "$RALPH_PR_GH_CAPABLE" == "true" ]]; then
-        _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
-        gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
-            || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
     fi
 
     return 0
@@ -495,9 +641,11 @@ worktree_fallback_branch_pr() {
     fi
 
     # ── Step 4: Commit ───────────────────────────────────────────────────────
-    if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
-        if ! git add -A; then
-            log_status "ERROR" "git add -A failed on fallback branch $FALLBACK_BRANCH"
+    # Exclude .ralph/ so ralph internal state never becomes a standalone commit
+    # or rides along in the PR (see Step 1 of worktree_commit_and_pr).
+    if [[ -n "$(git status --porcelain -- . ':(exclude).ralph/**' 2>/dev/null)" ]]; then
+        if ! git add -A -- . ':(exclude).ralph/**'; then
+            log_status "ERROR" "git add failed on fallback branch $FALLBACK_BRANCH"
             return 1
         fi
         if ! git commit -m "ralph-${engine}: auto-commit run #${loop_count}" 2>/dev/null; then
@@ -505,7 +653,7 @@ worktree_fallback_branch_pr() {
             return 1
         fi
     else
-        log_status "WARN" "Nothing to commit on fallback branch $FALLBACK_BRANCH"
+        log_status "WARN" "Nothing but ralph internal state to commit on fallback branch $FALLBACK_BRANCH"
     fi
 
     # Resolve base branch
@@ -524,11 +672,42 @@ worktree_fallback_branch_pr() {
         fi
     fi
 
+    # ── Step 4c: Rebase onto advanced base ───────────────────────────────────
+    # The fallback branch is checked out in the ambient repo (cwd), so rebase
+    # here. On conflict, restore the original branch and stop.
+    if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
+        local fb_rebase_status
+        fb_rebase_status=$(_pr_rebase_onto_base "$base_branch")
+        local fb_rebase_rc=$?
+        if [[ $fb_rebase_rc -ne 0 ]]; then
+            log_status "ERROR" "Rebase of $FALLBACK_BRANCH onto origin/$base_branch conflicted — stopping"
+            [[ -n "$original_branch" ]] && git checkout "$original_branch" >/dev/null 2>&1 || true
+            return 1
+        fi
+        if [[ "$fb_rebase_status" == "CHANGED" && "$gate_passed" == "true" ]] \
+            && declare -F worktree_run_quality_gates >/dev/null 2>&1 && [[ -n "${_WT_CURRENT_PATH:-}" ]]; then
+            log_status "INFO" "Rebased $FALLBACK_BRANCH onto advanced origin/$base_branch — re-running quality gates"
+            if ! worktree_run_quality_gates; then
+                gate_passed="false"
+                log_status "WARN" "Quality gates failed after rebase onto origin/$base_branch"
+            fi
+        fi
+    fi
+
     # ── Step 5: Push ─────────────────────────────────────────────────────────
     if [[ "$RALPH_PR_PUSH_CAPABLE" != "true" ]]; then
         log_status "WARN" "Push skipped — no git remote. Branch: $FALLBACK_BRANCH"
     else
-        if ! git push origin "$FALLBACK_BRANCH" --set-upstream 2>/dev/null; then
+        # Fix B: force-with-lease for ralph-owned branches absorbs a stale
+        # same-named remote branch without clobbering anyone else's work.
+        local fb_push_rc=0
+        if [[ "$FALLBACK_BRANCH" == ralph-*/* ]]; then
+            git fetch origin "$FALLBACK_BRANCH" >/dev/null 2>&1 || true
+            git push origin "$FALLBACK_BRANCH" --set-upstream --force-with-lease 2>/dev/null || fb_push_rc=$?
+        else
+            git push origin "$FALLBACK_BRANCH" --set-upstream 2>/dev/null || fb_push_rc=$?
+        fi
+        if [[ $fb_push_rc -ne 0 ]]; then
             log_status "ERROR" "Push failed for $FALLBACK_BRANCH"
             return 1
         fi
@@ -542,6 +721,17 @@ worktree_fallback_branch_pr() {
         if [[ -n "$existing_pr" ]]; then
             log_status "INFO" "PR already exists for $FALLBACK_BRANCH: $existing_pr"
         else
+            # Confirm the pushed branch is on origin (propagation lag) before gh.
+            _pr_confirm_remote_branch "$FALLBACK_BRANCH" || true
+
+            # Never call gh with zero commits (the "No commits between" failure).
+            local commits_ahead
+            commits_ahead=$(_pr_commits_ahead "$base_branch" "$FALLBACK_BRANCH")
+            if [[ "$commits_ahead" == "0" ]]; then
+                log_status "WARN" "No commits to PR for $FALLBACK_BRANCH (origin/$base_branch..$FALLBACK_BRANCH empty) — skipping PR creation"
+                return 0
+            fi
+
             local pr_title pr_body
             pr_title=$(pr_build_title "$task_id" "$task_name")
             pr_body=$(pr_build_description "$task_id" "$task_name" "$FALLBACK_BRANCH" \
@@ -551,7 +741,9 @@ worktree_fallback_branch_pr() {
             [[ "${PR_DRAFT:-false}" == "true" ]] && gh_args+=(--draft)
             local pr_url
             if ! pr_url=$(gh pr create "${gh_args[@]}" 2>&1); then
-                log_status "ERROR" "Fallback PR creation failed: $pr_url"
+                # Surface gh's stderr verbatim; keep the pushed branch for manual PR.
+                log_status "ERROR" "Fallback PR creation failed for $FALLBACK_BRANCH: $pr_url"
+                log_status "ERROR" "Branch is pushed — open by hand: gh pr create --head $FALLBACK_BRANCH --base $base_branch"
                 return 1
             fi
             log_status "SUCCESS" "Fallback PR created: $pr_url"
