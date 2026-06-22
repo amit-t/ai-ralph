@@ -15,25 +15,24 @@ The repo has a single remote:
 |---|---|---|---|
 | `origin` | `github.com-at:amit-t/ai-ralph` | `amit-t` | `amit-t/ai-ralph` |
 
-`origin` has `main` and `dev` branches.
+`main` is the single long-lived branch on `origin`. (`dev` was retired on 2026-06-22 — all PRs now target `main`.)
 
-When the user asks for "PRs to main and dev", open **2 PRs** against `origin`: `origin/main`, `origin/dev`. Push the branch to `origin` first, then create the PRs on the `amit-t` account:
+PRs target `origin/main`. Push the branch to `origin` first, then create the PR on the `amit-t` account:
 
 ```bash
 # Push to origin
 git push origin <branch>
 
-# amit-t PRs
+# amit-t PR
 gh auth switch --user amit-t
 gh pr create --repo amit-t/ai-ralph --base main --head <branch> ...
-gh pr create --repo amit-t/ai-ralph --base dev  --head <branch> ...
 ```
 
 If the user asks for a single PR with no remote specified, default to `amit-t/ai-ralph` on the `amit-t` account.
 
 ## Branch Safety
 
-**Never delete `dev` or `main` branches — locally or on any remote.** These are long-lived shared branches. All branch cleanup commands (`git branch -d`, `git branch -D`, `git push --delete`) must exclude `dev` and `main`. This applies even when the user asks for broad cleanup.
+**Never delete the `main` branch — locally or on any remote.** It is the only long-lived branch. All branch cleanup commands (`git branch -d`, `git branch -D`, `git push --delete`) must exclude `main`. This applies even when the user asks for broad cleanup.
 
 ## Worktrees
 
