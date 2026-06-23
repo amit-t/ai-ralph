@@ -574,9 +574,14 @@ Detection is automatic via `TERM_PROGRAM` / `VSCODE_PID`. Plain terminals (Apple
 
 Workers communicate with the orchestrator via atomic JSON files in `.ralph/.continuous_completions/` and heartbeat files in `.ralph/.continuous_heartbeats/`. If a tab is force-closed, the orchestrator detects the stale heartbeat after ~60s and synthesizes a failure completion so the task can be retried.
 
+#### cmux: one right pane, one tab per worker
+
+Inside [cmux](https://cmux.io) (detected via `CMUX_WORKSPACE_ID`), Ralph opens a **single pane to the right** of the tab it was dispatched from and adds **each worker as a tab** in that pane — instead of stacking one split pane per worker. At 10-20 concurrent workers the old pane-per-worker layout became an illegible wall of panes; the tabbed layout keeps every worker in one switchable tab strip. Each tab is named after its task id (or worker id) so they stay distinguishable. Set `RALPH_CMUX_LAYOUT=panes` to restore the legacy one-pane-per-worker behavior.
+
 | Flag | Env var | Default | Description |
 |---|---|---|---|
 | `--no-tabs` | `RALPH_DISABLE_TABS=true` | (off) | Force the single-pane orchestrator even under a tab-capable terminal. |
+| — | `RALPH_CMUX_LAYOUT=panes` | `tabs` | cmux only: `tabs` puts every worker in one right-side pane as tabs; `panes` stacks one split pane per worker (legacy). |
 
 ### Tuning
 

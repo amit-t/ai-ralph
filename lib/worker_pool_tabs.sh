@@ -449,14 +449,23 @@ _spawn_worker_tab() {
         args+=("${_extras[@]}")
     fi
 
+    # Label this worker's cmux tab so 10-20 concurrent workers stay
+    # distinguishable in the shared right-side pane. Prefer the task id, fall
+    # back to the worker id. Consumed by spawn_cmux_panes via RALPH_CMUX_TAB_LABEL.
+    local tab_label="${task_id:-$worker_id}"
+
     # Use spawn_parallel_agents (count=1) so the existing tab-detection
-    # logic (iTerm2 / VS Code / Windsurf / Cursor / background) is reused.
+    # logic (iTerm2 / VS Code / Windsurf / Cursor / cmux / background) is reused.
     # When the terminal doesn't support tabs or PARALLEL_BG=true, this
     # falls back to a background subprocess and tee's output to a per-worker log.
     if declare -F spawn_parallel_agents >/dev/null 2>&1; then
         # spawn_parallel_agents prints status; suppress to keep the
-        # orchestrator's per-completion telemetry clean.
-        spawn_parallel_agents 1 "$engine_cmd" "${args[@]}" >/dev/null 2>&1 &
+        # orchestrator's per-completion telemetry clean. Export the tab label in
+        # a subshell so it reaches the cmux spawner without leaking to siblings.
+        (
+            [[ -n "$tab_label" ]] && export RALPH_CMUX_TAB_LABEL="$tab_label"
+            spawn_parallel_agents 1 "$engine_cmd" "${args[@]}"
+        ) >/dev/null 2>&1 &
         return 0
     fi
 
