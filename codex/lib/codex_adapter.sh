@@ -1,21 +1,33 @@
 #!/bin/bash
 
 # Codex CLI Adapter Layer for Ralph
-# Wraps the Codex CLI to provide a consistent interface for the Ralph loop.
+# Wraps the real (clap-based) Codex CLI to provide a consistent interface for
+# the Ralph loop.
 #
-# Interface: codex [OPTIONS] [-- <PROMPT>...] [COMMAND]
+# Interface: codex [OPTIONS] [PROMPT]
+#            codex <COMMAND> [ARGS]
 #
-# Key CLI mappings:
-#   Non-interactive:  codex -p -- "prompt"
-#   Prompt from file: codex -p --prompt-file FILE
-#   Continue session: codex -c
-#   Resume session:   codex -r SESSION_ID
-#   List sessions:    codex list --format json
-#   Auth check:       codex auth status
-#   Model select:     codex --model gpt-4|gpt-3.5|claude
-#   Permissions:      codex --permission-mode auto|dangerous
+# Key CLI mappings (verified against codex-cli 0.142.0):
+#   Non-interactive:  codex exec [OPTIONS] "<prompt>"   (or `-` reads stdin)
+#   JSONL events:     codex exec --json ...             (emits thread.started)
+#   Resume session:   codex exec resume <SESSION_ID> "<prompt>"
+#   Interactive TUI:  codex "<prompt>"  /  codex resume <SESSION_ID>
+#   Auth check:       codex login status
+#   Model select:     codex exec --model <MODEL>
+#   Sandbox policy:   codex exec -s read-only|workspace-write|danger-full-access
+#   Bypass all:       codex exec --dangerously-bypass-approvals-and-sandbox
 #
-# Version: 0.1.0
+# Session IDs are UUID "thread_id"s surfaced by `--json` (thread.started event)
+# and persisted by the CLI under $CODEX_HOME/sessions/**/rollout-*.jsonl.
+#
+# NOTE on permission mapping: Ralph's user-facing CODEX_PERMISSION_MODE keeps the
+# legacy values "auto" and "dangerous" for backward compat. They translate to:
+#   auto      -> -s workspace-write                         (sandboxed, no prompts)
+#   dangerous -> --dangerously-bypass-approvals-and-sandbox (no sandbox)
+# `codex exec resume` does NOT accept -s, so on resume only the dangerous bypass
+# flag is emitted; "auto" inherits the original session's sandbox policy.
+#
+# Version: 0.2.0
 
 # Codex CLI command
 CODEX_CMD="codex"
@@ -26,8 +38,8 @@ CODEX_SESSION_FILE="${RALPH_DIR:-.ralph}/.codex_session_id"
 CODEX_SESSION_HISTORY_FILE="${RALPH_DIR:-.ralph}/.codex_session_history"
 
 # Codex-specific configuration (can be overridden from .ralphrc.codex)
-CODEX_MODEL="${CODEX_MODEL:-}"                         # gpt-4, gpt-3.5, claude (empty = default)
-CODEX_PERMISSION_MODE="${CODEX_PERMISSION_MODE:-dangerous}" # auto or dangerous
+CODEX_MODEL="${CODEX_MODEL:-}"                         # e.g. gpt-5-codex, o3 (empty = config default)
+CODEX_PERMISSION_MODE="${CODEX_PERMISSION_MODE:-dangerous}" # auto (-s workspace-write) or dangerous (bypass)
 
 # =============================================================================
 # DEPENDENCY CHECKS
@@ -39,20 +51,20 @@ check_codex_cli() {
         echo "ERROR: Codex CLI ('$CODEX_CMD') is not installed." >&2
         echo "" >&2
         echo "Install the official Codex CLI:" >&2
-        echo "  See: https://docs.codex.ai/ for installation instructions" >&2
+        echo "  npm install -g @openai/codex   (or: brew install codex)" >&2
         echo "" >&2
-        echo "Then authenticate: codex auth login" >&2
+        echo "Then authenticate: codex login" >&2
         return 1
     fi
 
-    # Check authentication status
+    # Check authentication status (real CLI: `codex login status`)
     local auth_output
     # shellcheck disable=SC2034 # captured for parallelism with auth_exit; reserved for future error message surface
-    auth_output=$("$CODEX_CMD" auth status 2>&1)
+    auth_output=$("$CODEX_CMD" login status 2>&1)
     local auth_exit=$?
 
     if [[ $auth_exit -ne 0 ]]; then
-        echo "WARN: Codex CLI may not be authenticated. Run 'codex auth login' or 'codex setup'." >&2
+        echo "WARN: Codex CLI may not be authenticated. Run 'codex login'." >&2
     fi
 
     return 0
@@ -72,9 +84,19 @@ declare -a CODEX_CMD_ARGS=()
 #   $1 - prompt_file: Path to the prompt file
 #   $2 - loop_context: Additional context string to append
 #   $3 - session_id: Session ID for --resume (empty = new session)
-#   $4 - print_mode: true = non-interactive (-p), false = interactive
+#   $4 - print_mode: true = non-interactive (`codex exec`), false = interactive TUI
 #   $5 - worktree_directive: If set, prepended at TOP of prompt so the agent
 #        sees the working-directory constraint before any other instruction.
+#
+# Resulting argv shapes:
+#   fresh   non-interactive: codex exec --json [--model M] <sandbox> "<prompt>"
+#   resume  non-interactive: codex exec resume <id> --json [--model M] [bypass] "<prompt>"
+#   fresh   interactive:     codex [--model M] "<prompt>"
+#   resume  interactive:     codex resume <id> [--model M] "<prompt>"
+#
+# The full prompt text is passed as the final positional argument (the real
+# `codex` CLI has no --prompt-file flag); callers invoke "${CODEX_CMD_ARGS[@]}"
+# directly without redirecting stdin, so the prompt must live in argv.
 build_codex_command() {
     local prompt_file=$1
     local loop_context=$2
@@ -91,27 +113,61 @@ build_codex_command() {
         return 1
     fi
 
-    # Non-interactive print mode for background execution
+    local resuming=false
+    [[ -n "$session_id" ]] && resuming=true
+
     if [[ "$print_mode" == "true" ]]; then
-        CODEX_CMD_ARGS+=("-p")
+        # Non-interactive: `codex exec` (optionally resuming a session).
+        CODEX_CMD_ARGS+=("exec")
+        if [[ "$resuming" == "true" ]]; then
+            CODEX_CMD_ARGS+=("resume" "$session_id")
+        fi
+        # Structured JSONL events — lets us capture the thread_id (session id).
+        CODEX_CMD_ARGS+=("--json")
+    else
+        # Interactive TUI: bare `codex` (or `codex resume <id>`).
+        if [[ "$resuming" == "true" ]]; then
+            CODEX_CMD_ARGS+=("resume" "$session_id")
+        fi
     fi
 
-    # Add model selection
+    # Model selection (real flag: --model / -m)
     if [[ -n "$CODEX_MODEL" ]]; then
         CODEX_CMD_ARGS+=("--model" "$CODEX_MODEL")
     fi
 
-    # Add permission mode
-    if [[ -n "$CODEX_PERMISSION_MODE" ]]; then
-        CODEX_CMD_ARGS+=("--permission-mode" "$CODEX_PERMISSION_MODE")
+    # Permission/sandbox mapping — only meaningful for non-interactive runs.
+    # In interactive TUI mode the user approves actions manually, so no flag.
+    if [[ "$print_mode" == "true" ]]; then
+        case "$CODEX_PERMISSION_MODE" in
+            dangerous)
+                # Valid on both `codex exec` and `codex exec resume`.
+                CODEX_CMD_ARGS+=("--dangerously-bypass-approvals-and-sandbox")
+                ;;
+            auto|"")
+                # `codex exec resume` rejects -s; resumed sessions inherit the
+                # original sandbox policy, so only set it on a fresh session.
+                if [[ "$resuming" != "true" ]]; then
+                    CODEX_CMD_ARGS+=("-s" "workspace-write")
+                fi
+                ;;
+            read-only|workspace-write|danger-full-access)
+                # Allow passing a raw codex sandbox value through directly.
+                if [[ "$resuming" != "true" ]]; then
+                    CODEX_CMD_ARGS+=("-s" "$CODEX_PERMISSION_MODE")
+                fi
+                ;;
+            *)
+                if [[ "$resuming" != "true" ]]; then
+                    CODEX_CMD_ARGS+=("-s" "workspace-write")
+                fi
+                ;;
+        esac
     fi
 
-    # Add session continuity flag
-    if [[ -n "$session_id" ]]; then
-        CODEX_CMD_ARGS+=("-r" "$session_id")
-    fi
-
-    # Merge prompt + context into a temp file if context or worktree directive exists
+    # Build the effective prompt (merge worktree directive + loop context if any),
+    # then pass its full text as the final positional PROMPT argument.
+    local effective_prompt_file="$prompt_file"
     if [[ -n "$loop_context" || -n "$worktree_directive" ]]; then
         local prompt_dir
         prompt_dir=$(dirname "$prompt_file")
@@ -128,19 +184,29 @@ build_codex_command() {
         if [[ -n "$loop_context" ]]; then
             printf '\n\n---\nRALPH LOOP CONTEXT: %s\n' "$loop_context" >> "$combined_file"
         fi
-        CODEX_CMD_ARGS+=("--prompt-file" "$combined_file")
-    else
-        CODEX_CMD_ARGS+=("--prompt-file" "$prompt_file")
+        effective_prompt_file="$combined_file"
     fi
+
+    CODEX_CMD_ARGS+=("$(cat "$effective_prompt_file")")
 }
 
 # =============================================================================
 # SESSION MANAGEMENT
 # =============================================================================
 
-# List recent Codex sessions as JSON
+# Directory where the Codex CLI persists session rollouts.
+CODEX_SESSIONS_DIR="${CODEX_HOME:-$HOME/.codex}/sessions"
+
+# List recent Codex session IDs (newest first), one per line.
+# The real CLI has no `codex list` command; sessions live as rollout files at
+# $CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl.
 codex_list_sessions() {
-    "$CODEX_CMD" list --format json 2>/dev/null
+    local limit="${1:-20}"
+    [[ -d "$CODEX_SESSIONS_DIR" ]] || return 1
+    # Newest-first by mtime; extract the trailing UUID from each filename.
+    ls -t "$CODEX_SESSIONS_DIR"/*/*/*/rollout-*.jsonl 2>/dev/null \
+        | head -n "$limit" \
+        | sed -E 's/.*rollout-[0-9T:-]+-([0-9a-fA-F-]{36})\.jsonl$/\1/'
 }
 
 # Load saved session ID
@@ -206,67 +272,60 @@ codex_reset_session() {
     CODEX_SESSION_ID=""
 }
 
-# Extract session ID from Codex output
+# Extract session ID from Codex `--json` output.
+# The exec JSONL stream begins with: {"type":"thread.started","thread_id":"<uuid>"}
+# Output files are often raw terminal captures (via `script`), so a robust regex
+# grep is used in addition to a structured jq pass.
 codex_extract_session_id() {
     local output_file=$1
-    
+
     if [[ ! -f "$output_file" ]]; then
-        return 1
-    fi
-    
-    # Try JSON format first
-    local session_id
-    session_id=$(jq -r '.sessionId // .session_id // empty' "$output_file" 2>/dev/null | head -1)
-    
-    # Fallback to text parsing
-    if [[ -z "$session_id" ]]; then
-        session_id=$(grep -oP 'session[_-]?id["\s:]+\K[a-zA-Z0-9_-]+' "$output_file" 2>/dev/null | head -1)
-    fi
-    
-    if [[ -n "$session_id" ]]; then
-        echo "$session_id"
-        return 0
-    fi
-    
-    return 1
-}
-
-# Get the most recent session ID from `codex list`
-# Returns: Session ID on stdout, or empty if unavailable
-codex_get_latest_session_id() {
-    local list_json
-    list_json=$("$CODEX_CMD" list --format json 2>/dev/null) || return 1
-
-    if [[ -z "$list_json" ]] || ! echo "$list_json" | jq empty 2>/dev/null; then
         return 1
     fi
 
     local session_id=""
 
-    # Shape 1: Array of session objects — sort by timestamp, take most recent
-    session_id=$(echo "$list_json" | jq -r '
-        if type == "array" then
-            (sort_by(.created_at // .started_at // .timestamp // "") | reverse)[0] |
-            (.id // .session_id // .sessionId // empty)
-        else empty end
-    ' 2>/dev/null)
+    # Primary: grep the thread_id / session_id field (survives terminal noise).
+    session_id=$(grep -oE '"(thread_id|session_id|sessionId|id)"[[:space:]]*:[[:space:]]*"[0-9a-fA-F-]{36}"' "$output_file" 2>/dev/null \
+        | grep -oE '[0-9a-fA-F-]{36}' \
+        | head -1)
 
-    # Shape 2: Object with a .sessions array
-    if [[ -z "$session_id" || "$session_id" == "null" ]]; then
-        session_id=$(echo "$list_json" | jq -r '
-            if type == "object" and .sessions then
-                (.sessions | sort_by(.created_at // .started_at // .timestamp // "") | reverse)[0] |
-                (.id // .session_id // .sessionId // empty)
-            else empty end
-        ' 2>/dev/null)
+    # Secondary: structured jq pass over JSONL (clean output only).
+    if [[ -z "$session_id" ]]; then
+        session_id=$(jq -rs '
+            (map(.thread_id // .session_id // .sessionId // empty) | map(select(. != null and . != "")) | .[0]) // empty
+        ' "$output_file" 2>/dev/null)
     fi
 
-    # Shape 3: Simple first-element fallback (if already sorted most-recent-first)
+    if [[ -n "$session_id" && "$session_id" != "null" ]]; then
+        echo "$session_id"
+        return 0
+    fi
+
+    return 1
+}
+
+# Get the most recent session ID from the Codex rollout store.
+# Reads $CODEX_HOME/sessions/**/rollout-<ts>-<uuid>.jsonl (no `codex list` exists).
+# Strategy: newest rollout file's session_meta payload, then its filename UUID.
+# Returns: Session ID on stdout, or empty if unavailable.
+codex_get_latest_session_id() {
+    [[ -d "$CODEX_SESSIONS_DIR" ]] || return 1
+
+    local newest
+    newest=$(ls -t "$CODEX_SESSIONS_DIR"/*/*/*/rollout-*.jsonl 2>/dev/null | head -1)
+    [[ -n "$newest" ]] || return 1
+
+    local session_id=""
+
+    # Primary: first line is a session_meta record with payload.session_id / id.
+    session_id=$(head -1 "$newest" 2>/dev/null \
+        | jq -r '.payload.session_id // .payload.id // .session_id // .id // empty' 2>/dev/null)
+
+    # Fallback: the UUID embedded in the rollout filename.
     if [[ -z "$session_id" || "$session_id" == "null" ]]; then
-        session_id=$(echo "$list_json" | jq -r '
-            if type == "array" then .[0] | (.id // .session_id // .sessionId // empty)
-            else empty end
-        ' 2>/dev/null)
+        session_id=$(printf '%s\n' "$newest" \
+            | sed -E 's/.*rollout-[0-9T:-]+-([0-9a-fA-F-]{36})\.jsonl$/\1/')
     fi
 
     if [[ -n "$session_id" && "$session_id" != "null" ]]; then
