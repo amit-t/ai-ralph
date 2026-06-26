@@ -5,10 +5,10 @@
 # This is a parallel implementation to ralph_loop.sh (Claude Code) — no shared state.
 #
 # The official Codex CLI is a local agent (like Claude Code):
-#   codex -p --prompt-file FILE     # Non-interactive execution
-#   codex -r SESSION_ID             # Resume specific session
-#   codex --model opus|sonnet       # Model selection
-#   codex --permission-mode auto    # Permission control
+#   codex exec "<prompt>"                  # Non-interactive execution
+#   codex exec resume <SESSION_ID> "..."   # Resume specific session
+#   codex exec --model <MODEL>             # Model selection
+#   codex exec -s workspace-write          # Sandbox policy (see codex_adapter.sh)
 #
 # Config: Uses .ralphrc.codex (separate from Claude's .ralphrc)
 #
@@ -1279,7 +1279,7 @@ main() {
             echo -e "${YELLOW}║${NC}  Result:          No implementation changes detected"
             if [[ -n "$_summary_session_id" ]]; then
                 echo -e "${YELLOW}║${NC}  Session ID:      ${_summary_session_id}"
-                echo -e "${YELLOW}║${NC}  Resume with:     codex -r ${_summary_session_id}"
+                echo -e "${YELLOW}║${NC}  Resume with:     codex exec resume ${_summary_session_id}"
             fi
             echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
             echo ""
@@ -1361,7 +1361,7 @@ main() {
         echo -e "${GREEN}║${NC}  Net change:      $((lines_added - lines_removed)) lines"
         if [[ -n "$_summary_session_id" ]]; then
             echo -e "${GREEN}║${NC}  Session ID:      ${_summary_session_id}"
-            echo -e "${GREEN}║${NC}  Resume with:     codex -r ${_summary_session_id}"
+            echo -e "${GREEN}║${NC}  Resume with:     codex exec resume ${_summary_session_id}"
         fi
         echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
         echo ""
@@ -1389,7 +1389,7 @@ main() {
         fi
         if [[ -n "$_fail_session_id" ]]; then
             echo -e "${RED}║${NC}  Session ID:      ${_fail_session_id}"
-            echo -e "${RED}║${NC}  Resume with:     codex -r ${_fail_session_id}"
+            echo -e "${RED}║${NC}  Resume with:     codex exec resume ${_fail_session_id}"
         fi
         echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
         echo ""
