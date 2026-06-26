@@ -472,6 +472,34 @@ init_codex_session_tracking() {
 }
 
 # =============================================================================
+# RESULT / ERROR CLASSIFICATION
+# =============================================================================
+
+# codex_extract_turn_error - First error message from a Codex JSONL output file.
+# Codex surfaces a failed turn as {"type":"error","message":...} and/or
+# {"type":"turn.failed","error":{"message":...}}; the message often wraps a
+# nested JSON carrying an HTTP status (e.g. 429 = rate limit).
+# Args: $1 - output_file (Codex --json JSONL, may be wrapped by `script -q`)
+# Echoes the first non-empty error message, or empty. Always returns 0.
+codex_extract_turn_error() {
+    local output_file=$1
+    [[ -f "$output_file" && -s "$output_file" ]] || { echo ""; return 0; }
+    jq -rs '
+        [ (.[] | select(.type=="turn.failed") | .error.message?),
+          (.[] | select(.type=="error")       | .message?) ]
+        | map(select(. != null and . != "")) | .[0] // empty
+    ' "$output_file" 2>/dev/null || true
+}
+
+# codex_is_rate_limit_message - True (rc 0) if an error message looks like a
+# transient rate-limit / quota / 429 worth a backoff-retry (vs a hard failure).
+# Args: $1 - error message string
+codex_is_rate_limit_message() {
+    local msg=$1
+    echo "$msg" | grep -qiE '(rate.?limit|hit your limit|usage limit|resets|quota|too many|"status":[[:space:]]*429|(^|[^0-9])429([^0-9]|$))'
+}
+
+# =============================================================================
 # BEADS BIDIRECTIONAL SYNC
 # =============================================================================
 
