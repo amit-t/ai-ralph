@@ -1788,26 +1788,54 @@ EOF
             fi
 
             if [[ -n "$api_error" ]]; then
-                log_status "ERROR" "Claude API error: $api_error"
-                echo -e "\n${RED}━━━ Claude API Error ━━━${NC}"
-                echo -e "${YELLOW}$api_error${NC}"
-                echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-                echo '{"status": "failed", "error": "is_error:true", "timestamp": "'"$(date '+%Y-%m-%d %H:%M:%S')"'"}' > "$PROGRESS_FILE"
+                # Classify the is_error:true result before deciding what to do.
+                # Claude CLI can set is_error:true (e.g. a late 429 rate-limit)
+                # AFTER the worker already finished and committed — the result
+                # body then carries the completion summary, not a real failure.
+                local task_complete="false"
+                if grep -q 'RALPH_STATUS' "$output_file" 2>/dev/null \
+                   && grep -qE 'STATUS:[[:space:]]*COMPLETE' "$output_file" 2>/dev/null; then
+                    task_complete="true"
+                fi
+                local is_rate_limit="false"
+                if echo "$api_error" | grep -qiE '(rate.?limit|hit your limit|resets|quota|too many|429)'; then
+                    is_rate_limit="true"
+                fi
 
-                # Reset session to prevent infinite retry with bad session ID
-                if echo "$api_error" | grep -qi "tool.use.concurrency\|concurrency"; then
-                    reset_session "tool_use_concurrency_error"
-                    log_status "WARN" "Session reset due to tool use concurrency error. Re-run ralph to start a fresh session."
+                if [[ "$task_complete" == "true" ]]; then
+                    # Honor the completion. Do NOT fail the loop or reset the
+                    # session over an error flag that landed after the work was
+                    # done (session save is still skipped by the is_error guard
+                    # above, which is acceptable — the task is finished).
+                    log_status "WARN" "Claude set is_error:true but output contains STATUS: COMPLETE — treating as completed (likely late rate-limit). Not failing, not resetting session."
+                    set -e
+                    # Fall through to the success-handling path below.
                 else
-                    reset_session "api_error_is_error_true"
-                    log_status "WARN" "Session reset due to API error (is_error:true). Re-run ralph to start a fresh session."
-                fi
+                    log_status "ERROR" "Claude API error: $api_error"
+                    echo -e "\n${RED}━━━ Claude API Error ━━━${NC}"
+                    echo -e "${YELLOW}$api_error${NC}"
+                    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+                    echo '{"status": "failed", "error": "is_error:true", "timestamp": "'"$(date '+%Y-%m-%d %H:%M:%S')"'"}' > "$PROGRESS_FILE"
 
-                set -e
-                if echo "$api_error" | grep -qiE '(rate.limit|hit your limit|resets|quota|too many)'; then
-                    return 2
+                    if echo "$api_error" | grep -qi "tool.use.concurrency\|concurrency"; then
+                        reset_session "tool_use_concurrency_error"
+                        log_status "WARN" "Session reset due to tool use concurrency error. Re-run ralph to start a fresh session."
+                    elif [[ "$is_rate_limit" == "true" ]]; then
+                        # Transient throttling — KEEP the session so a retry
+                        # resumes context instead of starting cold.
+                        log_status "WARN" "Rate limit (429) hit. Session preserved — back off and re-run to resume."
+                    else
+                        # Reset session to prevent infinite retry with bad session ID
+                        reset_session "api_error_is_error_true"
+                        log_status "WARN" "Session reset due to API error (is_error:true). Re-run ralph to start a fresh session."
+                    fi
+
+                    set -e
+                    if [[ "$is_rate_limit" == "true" ]]; then
+                        return 2
+                    fi
+                    return 1
                 fi
-                return 1
             fi
         fi
         set -e

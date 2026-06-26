@@ -648,11 +648,14 @@ analyze_response() {
     if [[ -f "$RALPH_DIR/.last_output_length" ]]; then
         local last_length
         last_length=$(cat "$RALPH_DIR/.last_output_length")
-        local length_ratio=$((output_length * 100 / last_length))
+        # Guard against empty/non-numeric/zero values to avoid division by zero
+        if [[ "$last_length" =~ ^[0-9]+$ && $last_length -gt 0 ]]; then
+            local length_ratio=$((output_length * 100 / last_length))
 
-        if [[ $length_ratio -lt 50 ]]; then
-            # Output is less than 50% of previous - possible completion
-            ((confidence_score+=10))
+            if [[ $length_ratio -lt 50 ]]; then
+                # Output is less than 50% of previous - possible completion
+                ((confidence_score+=10))
+            fi
         fi
     fi
     echo "$output_length" > "$RALPH_DIR/.last_output_length"

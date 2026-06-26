@@ -30,6 +30,95 @@ _pr_warn_block() {
     echo "╚══════════════════════════════════════════════════════╝"
 }
 
+# ── gh multi-account fallback ───────────────────────────────────────────────────
+# Amit (and others) commonly keep more than one gh account logged in, and a given
+# repo is usually accessible by only ONE of them. git push uses SSH keys, but gh
+# API calls use whichever account is *active*. If the active account lacks repo
+# access, the gh call 404s. These helpers retry a gh command across every
+# logged-in account, then restore the original active account.
+#
+# NOTE: `gh auth switch` mutates GLOBAL gh state (shared by the user's shell and
+# any --parallel workers). We restore the original active account in all paths to
+# keep that window small; a true per-process selection is not exposed by gh.
+
+# List all logged-in gh usernames (active first if discoverable).
+_pr_gh_accounts() {
+    gh auth status 2>/dev/null \
+        | grep -oE 'account [A-Za-z0-9_-]+' \
+        | awk '{print $2}'
+}
+
+# Current active gh username (empty if none/unknown).
+_pr_gh_active_account() {
+    gh auth status --active 2>/dev/null \
+        | grep -oE 'account [A-Za-z0-9_-]+' \
+        | awk '{print $2; exit}'
+}
+
+# Heuristic: does this gh stderr look like an access/auth problem worth retrying
+# under a different account (vs. a real error we should surface immediately)?
+_pr_gh_access_error() {
+    grep -qiE 'not accessible|HTTP 40[34]|404|not found|no longer access|must have|permission|not authorized|Could not resolve to a (Repository|User)|authentication|gh auth login' <<<"$1"
+}
+
+# Run a gh command, retrying across logged-in accounts on access/auth failure.
+# Usage: _pr_gh_try <gh-args...>
+# Prints gh's combined output (success URL or failure error) to STDOUT and
+# returns gh's rc. Callers capture with $(...) — NO 2>&1 needed; progress logs
+# go to stderr (via log_status) and never pollute the captured value.
+# Always restores the original active account.
+_pr_gh_try() {
+    local original active out rc=1
+    original=$(_pr_gh_active_account)
+
+    # Build account order: active first, then the rest.
+    local -a accts=()
+    [[ -n "$original" ]] && accts+=("$original")
+    local a
+    while IFS= read -r a; do
+        [[ -n "$a" && "$a" != "$original" ]] && accts+=("$a")
+    done < <(_pr_gh_accounts)
+
+    # No accounts discoverable — just run gh as-is.
+    if [[ ${#accts[@]} -eq 0 ]]; then
+        out=$(gh "$@" 2>&1); rc=$?
+        printf '%s\n' "$out"
+        return $rc
+    fi
+
+    local acct
+    for acct in "${accts[@]}"; do
+        if [[ "$acct" != "$(_pr_gh_active_account)" ]]; then
+            if ! gh auth switch -u "$acct" >/dev/null 2>&1; then
+                continue
+            fi
+            log_status "INFO" "PR: trying gh as account '$acct'"
+        fi
+        if out=$(gh "$@" 2>&1); then
+            rc=0
+            [[ "$acct" != "$original" ]] && log_status "INFO" "PR: gh succeeded as account '$acct'"
+            break
+        else
+            # Capture gh's rc here (inside else); reading $? after `fi` would yield
+            # the if-statement's own 0 and mask the failure.
+            rc=$?
+        fi
+        # Stop early on a non-access error (real failure) — don't shop accounts.
+        if ! _pr_gh_access_error "$out"; then
+            break
+        fi
+        log_status "WARN" "PR: account '$acct' cannot access repo — trying next account"
+    done
+
+    # Restore original active account (best effort).
+    if [[ -n "$original" && "$original" != "$(_pr_gh_active_account)" ]]; then
+        gh auth switch -u "$original" >/dev/null 2>&1 || true
+    fi
+
+    printf '%s\n' "$out"
+    return $rc
+}
+
 # ── _pr_ensure_label ──────────────────────────────────────────────────────────
 # Ensures a GitHub label exists in the repo, creating it if missing.
 # Args: $1=label_name  $2=color (hex without #, default: "d93f0b")
@@ -238,13 +327,27 @@ pr_preflight_check() {
         return 0
     fi
 
-    # Check 1b: remote is actually reachable (catches missing SSH keys / bad credentials)
-    if ! git ls-remote origin HEAD &>/dev/null; then
-        log_status "WARN" "PR: Cannot reach remote 'origin' — push and PR disabled"
+    # Check 1b: remote is actually reachable (catches missing SSH keys / bad
+    # credentials). Retry to survive transient SSH flakes — a single blip must not
+    # disable push/PR for the whole run. Use an explicit ConnectTimeout so a hung
+    # handshake fails fast instead of stalling, and capture stderr so the real
+    # reason is logged (the old &>/dev/null swallowed it).
+    local _lsr_err="" _lsr_ok="false" _lsr_try
+    for _lsr_try in 1 2 3; do
+        if _lsr_err=$(GIT_SSH_COMMAND="ssh -o ConnectTimeout=10 -o BatchMode=yes" \
+                      git ls-remote origin HEAD 2>&1); then
+            _lsr_ok="true"
+            break
+        fi
+        [[ $_lsr_try -lt 3 ]] && sleep $((_lsr_try * 2))
+    done
+    if [[ "$_lsr_ok" != "true" ]]; then
+        log_status "WARN" "PR: Cannot reach remote 'origin' after 3 tries — push disabled"
+        log_status "WARN" "    git ls-remote origin said: ${_lsr_err}"
         log_status "WARN" "    Check SSH keys or credentials: git ls-remote origin"
         RALPH_PR_PUSH_CAPABLE="false"
-        RALPH_PR_GH_CAPABLE="false"
-        return 0
+        # Do NOT disable gh here — gh capability is independent of the push probe
+        # (different transport/account). Fall through to the gh checks below.
     fi
 
     # Check 2: gh CLI installed
@@ -533,7 +636,7 @@ worktree_commit_and_pr() {
         fi
 
         local existing_pr
-        existing_pr=$(gh pr view "$_WT_CURRENT_BRANCH" --json url --jq '.url' 2>/dev/null)
+        existing_pr=$(_pr_gh_try pr view "$_WT_CURRENT_BRANCH" --json url --jq '.url' 2>/dev/null)
         if [[ -n "$existing_pr" ]]; then
             log_status "INFO" "PR already exists for $_WT_CURRENT_BRANCH: $existing_pr. Skipping creation."
         else
@@ -562,7 +665,7 @@ worktree_commit_and_pr() {
             [[ "${PR_DRAFT:-false}" == "true" ]] && gh_args+=(--draft)
 
             local pr_url
-            if ! pr_url=$(gh pr create "${gh_args[@]}" 2>&1); then
+            if ! pr_url=$(_pr_gh_try pr create "${gh_args[@]}"); then
                 # Surface gh's stderr verbatim and keep the pushed branch so it
                 # can be PR'd by hand.
                 log_status "ERROR" "PR creation failed for $_WT_CURRENT_BRANCH: $pr_url"
@@ -717,7 +820,7 @@ worktree_fallback_branch_pr() {
     # ── Steps 6–7: Create PR ─────────────────────────────────────────────────
     if [[ "$RALPH_PR_GH_CAPABLE" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
         local existing_pr
-        existing_pr=$(gh pr view "$FALLBACK_BRANCH" --json url --jq '.url' 2>/dev/null)
+        existing_pr=$(_pr_gh_try pr view "$FALLBACK_BRANCH" --json url --jq '.url' 2>/dev/null)
         if [[ -n "$existing_pr" ]]; then
             log_status "INFO" "PR already exists for $FALLBACK_BRANCH: $existing_pr"
         else
@@ -740,7 +843,7 @@ worktree_fallback_branch_pr() {
                            --title "$pr_title" --body "$pr_body")
             [[ "${PR_DRAFT:-false}" == "true" ]] && gh_args+=(--draft)
             local pr_url
-            if ! pr_url=$(gh pr create "${gh_args[@]}" 2>&1); then
+            if ! pr_url=$(_pr_gh_try pr create "${gh_args[@]}"); then
                 # Surface gh's stderr verbatim; keep the pushed branch for manual PR.
                 log_status "ERROR" "Fallback PR creation failed for $FALLBACK_BRANCH: $pr_url"
                 log_status "ERROR" "Branch is pushed — open by hand: gh pr create --head $FALLBACK_BRANCH --base $base_branch"
