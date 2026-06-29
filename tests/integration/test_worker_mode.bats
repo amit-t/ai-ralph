@@ -128,14 +128,18 @@ teardown() {
 # RALPH_TABS_ENGINE_CMD per engine
 # =============================================================================
 
-@test "ralph_loop.sh sets RALPH_TABS_ENGINE_CMD=ralph" {
-    grep -q 'RALPH_TABS_ENGINE_CMD="ralph"' "$RALPH_BIN"
+# The engine cmd is prefix-aware: ${RALPH_CMD_PREFIX:-} keeps tab workers on the
+# SAME install that launched them (e.g. per.ralph-codex spawns per.ralph-codex, not
+# the plain twin). Empty prefix preserves the legacy plain binary name.
+# grep -F: the pattern contains ${...} / $ which BRE mishandles non-portably.
+@test "ralph_loop.sh sets prefix-aware RALPH_TABS_ENGINE_CMD=...ralph" {
+    grep -Fq 'RALPH_TABS_ENGINE_CMD="${RALPH_CMD_PREFIX:-}ralph"' "$RALPH_BIN"
 }
 
-@test "ralph_loop_devin.sh sets RALPH_TABS_ENGINE_CMD=ralph-devin" {
-    grep -q 'RALPH_TABS_ENGINE_CMD="ralph-devin"' "$DEVIN_BIN"
+@test "ralph_loop_devin.sh sets prefix-aware RALPH_TABS_ENGINE_CMD=...ralph-devin" {
+    grep -Fq 'RALPH_TABS_ENGINE_CMD="${RALPH_CMD_PREFIX:-}ralph-devin"' "$DEVIN_BIN"
 }
 
-@test "ralph_loop_codex.sh sets RALPH_TABS_ENGINE_CMD=ralph-codex" {
-    grep -q 'RALPH_TABS_ENGINE_CMD="ralph-codex"' "$CODEX_BIN"
+@test "ralph_loop_codex.sh sets prefix-aware RALPH_TABS_ENGINE_CMD=...ralph-codex" {
+    grep -Fq 'RALPH_TABS_ENGINE_CMD="${RALPH_CMD_PREFIX:-}ralph-codex"' "$CODEX_BIN"
 }
