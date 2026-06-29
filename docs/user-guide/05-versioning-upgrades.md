@@ -14,7 +14,7 @@ The command:
 4. Re-runs `install.sh` so any new commands, library files, and shell wrappers land in `~/.local/bin` and `~/.local/share/wb-versioncheck/`, then chains the per-engine installers (`devin/install_devin.sh`, `codex/install_codex.sh`) when present so engine code under `~/.ralph/devin` and `~/.ralph/codex` is refreshed too. Pass `--skip-install` to skip this step if you only want the source updated.
 5. Refuses to upgrade if the new version requires peers (for example, a specific ai-devkit version) you do not have installed (exit code 3). Pass `--force` to bypass at your own risk.
 
-Because step 4 chains the Devin installer, **a Devin-engine change like the `sw1.6` default ships with a normal `ralph.upgrade`** — no separate Devin reinstall needed.
+Because step 4 chains the Devin installer, **a Devin-engine change like the `swe-1.6` default ships with a normal `ralph.upgrade`** — no separate Devin reinstall needed.
 
 If an urgent fix lands behind the *same* `version.json` version, `ralph.upgrade` would normally report "already at X" and stop. Use `--reinstall` to force a fetch + rebase of new commits behind that version and re-run the installers:
 

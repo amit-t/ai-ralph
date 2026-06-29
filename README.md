@@ -18,7 +18,7 @@ This project is a fork of [frankbria/ralph-claude-code](https://github.com/frank
 
 ### What this fork adds over upstream
 
-- **Devin CLI engine** (`ralph-devin`, `rpd.*` aliases) with cloud session polling, ACU limits, and parallel agent spawning. Defaults to the **sw1.6** model (override with `--model`, `DEVIN_MODEL=`, or `DEVIN_MODEL=` in `.ralphrc.devin`)
+- **Devin CLI engine** (`ralph-devin`, `rpd.*` aliases) with cloud session polling, ACU limits, and parallel agent spawning. Defaults to the **swe-1.6** model (override with `--model`, `DEVIN_MODEL=`, or `DEVIN_MODEL=` in `.ralphrc.devin`)
 - **Codex CLI engine** (`ralph-codex`, `rpx.*` aliases) with GPT-4/Claude model selection
 - **Single-run architecture** -- each loop iteration is one agent invocation (no inner while-loop)
 - **Git worktree isolation** -- each loop runs on a dedicated branch; changes merge back only after quality gates pass
@@ -684,11 +684,11 @@ Source: `devin/ALIASES.sh`
 
 #### Model Selection
 
-The Devin loop **defaults to the `sw1.6` model** when you don't pass `--model`. Use these aliases to pin a different one:
+The Devin loop **defaults to the `swe-1.6` model** when you don't pass `--model`. Use these aliases to pin a different one:
 
 | Alias | Expands To | Description |
 |---|---|---|
-| `rpd.sw16` | `ralph-devin --model sw1.6` | Use sw1.6 model (the default) |
+| `rpd.sw16` | `ralph-devin --model swe-1.6` | Use swe-1.6 model (the default) |
 | `rpd.opus` | `ralph-devin --model opus` | Use Opus model |
 | `rpd.sonnet` | `ralph-devin --model sonnet` | Use Sonnet model |
 | `rpd.swe` | `ralph-devin --model swe` | Use SWE model |
@@ -1076,7 +1076,7 @@ These flags work across all engines (substitute `ralph-devin` / `ralph` / `ralph
 ### Devin-Specific Options
 
 ```
---model MODEL           Model: sw1.6 (default), opus, sonnet, swe, gpt
+--model MODEL           Model: swe-1.6 (default), opus, sonnet, swe, gpt
 --permission-mode MODE  Permission mode: auto, dangerous
 --max-loops NUM         Stop after N loops (0 = unlimited)
 --no-worktree           Disable git worktree isolation
@@ -1180,9 +1180,9 @@ DEVIN_MAX_ACU=100
 DEVIN_POLL_INTERVAL=15
 DEVIN_USE_CONTINUE=true
 
-# Model (project-level; the loop defaults to sw1.6 when unset).
-# Precedence: --model CLI > DEVIN_MODEL env > this file > sw1.6 default.
-# DEVIN_MODEL=sw1.6   # e.g. sw1.6, swe, opus, sonnet, gpt
+# Model (project-level; the loop defaults to swe-1.6 when unset).
+# Precedence: --model CLI > DEVIN_MODEL env > this file > swe-1.6 default.
+# DEVIN_MODEL=swe-1.6   # e.g. swe-1.6, swe, opus, sonnet, gpt
 
 # Worktree isolation
 WORKTREE_ENABLED=true
@@ -1602,7 +1602,7 @@ Uninstalling one engine does not affect the others.
 
 **Devin CLI Engine**
 - Cloud session polling with ACU limits
-- Defaults to the **sw1.6** model; sw1.6, Opus, Sonnet, SWE, and GPT model selection
+- Defaults to the **swe-1.6** model; swe-1.6, Opus, Sonnet, SWE, and GPT model selection
 - Permission modes (auto, dangerous)
 
 ### In Progress
