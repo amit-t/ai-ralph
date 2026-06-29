@@ -52,6 +52,14 @@ if [[ ! -d "$CLONE/.git" ]]; then
   exit 1
 fi
 
+# The _wb_* helpers in lib/version-check.sh resolve the clone independently via
+# _wb_clone_path, which reads RALPH_CLONE with no SCRIPT_DIR fallback. When that
+# env var is unset (e.g. a stamped workbench invokes ralph.upgrade directly) the
+# helpers go blind: _wb_local_version returns a bogus "0.0.0" (false-positive
+# upgrade) and _wb_record_prior hits `return 1`, which kills the script silently
+# under set -e. Export the resolved clone so every helper sees the same path.
+export RALPH_CLONE="$CLONE"
+
 # Chain per-engine installers (devin, codex) when present. Root install.sh
 # only refreshes ~/.ralph/{lib,templates,...} and the Claude bits; engine
 # code lives under ~/.ralph/devin and ~/.ralph/codex and is owned by the
@@ -144,7 +152,9 @@ if ! $YES; then
   fi
 fi
 
-_wb_record_prior ralph
+# Non-fatal: a bare _wb_record_prior under set -e would silently kill the
+# upgrade after the user already confirmed if the helper ever returns 1.
+_wb_record_prior ralph || printf "[ralph] warning: could not record prior version for rollback\n" >&2
 git -C "$CLONE" pull --rebase -q origin main
 if ! $SKIP_INSTALL && [[ -x "$CLONE/install.sh" ]]; then
   bash "$CLONE/install.sh"
