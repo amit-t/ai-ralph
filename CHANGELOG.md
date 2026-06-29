@@ -2,6 +2,40 @@
 
 All notable changes to ai-ralph are documented here. release-please appends entries on every merge to `main` based on Conventional Commit messages.
 
+## [2.4.0](https://github.com/amit-t/ai-ralph/compare/v2.3.0...v2.4.0) (2026-06-29)
+
+
+### Features
+
+* **cmux:** one right pane with a tab per worker in parallel mode ([f9b5d58](https://github.com/amit-t/ai-ralph/commit/f9b5d58c1f504465f30b87ced0d5791527c01470))
+* **cmux:** one right pane with a tab per worker in parallel mode ([b233d49](https://github.com/amit-t/ai-ralph/commit/b233d49342d9a87746fb2111e9b7e01d3ca04b68))
+* **install:** add RALPH_CMD_PREFIX for side-by-side (per.) installs ([e1f5efa](https://github.com/amit-t/ai-ralph/commit/e1f5efa9e6fe19bb3b5545637c6491915fbc538a))
+* **install:** RALPH_CMD_PREFIX for side-by-side (per.) installs ([fe632c6](https://github.com/amit-t/ai-ralph/commit/fe632c69e38bd17b93631570d474504286b6dd5b))
+* **parallel:** spawn continuous workers as cmux panes ([3363723](https://github.com/amit-t/ai-ralph/commit/3363723168ea6a69f8c8918393cb07b9c9792de5))
+* **parallel:** spawn continuous workers as cmux panes ([d32686e](https://github.com/amit-t/ai-ralph/commit/d32686e6972e87c3abf5ca4150c1066b3f28b4ef))
+
+
+### Bug Fixes
+
+* **codex:** conform adapter to real Codex CLI (exec/sandbox/resume) ([c7a77e2](https://github.com/amit-t/ai-ralph/commit/c7a77e2384d56b2d3093315e04efd7f8634b3bfc))
+* **codex:** conform adapter to real Codex CLI (exec/sandbox/resume) ([fa36ccf](https://github.com/amit-t/ai-ralph/commit/fa36ccf8a20ddab6c0be9bb65ad3a2cd1107efc1))
+* **codex:** port is_error/429 completion handling to Codex loop ([e88f49c](https://github.com/amit-t/ai-ralph/commit/e88f49c8785d25e0d97fd666dcc1a8143cefdbb4))
+* **codex:** port is_error/429 completion handling to Codex loop ([9a10087](https://github.com/amit-t/ai-ralph/commit/9a10087aed6fc1be399fe01d0786db8dc9134f99))
+* **codex:** serialize auth pre-warm before parallel fan-out ([6016133](https://github.com/amit-t/ai-ralph/commit/6016133cc115e2d64f39177d0250ab22c76fbf25))
+* **codex:** serialize auth pre-warm before parallel fan-out ([0575a34](https://github.com/amit-t/ai-ralph/commit/0575a3430edef74cd4c202a42869ca165012966f))
+* **devin:** correct default model sw1.6 -&gt; swe-1.6 ([8982db1](https://github.com/amit-t/ai-ralph/commit/8982db1412c54764f136431185eb9876a2b8ec03))
+* **devin:** correct default model sw1.6 -&gt; swe-1.6 ([e84cbcd](https://github.com/amit-t/ai-ralph/commit/e84cbcdd91d4b1b31a7c46c0be47fd7ef22e0461))
+* **ralph:** harden runtime error handling (div-by-zero, PR remote/gh, is_error/429) ([ee0ff01](https://github.com/amit-t/ai-ralph/commit/ee0ff014c3aef390346cf9e4d36510e3c8240607))
+* **ralph:** harden runtime error handling surfaced by dispatch run ([fae65a9](https://github.com/amit-t/ai-ralph/commit/fae65a947bfbea705e20679ce057747f61f3c9db))
+* **tabs:** make RALPH_TABS_ENGINE_CMD prefix-aware ([746d199](https://github.com/amit-t/ai-ralph/commit/746d1993ec8cd79e51dc9f726d207a7121a555ca))
+* **tabs:** make RALPH_TABS_ENGINE_CMD prefix-aware ([7a09724](https://github.com/amit-t/ai-ralph/commit/7a09724650883a6caa7623b70fd78e9d126252b6))
+* **upgrade:** export RALPH_CLONE so ralph.upgrade doesn't die silently ([55d9f23](https://github.com/amit-t/ai-ralph/commit/55d9f237b3760603a917c0e288d9341c4ea77bae))
+* **upgrade:** export RALPH_CLONE so version-check helpers see the clone ([b0c0c55](https://github.com/amit-t/ai-ralph/commit/b0c0c55b0573ceca42a490f8f3dbf0b737a0cd63))
+* **workspace:** make ralph open PRs reliably after a successful push ([25abc30](https://github.com/amit-t/ai-ralph/commit/25abc30f8c7870035189d038fc977547c833392c))
+* **workspace:** make ralph open PRs reliably after a successful push ([e4fc99e](https://github.com/amit-t/ai-ralph/commit/e4fc99e272f4c9c102462ce673fd24a3755cc607))
+* **workspace:** preserve completed headless PR work ([bd3677b](https://github.com/amit-t/ai-ralph/commit/bd3677b15a32804d0f7ace625f8e3395640af9dd))
+* **workspace:** preserve completed headless PR work ([f7ac8e5](https://github.com/amit-t/ai-ralph/commit/f7ac8e52222d676e1be17c109469ed7da699b2b4))
+
 ## [2.3.0](https://github.com/amit-t/ai-ralph/compare/v2.2.0...v2.3.0) (2026-06-08)
 
 
