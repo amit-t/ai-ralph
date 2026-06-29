@@ -73,9 +73,25 @@ CB_AUTO_RESET=false
 CODEX_USE_CONTINUE=true
 CODEX_SESSION_EXPIRY_HOURS=24
 
+# Parallel Auth Pre-warm
+# Before spawning parallel workers (--parallel N>1), Ralph runs ONE serialized
+# auth probe so a stale/partial ~/.codex/auth.json surfaces as a single clear
+# "run codex login" error instead of N workers spewing 401 "Missing bearer"
+# retries — and so any token refresh happens once, not racing across workers.
+CODEX_AUTH_PREWARM=true          # set false to skip the probe
+CODEX_AUTH_PREWARM_TIMEOUT=45    # seconds to wait for an auth verdict
+
 # Logging
 VERBOSE_PROGRESS=false
 ```
+
+> **401 `Missing bearer or basic authentication in header` under `--parallel`?**
+> The Codex CLI could not attach credentials. Re-authenticate and verify:
+> ```bash
+> codex login
+> codex exec --json -s read-only "ok"   # should print turn.completed
+> ```
+> The pre-warm above stops a parallel dispatch up front when this happens.
 
 ## CLI Commands
 

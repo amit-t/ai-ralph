@@ -70,6 +70,107 @@ check_codex_cli() {
     return 0
 }
 
+# Serialized auth pre-warm — run ONCE in the orchestrator before spawning
+# parallel workers.
+#
+# Why: `codex login status` only checks that a session record exists; it does
+# NOT prove codex can attach a bearer to a real request. When the on-disk
+# ~/.codex/auth.json is stale/partial (or a token refresh is mid-write), codex
+# sends no Authorization header and the API returns:
+#   401 Unauthorized: Missing bearer or basic authentication in header
+# Under `--parallel N` every worker shares the same ~/.codex/auth.json, so a
+# refresh-write can race across workers and each failed worker spews ~10 retry
+# lines of raw 401 JSON. Probing once, serially, before fan-out (a) forces any
+# token refresh to happen a single time in the orchestrator and (b) aborts the
+# whole dispatch with one actionable message instead of N walls of 401 noise.
+#
+# Controlled by:
+#   CODEX_AUTH_PREWARM=true|false   (default true)
+#   CODEX_AUTH_PREWARM_TIMEOUT=<s>  (default 60)
+#
+# Returns 0 if codex completed a trivial turn (auth healthy), 1 on auth failure.
+codex_prewarm_auth() {
+    if [[ "${CODEX_AUTH_PREWARM:-true}" != "true" ]]; then
+        return 0
+    fi
+    command -v "$CODEX_CMD" &>/dev/null || return 0
+
+    local timeout_s="${CODEX_AUTH_PREWARM_TIMEOUT:-45}"
+    local tmp_out verdict="" waited=0 pid
+
+    tmp_out=$(mktemp "${TMPDIR:-/tmp}/ralph_codex_prewarm.XXXXXX") || return 0
+
+    # Trivial read-only turn streamed to a temp file. `-s read-only` avoids any
+    # workspace mutation; the prompt is throwaway. We watch the JSONL stream and
+    # short-circuit the moment auth is proven healthy or failed, so a healthy
+    # probe returns in ~seconds instead of running a full agent turn.
+    # stdin from /dev/null: `codex exec` otherwise blocks on "Reading additional
+    # input from stdin..." when backgrounded without a closed stdin.
+    ( "$CODEX_CMD" exec --json -s read-only "Reply with exactly: RALPH_AUTH_OK" \
+        >"$tmp_out" 2>&1 </dev/null ) &
+    pid=$!
+
+    while kill -0 "$pid" 2>/dev/null; do
+        # Failure: 401 / missing-bearer / turn.failed (websocket + https paths).
+        if grep -qiE '401 Unauthorized|Missing bearer|Unauthorized:.*authentication|"type":"turn\.failed"' "$tmp_out" 2>/dev/null; then
+            verdict="fail"; break
+        fi
+        # Success: post-auth activity. NOTE: "turn.started" fires BEFORE the API
+        # call (it appears even in the 401 case), so it is NOT a success signal —
+        # only item.* / turn.completed prove the bearer was accepted.
+        if grep -qE '"type":"item\.started"|"type":"item\.completed"|"type":"turn\.completed"|RALPH_AUTH_OK' "$tmp_out" 2>/dev/null; then
+            verdict="ok"; break
+        fi
+        if (( waited >= timeout_s )); then
+            verdict="timeout"; break
+        fi
+        sleep 1; (( waited++ ))
+    done
+
+    # The probe turn is disposable — stop codex regardless of verdict.
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+
+    # Final evaluation: codex may finish so fast that the `kill -0` loop guard
+    # exits before the last grep ran. Re-check the complete output once.
+    if [[ -z "$verdict" ]]; then
+        if grep -qiE '401 Unauthorized|Missing bearer|Unauthorized:.*authentication|"type":"turn\.failed"' "$tmp_out" 2>/dev/null; then
+            verdict="fail"
+        elif grep -qE '"type":"item\.started"|"type":"item\.completed"|"type":"turn\.completed"|RALPH_AUTH_OK' "$tmp_out" 2>/dev/null; then
+            verdict="ok"
+        fi
+    fi
+
+    rm -f "$tmp_out" 2>/dev/null
+
+    if [[ "$verdict" == "fail" ]]; then
+        echo "ERROR: Codex authentication failed (401 — no bearer token sent)." >&2
+        echo "" >&2
+        echo "  The Codex CLI could not attach credentials to its API request." >&2
+        echo "  This usually means ~/.codex/auth.json is stale or was left in a" >&2
+        echo "  partial state (e.g. an interrupted login or a concurrent token" >&2
+        echo "  refresh). Parallel workers share that file, so the run was halted" >&2
+        echo "  before fanning out to avoid a wall of 401 retries." >&2
+        echo "" >&2
+        echo "  Fix: re-authenticate, then retry:" >&2
+        echo "      codex login" >&2
+        echo "      codex exec --json -s read-only \"ok\"   # verify it works" >&2
+        return 1
+    fi
+
+    if [[ "$verdict" == "ok" ]]; then
+        # Auth healthy; any pending token refresh has now happened once, serially.
+        return 0
+    fi
+
+    # Inconclusive (timeout / network blip). Don't hard-block on an ambiguous
+    # probe — warn and let workers proceed.
+    echo "WARN: Codex auth pre-warm was inconclusive (no verdict in ${timeout_s}s);" >&2
+    echo "      proceeding. If workers fail with 401 'Missing bearer', run" >&2
+    echo "      'codex login' and retry." >&2
+    return 0
+}
+
 # =============================================================================
 # COMMAND BUILDING
 # =============================================================================
