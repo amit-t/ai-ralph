@@ -27,7 +27,7 @@ DEVIN_SESSION_FILE="${RALPH_DIR:-.ralph}/.devin_session_id"
 DEVIN_SESSION_HISTORY_FILE="${RALPH_DIR:-.ralph}/.devin_session_history"
 
 # Devin-specific configuration (can be overridden from .ralphrc.devin)
-DEVIN_MODEL="${DEVIN_MODEL:-}"                         # sw1.6, opus, sonnet, swe, gpt (empty here; ralph_loop_devin.sh defaults this to sw1.6)
+DEVIN_MODEL="${DEVIN_MODEL:-}"                         # swe-1.6, opus, sonnet, swe, gpt (empty here; ralph_loop_devin.sh defaults this to swe-1.6)
 DEVIN_PERMISSION_MODE="${DEVIN_PERMISSION_MODE:-dangerous}" # auto or dangerous
 
 # =============================================================================

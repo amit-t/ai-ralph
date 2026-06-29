@@ -296,8 +296,8 @@ RALPH_ENGINE="devin"
 MAX_CALLS_PER_HOUR=100
 DEVIN_TIMEOUT_MINUTES=30
 
-# Model selection (project-level default; the loop defaults to sw1.6 when unset).
-# DEVIN_MODEL=sw1.6            # e.g. sw1.6, swe, opus, sonnet, gpt
+# Model selection (project-level default; the loop defaults to swe-1.6 when unset).
+# DEVIN_MODEL=swe-1.6            # e.g. swe-1.6, swe, opus, sonnet, gpt
 
 # Session management
 DEVIN_USE_CONTINUE=true

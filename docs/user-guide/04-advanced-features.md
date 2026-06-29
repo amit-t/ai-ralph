@@ -118,7 +118,7 @@ The planner:
 # Model override (Claude + Devin)
 ralph-plan --model opus                        # Claude Opus
 ralph-plan --model sonnet                      # Claude Sonnet
-ralph-plan --engine devin                      # Devin planning on sw1.6 (default)
+ralph-plan --engine devin                      # Devin planning on swe-1.6 (default)
 ralph-plan --engine devin --model claude-opus-4.6
 
 # Thinking depth
@@ -131,9 +131,9 @@ ralph-plan --model opus --thinking ultra --yolo --superpowers   # deepest Claude
 
 Aliases: `rpc.plan.opus`, `rpc.plan.ultra`, `rpc.plan.opus.ultra`, `rpc.plan.max`, plus `rpd.plan.*` equivalents for Devin (including `rpd.plan.sw16`).
 
-### Devin default model (sw1.6)
+### Devin default model (swe-1.6)
 
-The Devin engine defaults to the **`sw1.6`** model for both the execution loop (`ralph-devin`) and planning (`ralph-plan --engine devin`) — you don't need to pass `--model`. This is a project-level default, not per-individual.
+The Devin engine defaults to the **`swe-1.6`** model for both the execution loop (`ralph-devin`) and planning (`ralph-plan --engine devin`) — you don't need to pass `--model`. This is a project-level default, not per-individual.
 
 Override it (highest precedence first):
 
@@ -141,10 +141,10 @@ Override it (highest precedence first):
 ralph-devin --model opus            # 1. per-run CLI flag
 DEVIN_MODEL=opus ralph-devin        # 2. environment variable
 # .ralphrc.devin:  DEVIN_MODEL=swe  # 3. project config file
-#                                     4. built-in default: sw1.6
+#                                     4. built-in default: swe-1.6
 ```
 
-The `sw1.6` default lands after Ralph snapshots your environment, so leaving `DEVIN_MODEL` unset never overrides a `.ralphrc.devin` value. Aliases `rpd.sw16` and `rpd.plan.sw16` pin it explicitly.
+The `swe-1.6` default lands after Ralph snapshots your environment, so leaving `DEVIN_MODEL` unset never overrides a `.ralphrc.devin` value. Aliases `rpd.sw16` and `rpd.plan.sw16` pin it explicitly.
 
 ## Quality-gate fix mode (`--qg`)
 
