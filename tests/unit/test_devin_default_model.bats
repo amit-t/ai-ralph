@@ -1,13 +1,13 @@
 #!/usr/bin/env bats
-# Unit tests for the Devin default model (sw1.6).
+# Unit tests for the Devin default model (swe-1.6).
 #
 # Behavior under test:
-#   - The Ralph Devin loop defaults DEVIN_MODEL to sw1.6 when unset.
+#   - The Ralph Devin loop defaults DEVIN_MODEL to swe-1.6 when unset.
 #   - Override precedence is preserved: --model CLI > DEVIN_MODEL env >
 #     .ralphrc.devin > built-in default.
 #   - build_devin_command emits "--model <value>" from DEVIN_MODEL.
 #   - The plan/workspace engine runners (ralph_plan.sh + lib/workspace_plan.sh)
-#     default Devin to sw1.6 while still honoring an explicit --model.
+#     default Devin to swe-1.6 while still honoring an explicit --model.
 
 load '../helpers/test_helper'
 
@@ -31,11 +31,11 @@ teardown() {
 # Loop default + precedence (top-level defaults in ralph_loop_devin.sh)
 # =============================================================================
 
-@test "devin loop defaults DEVIN_MODEL to sw1.6 when unset" {
+@test "devin loop defaults DEVIN_MODEL to swe-1.6 when unset" {
     run env -u DEVIN_MODEL bash -c \
         "source '$LOOP_SCRIPT' >/dev/null 2>&1; echo \"MODEL=\$DEVIN_MODEL\""
     [ "$status" -eq 0 ]
-    [[ "$output" == *"MODEL=sw1.6"* ]]
+    [[ "$output" == *"MODEL=swe-1.6"* ]]
 }
 
 @test "devin loop leaves _env_DEVIN_MODEL empty when DEVIN_MODEL unset" {
@@ -47,14 +47,14 @@ teardown() {
     [[ "$output" == *"SNAP=[]"* ]]
 }
 
-@test "DEVIN_MODEL env var overrides the sw1.6 default" {
+@test "DEVIN_MODEL env var overrides the swe-1.6 default" {
     run env DEVIN_MODEL=opus bash -c \
         "source '$LOOP_SCRIPT' >/dev/null 2>&1; echo \"MODEL=\$DEVIN_MODEL\""
     [ "$status" -eq 0 ]
     [[ "$output" == *"MODEL=opus"* ]]
 }
 
-@test ".ralphrc.devin DEVIN_MODEL beats the sw1.6 default" {
+@test ".ralphrc.devin DEVIN_MODEL beats the swe-1.6 default" {
     printf 'DEVIN_MODEL=swe\n' > .ralphrc.devin
     run env -u DEVIN_MODEL bash -c \
         "cd '$TEST_DIR'; source '$LOOP_SCRIPT' >/dev/null 2>&1; load_ralphrc; echo \"MODEL=\$DEVIN_MODEL\""
@@ -78,13 +78,13 @@ teardown() {
     printf 'do the thing\n' > prompt.md
     run bash -c "
         source '$ADAPTER' >/dev/null 2>&1
-        DEVIN_MODEL=sw1.6
+        DEVIN_MODEL=swe-1.6
         build_devin_command 'prompt.md' '' '' true ''
         printf '%s\n' \"\${DEVIN_CMD_ARGS[@]}\"
     "
     [ "$status" -eq 0 ]
     [[ "$output" == *"--model"* ]]
-    [[ "$output" == *"sw1.6"* ]]
+    [[ "$output" == *"swe-1.6"* ]]
 }
 
 @test "build_devin_command omits --model when DEVIN_MODEL empty" {
@@ -103,7 +103,7 @@ teardown() {
 # Plan / workspace engine runner default (lib/workspace_plan.sh)
 # =============================================================================
 
-@test "workspace_plan_run_engine defaults Devin to sw1.6 when no model given" {
+@test "workspace_plan_run_engine defaults Devin to swe-1.6 when no model given" {
     mkdir -p repo
     printf 'prompt body\n' > prompt.md
 
@@ -124,7 +124,7 @@ STUB
         "
     [ "$status" -eq 0 ]
     grep -q -- '--model' "$TEST_DIR/args.txt"
-    grep -qx 'sw1.6' "$TEST_DIR/args.txt"
+    grep -qx 'swe-1.6' "$TEST_DIR/args.txt"
 }
 
 @test "workspace_plan_run_engine honors explicit Devin model over the default" {
@@ -147,5 +147,5 @@ STUB
         "
     [ "$status" -eq 0 ]
     grep -qx 'opus' "$TEST_DIR/args.txt"
-    ! grep -qx 'sw1.6' "$TEST_DIR/args.txt"
+    ! grep -qx 'swe-1.6' "$TEST_DIR/args.txt"
 }

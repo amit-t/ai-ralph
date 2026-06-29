@@ -39,8 +39,8 @@ alias "${__rp}rpd.cb.auto=$__R --auto-reset-circuit"
 alias "${__rp}rpd.fast=$__R --calls 200"
 alias "${__rp}rpd.slow=$__R --calls 50"
 
-# Model selection (Devin loop defaults to sw1.6 when no --model is given)
-alias "${__rp}rpd.sw16=$__R --model sw1.6"
+# Model selection (Devin loop defaults to swe-1.6 when no --model is given)
+alias "${__rp}rpd.sw16=$__R --model swe-1.6"
 alias "${__rp}rpd.opus=$__R --model opus"
 alias "${__rp}rpd.sonnet=$__R --model sonnet"
 alias "${__rp}rpd.swe=$__R --model swe"
@@ -99,8 +99,8 @@ alias "${__rp}rpd.plan=${__rp}ralph-plan --engine devin"
 # Fix plan status (note: rpd.status is agent session status; rpd.plan.s is fix plan status)
 alias "${__rp}rpd.plan.s=${__rp}ralph-plan --engine devin --status"
 
-# Model overrides for Devin planning (Devin CLI accepts --model sw1.6|opus|sonnet|...)
-alias "${__rp}rpd.plan.sw16=${__rp}ralph-plan --engine devin --model sw1.6"
+# Model overrides for Devin planning (Devin CLI accepts --model swe-1.6|opus|sonnet|...)
+alias "${__rp}rpd.plan.sw16=${__rp}ralph-plan --engine devin --model swe-1.6"
 alias "${__rp}rpd.plan.opus=${__rp}ralph-plan --engine devin --model opus"
 alias "${__rp}rpd.plan.sonnet=${__rp}ralph-plan --engine devin --model sonnet"
 

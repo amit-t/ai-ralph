@@ -271,9 +271,9 @@ workspace_plan_run_engine() {
             ;;
         devin)
             local -a devin_flags=("--permission-mode" "dangerous")
-            # Devin defaults to sw1.6 (project-level default, not per-individual).
+            # Devin defaults to swe-1.6 (project-level default, not per-individual).
             # An explicit --model passed through $model still wins.
-            local devin_model="${model:-sw1.6}"
+            local devin_model="${model:-swe-1.6}"
             devin_flags+=("--model" "$devin_model")
             devin_flags+=("--prompt-file" "$prompt_file")
             "$cli_cmd" "${devin_flags[@]}" || exit_code=$?
