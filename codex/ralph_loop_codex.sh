@@ -1463,6 +1463,10 @@ run_workspace_mode() {
 
     # ── Parallel workspace mode ──────────────────────────────────────
     if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
+        # Serialized auth pre-warm before fan-out (see run_continuous_workspace).
+        if [[ "$PARALLEL_COUNT" -gt 1 ]] && ! codex_prewarm_auth; then
+            return 1
+        fi
         _run_workspace_parallel "$fix_plan" "." "$PARALLEL_COUNT"
         return $?
     fi
@@ -1876,6 +1880,16 @@ run_continuous_workspace() {
         return 1
     fi
 
+    # Serialized auth pre-warm before parallel fan-out. Catches a broken/stale
+    # ~/.codex/auth.json (401 "Missing bearer") with one clear message instead of
+    # N workers each spewing 401 retries, and forces any token refresh to happen
+    # once here rather than racing across workers.
+    if [[ "$PARALLEL_COUNT" -gt 1 ]]; then
+        if ! codex_prewarm_auth; then
+            return 1
+        fi
+    fi
+
     log_status "SUCCESS" "Ralph Codex continuous workspace mode (N=$PARALLEL_COUNT, M=$MAX_TASKS)"
 
     local ws_validation
@@ -2083,6 +2097,13 @@ run_continuous_singlerepo() {
     fi
     if ! check_codex_cli; then
         return 1
+    fi
+
+    # Serialized auth pre-warm before parallel fan-out (see run_continuous_workspace).
+    if [[ "$PARALLEL_COUNT" -gt 1 ]]; then
+        if ! codex_prewarm_auth; then
+            return 1
+        fi
     fi
 
     log_status "SUCCESS" "Ralph Codex continuous single-repo mode (N=$PARALLEL_COUNT, M=$MAX_TASKS)"
@@ -2561,6 +2582,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
     # If parallel mode requested (non-workspace), spawn agents (iTerm tabs or background jobs)
     if [[ "$PARALLEL_COUNT" -gt 0 ]]; then
+        # Serialized auth pre-warm before fan-out (see run_continuous_singlerepo).
+        if [[ "$PARALLEL_COUNT" -gt 1 ]] && ! codex_prewarm_auth; then
+            exit 1
+        fi
         # Rebuild args without --parallel N / --parallel-bg N
         passthrough_args=()
         skip_next=false
