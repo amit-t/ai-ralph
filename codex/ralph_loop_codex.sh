@@ -947,19 +947,48 @@ EOF
     if [[ $exit_code -eq 0 ]]; then
         # Check for API errors hidden inside a successful exit code (e.g., rate limits)
         if [[ -f "$output_file" && -s "$output_file" ]]; then
+            # Codex emits JSONL events. A failed turn surfaces as a top-level
+            # {"type":"error","message":...} and/or {"type":"turn.failed",
+            # "error":{"message":...}}; the message often wraps a nested JSON
+            # carrying an HTTP status (429 = rate limit). Extract the first such
+            # message. (The old `select(.is_error==true)` was Claude-format and
+            # never matched Codex output.)
             local api_error=""
-            api_error=$(jq -r 'select(.is_error == true) | .result // empty' "$output_file" 2>/dev/null | head -1)
+            api_error=$(codex_extract_turn_error "$output_file")
 
             if [[ -n "$api_error" ]]; then
-                log_status "ERROR" "API error: $api_error"
-                echo -e "\n${RED}━━━ API Error ━━━${NC}"
-                echo -e "${YELLOW}$api_error${NC}"
-                echo -e "${RED}━━━━━━━━━━━━━━━━━${NC}\n"
-
-                if echo "$api_error" | grep -qiE '(rate.limit|hit your limit|resets|quota|too many)'; then
-                    return 2
+                # Did the worker finish (commit + RALPH_STATUS) before the error
+                # landed? A late 429 must not discard a completed task.
+                local task_complete="false"
+                if grep -qa 'RALPH_STATUS' "$output_file" 2>/dev/null \
+                   && grep -qaE 'STATUS:[[:space:]]*COMPLETE' "$output_file" 2>/dev/null; then
+                    task_complete="true"
                 fi
-                return 1
+                local is_rate_limit="false"
+                if codex_is_rate_limit_message "$api_error"; then
+                    is_rate_limit="true"
+                fi
+
+                if [[ "$task_complete" == "true" ]]; then
+                    # Honor the completion: don't fail, keep the thread/session
+                    # (the success path below still runs codex_save_session).
+                    log_status "WARN" "Codex reported an error but output contains STATUS: COMPLETE — treating as completed (likely late rate-limit). Not failing."
+                    # Fall through to the success-handling path below.
+                else
+                    log_status "ERROR" "Codex API error: $api_error"
+                    echo -e "\n${RED}━━━ Codex API Error ━━━${NC}"
+                    echo -e "${YELLOW}$api_error${NC}"
+                    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+                    echo '{"status": "failed", "error": "codex_error", "timestamp": "'"$(date '+%Y-%m-%d %H:%M:%S')"'"}' > "$PROGRESS_FILE"
+
+                    if [[ "$is_rate_limit" == "true" ]]; then
+                        # Transient throttling — preserve the Codex thread so a
+                        # retry resumes context instead of starting cold.
+                        log_status "WARN" "Rate limit (429) hit. Session preserved — back off and re-run to resume."
+                        return 2
+                    fi
+                    return 1
+                fi
             fi
         fi
 
