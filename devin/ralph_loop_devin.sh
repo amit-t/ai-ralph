@@ -1888,7 +1888,7 @@ run_continuous_workspace() {
     # Tabs vs. single-pane decision (proposal: docs/proposals/continuous-with-tabs.md).
     if [[ "${NO_TABS:-false}" != "true" ]] && tabs_supported_by_terminal; then
         log_status "INFO" "Tab-mode continuous orchestrator engaged (per-worker terminal tabs)"
-        export RALPH_TABS_ENGINE_CMD="ralph-devin"
+        export RALPH_TABS_ENGINE_CMD="${RALPH_CMD_PREFIX:-}ralph-devin"
         export RALPH_TABS_WORKSPACE_MODE="true"
         run_continuous_worker_pool_tabs \
             "$PARALLEL_COUNT" \
@@ -2098,7 +2098,7 @@ run_continuous_singlerepo() {
     # Tabs vs. single-pane decision (proposal: docs/proposals/continuous-with-tabs.md).
     if [[ "${NO_TABS:-false}" != "true" ]] && tabs_supported_by_terminal; then
         log_status "INFO" "Tab-mode continuous orchestrator engaged (per-worker terminal tabs)"
-        export RALPH_TABS_ENGINE_CMD="ralph-devin"
+        export RALPH_TABS_ENGINE_CMD="${RALPH_CMD_PREFIX:-}ralph-devin"
         export RALPH_TABS_WORKSPACE_MODE="false"
         run_continuous_worker_pool_tabs \
             "$PARALLEL_COUNT" \
