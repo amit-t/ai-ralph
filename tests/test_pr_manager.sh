@@ -714,6 +714,39 @@ RALPH_PR_PUSH_CAPABLE="false"
 RALPH_PR_GH_CAPABLE="false"
 rm -rf "$WT_DIR_S"
 
+# ── task-state summary line on failure return (no committable source diff) ───
+WT_DIR_SF=$(mktemp -d)
+(
+    cd "$WT_DIR_SF" || exit
+    git init -q -b main
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    # Only ralph internal state changes — no committable source diff vs main
+    mkdir -p .ralph && echo x > .ralph/.quality_gate_results
+)
+_WT_CURRENT_PATH="$WT_DIR_SF"
+_WT_CURRENT_BRANCH="ralph-claude/T-state-fail"
+_WT_MAIN_DIR="$WT_DIR_SF"
+RALPH_PR_PUSH_CAPABLE="true"
+RALPH_PR_GH_CAPABLE="true"
+STATE_FAIL_LOG_CAPTURE=""
+log_status() { STATE_FAIL_LOG_CAPTURE+="[$1] $2"$'\n'; }
+gh() {
+    if [[ "$1" == "pr" && "$2" == "view" ]]; then return 1; fi
+    if [[ "$1" == "pr" && "$2" == "create" ]]; then echo "https://github.com/o/r/pull/3"; return 0; fi
+    return 0
+}
+git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
+worktree_commit_and_pr "T-SF" "State line failure test" "true" "1" 2>/dev/null
+run_test "task-state line emitted on no-source-diff failure return" "1" \
+    "$([[ "$STATE_FAIL_LOG_CAPTURE" == *"task-state branch=ralph-claude/T-state-fail quality_gates=true rebase=SKIPPED pushed=false pr=skipped failure_label=n/a"* ]] && echo 1 || echo 0)"
+log_status() { :; }
+unset -f gh git
+RALPH_PR_PUSH_CAPABLE="false"
+RALPH_PR_GH_CAPABLE="false"
+rm -rf "$WT_DIR_SF"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "Results: ${TESTS_PASSED} passed, ${TESTS_FAILED} failed"

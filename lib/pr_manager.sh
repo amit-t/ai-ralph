@@ -643,7 +643,10 @@ worktree_commit_and_pr() {
         fi
     )
     local commit_result=$?
-    if [[ $commit_result -ne 0 ]]; then return 1; fi
+    if [[ $commit_result -ne 0 ]]; then
+        _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
+        return 1
+    fi
 
     # ── Step 1b: Ensure branch contains real source diff before push/PR ─────
     if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
@@ -652,7 +655,10 @@ worktree_commit_and_pr() {
             _pr_require_committable_source_diff "$base_branch" "$_WT_CURRENT_BRANCH"
         )
         local diff_result=$?
-        if [[ $diff_result -ne 0 ]]; then return 1; fi
+        if [[ $diff_result -ne 0 ]]; then
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
+            return 1
+        fi
     fi
 
     # ── Step 1c: Rebase onto advanced base ───────────────────────────────────
@@ -737,6 +743,7 @@ worktree_commit_and_pr() {
     if [[ "$RALPH_PR_GH_CAPABLE" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
         if ! pushd "$_WT_MAIN_DIR" >/dev/null 2>&1; then
             log_status "ERROR" "Cannot enter repo dir for PR: $_WT_MAIN_DIR"
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
             return 1
         fi
 
