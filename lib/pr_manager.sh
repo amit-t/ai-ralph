@@ -694,8 +694,14 @@ worktree_commit_and_pr() {
         # ── Step 4: Add failure label (still inside repo dir) ─────────────────
         if [[ "$gate_passed" == "false" ]]; then
             _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
-            gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
-                || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
+            local label_out
+            # shellcheck disable=SC2034
+            local state_label="applied"
+            if ! label_out=$(gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>&1); then
+                # shellcheck disable=SC2034
+                state_label="failed"
+                log_status "WARN" "Could not add 'quality-gates-failed' label to PR: $label_out"
+            fi
         fi
 
         popd >/dev/null 2>&1 || true
@@ -873,8 +879,14 @@ worktree_fallback_branch_pr() {
     # ── Step 7: Add failure label ─────────────────────────────────────────────
     if [[ "$gate_passed" == "false" && "$RALPH_PR_GH_CAPABLE" == "true" ]]; then
         _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
-        gh pr edit "$FALLBACK_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
-            || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
+        local label_out
+        # shellcheck disable=SC2034
+        local state_label="applied"
+        if ! label_out=$(gh pr edit "$FALLBACK_BRANCH" --add-label "quality-gates-failed" 2>&1); then
+            # shellcheck disable=SC2034
+            state_label="failed"
+            log_status "WARN" "Could not add 'quality-gates-failed' label to PR: $label_out"
+        fi
     fi
 
     return 0

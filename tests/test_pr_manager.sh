@@ -307,6 +307,7 @@ rm -rf "$WT_DIR3"
 
 # Test: gate_passed=false + GH_CAPABLE=true → quality-gates-failed label applied
 WT_DIR4=$(mktemp -d)
+GH_LABEL_MARKER=$(mktemp)
 (
     cd "$WT_DIR4" || exit
     git init -q
@@ -320,20 +321,19 @@ _WT_CURRENT_BRANCH="ralph-claude/T-1-gates"
 _WT_MAIN_DIR="$WT_DIR4"
 RALPH_PR_PUSH_CAPABLE="true"
 RALPH_PR_GH_CAPABLE="true"
-PR_EDIT_LABEL_CALLED=0
 gh() {
     if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "https://github.com/owner/repo/pull/99"; return 0; fi
     if [[ "$1" == "label" && "$2" == "list" ]]; then echo "quality-gates-failed"; return 0; fi
-    if [[ "$1" == "pr" && "$2" == "edit" && "$*" == *"quality-gates-failed"* ]]; then PR_EDIT_LABEL_CALLED=1; return 0; fi
+    if [[ "$1" == "pr" && "$2" == "edit" && "$*" == *"quality-gates-failed"* ]]; then echo "called" > "$GH_LABEL_MARKER"; return 0; fi
     return 0
 }
 git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
 worktree_commit_and_pr "T-1" "Gates test" "false" "2"
-run_test "gate_passed=false calls gh pr edit --add-label" "1" "$PR_EDIT_LABEL_CALLED"
+run_test "gate_passed=false calls gh pr edit --add-label" "1" "$(grep -c called "$GH_LABEL_MARKER" 2>/dev/null || echo 0)"
 unset -f gh git
 RALPH_PR_PUSH_CAPABLE="false"
 RALPH_PR_GH_CAPABLE="false"
-rm -rf "$WT_DIR4"
+rm -rf "$WT_DIR4" "$GH_LABEL_MARKER"
 
 # Test: _pr_ensure_label auto-creates label when it doesn't exist
 LABEL_CREATE_CALLED=0
@@ -649,6 +649,38 @@ unset -f gh git
 RALPH_PR_PUSH_CAPABLE="false"
 RALPH_PR_GH_CAPABLE="false"
 rm -rf "$WT_DIR_P"
+
+# ── Label-add failure logs gh's stderr ───────────────────────────────────────
+WT_DIR_L=$(mktemp -d)
+(
+    cd "$WT_DIR_L" || exit
+    git init -q
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for label log path" >> work.txt
+)
+_WT_CURRENT_PATH="$WT_DIR_L"
+_WT_CURRENT_BRANCH="ralph-claude/T-label-log"
+_WT_MAIN_DIR="$WT_DIR_L"
+RALPH_PR_PUSH_CAPABLE="true"
+RALPH_PR_GH_CAPABLE="true"
+LABEL_LOG_CAPTURE=""
+log_status() { LABEL_LOG_CAPTURE+="[$1] $2"$'\n'; }
+gh() {
+    if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "https://github.com/o/r/pull/9"; return 0; fi
+    if [[ "$1" == "pr" && "$2" == "edit" ]]; then echo "HTTP 422: label rejected by server" >&2; return 1; fi
+    return 0
+}
+git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
+worktree_commit_and_pr "T-L" "Label log test" "false" "1"
+run_test "label failure log includes gh stderr" "1" \
+    "$([[ "$LABEL_LOG_CAPTURE" == *"HTTP 422: label rejected by server"* ]] && echo 1 || echo 0)"
+log_status() { :; }
+unset -f gh git
+RALPH_PR_PUSH_CAPABLE="false"
+RALPH_PR_GH_CAPABLE="false"
+rm -rf "$WT_DIR_L"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
