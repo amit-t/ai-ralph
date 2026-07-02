@@ -353,7 +353,7 @@ _pr_rebase_onto_base() {
             mkdir -p "$snapshot_dir/$(dirname "$_f")"
             cp -p "$_f" "$snapshot_dir/$_f" 2>/dev/null || true
         done
-        git checkout -- "${ralph_dirty[@]}" 2>/dev/null || true
+        git checkout HEAD -- "${ralph_dirty[@]}" 2>/dev/null || true
         log_status "INFO" "Stashed dirty tracked ralph artifacts for rebase: ${ralph_dirty[*]}"
     fi
 
@@ -370,7 +370,7 @@ _pr_rebase_onto_base() {
             log_status "ERROR" "Conflicted files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
             log_status "ERROR" "Worktree status: $(git status --short 2>/dev/null | tr '\n' ';' )"
             if declare -F worktree_resolve_rebase_conflicts >/dev/null 2>&1 \
-               && worktree_resolve_rebase_conflicts "$base_branch"; then
+               && worktree_resolve_rebase_conflicts "$base_branch" 1>&2; then
                 log_status "INFO" "Rebase conflict resolved by worktree_resolve_rebase_conflicts hook"
                 status_word=""; status_rc=0
             else

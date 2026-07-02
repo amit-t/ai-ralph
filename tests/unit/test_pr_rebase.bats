@@ -53,7 +53,7 @@ advance_main() {
     echo "live gate output" > .ralph/.quality_gate_results
     run _pr_rebase_onto_base main
     [ "$status" -eq 0 ]
-    [[ "$output" == *"CHANGED"* ]]
+    [[ "$output" == *"CHANGED"* ]] || return 1
     grep -q "live gate output" .ralph/.quality_gate_results
     git merge-base --is-ancestor origin/main HEAD
 }
@@ -64,8 +64,8 @@ advance_main() {
     tip_before=$(git rev-parse HEAD)
     run _pr_rebase_onto_base main
     [ "$status" -eq 2 ]
-    [[ "$output" == *"DIRTY"* ]]
-    [[ "$output" == *"src.txt"* ]]
+    [[ "$output" == *"DIRTY"* ]] || return 1
+    [[ "$output" == *"src.txt"* ]] || return 1
     [ "$(git rev-parse HEAD)" = "$tip_before" ]
 }
 
@@ -74,8 +74,8 @@ advance_main() {
     tip_before=$(git rev-parse HEAD)
     run _pr_rebase_onto_base main
     [ "$status" -eq 1 ]
-    [[ "$output" == *"CONFLICT"* ]]
-    [[ "$output" == *"feature.txt"* ]]
+    [[ "$output" == *"CONFLICT"* ]] || return 1
+    [[ "$output" == *"feature.txt"* ]] || return 1
     [ "$(git rev-parse HEAD)" = "$tip_before" ]
     [ -z "$(git status --porcelain)" ]   # abort left the tree clean
 }
@@ -90,7 +90,25 @@ advance_main() {
     export -f worktree_resolve_rebase_conflicts
     run _pr_rebase_onto_base main
     [ "$status" -eq 0 ]
-    [[ "$output" == *"CHANGED"* ]]
+    [[ "$output" == *"CHANGED"* ]] || return 1
+    git merge-base --is-ancestor origin/main HEAD
+}
+
+@test "hook stdout chatter does not corrupt the captured status word" {
+    advance_main feature.txt "conflicting upstream content"
+    worktree_resolve_rebase_conflicts() {
+        echo "hook chatter"
+        echo "resolved content" > feature.txt
+        git add feature.txt
+        GIT_EDITOR=true git rebase --continue
+    }
+    export -f worktree_resolve_rebase_conflicts
+    # Capture stdout directly (not via `run`, which merges stderr) — this is
+    # exactly how the callers consume the status word.
+    result=$(_pr_rebase_onto_base main 2>/dev/null)
+    rc=$?
+    [ "$rc" -eq 0 ]
+    [ "$result" = "CHANGED" ] || return 1
     git merge-base --is-ancestor origin/main HEAD
 }
 
@@ -98,5 +116,5 @@ advance_main() {
     git remote remove origin
     run _pr_rebase_onto_base main
     [ "$status" -eq 0 ]
-    [[ "$output" == *"SKIPPED"* ]]
+    [[ "$output" == *"SKIPPED"* ]] || return 1
 }
