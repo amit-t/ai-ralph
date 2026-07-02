@@ -160,6 +160,13 @@ _pr_ensure_label() {
     return 1
 }
 
+# ── _pr_log_task_state ────────────────────────────────────────────────────────
+# One canonical, grep-able line summarising the PR workflow outcome.
+# Args: $1=branch $2=gates $3=rebase $4=pushed $5=pr $6=label
+_pr_log_task_state() {
+    log_status "INFO" "task-state branch=$1 quality_gates=$2 rebase=$3 pushed=$4 pr=$5 failure_label=$6"
+}
+
 # ── _pr_remote_to_web_url ────────────────────────────────────────────────────
 # Normalises git remote URL → HTTPS web base URL for browser links.
 # Handles HTTPS, SSH (git@), and embedded credentials in URL.
@@ -612,6 +619,7 @@ worktree_commit_and_pr() {
         base_branch="main"
     fi
     log_status "INFO" "PR base branch: $base_branch"
+    local state_rebase="SKIPPED" state_pushed="false" state_pr="skipped" state_label="n/a"
 
     # ── Step 1: Auto-commit in worktree ──────────────────────────────────────
     # Exclude .ralph/ from the auto-commit: ralph internal state (e.g.
@@ -660,6 +668,7 @@ worktree_commit_and_pr() {
             _pr_rebase_onto_base "$base_branch"
         )
         local rebase_rc=$?
+        state_rebase="${rebase_status:-FAILED}"
         if [[ $rebase_rc -ne 0 ]]; then
             case "$rebase_status" in
                 DIRTY)
@@ -669,6 +678,7 @@ worktree_commit_and_pr() {
                 *)
                     log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch failed — git output logged above" ;;
             esac
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
             return 1
         fi
         if [[ "$rebase_status" == "CHANGED" ]]; then
@@ -712,7 +722,11 @@ worktree_commit_and_pr() {
             log_status "SUCCESS" "Branch pushed: $_WT_CURRENT_BRANCH"
         )
         local push_result=$?
-        if [[ $push_result -ne 0 ]]; then return 1; fi
+        if [[ $push_result -ne 0 ]]; then
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
+            return 1
+        fi
+        state_pushed="true"
     fi
 
     # ── Step 3: Create PR ────────────────────────────────────────────────────
@@ -729,6 +743,7 @@ worktree_commit_and_pr() {
         local existing_pr
         if existing_pr=$(_pr_lookup_existing_pr "$_WT_CURRENT_BRANCH"); then
             log_status "INFO" "PR already exists for $_WT_CURRENT_BRANCH: $existing_pr. Skipping creation."
+            state_pr="exists"
         else
             # Confirm the pushed branch is visible on origin before asking gh to
             # open a PR (absorbs remote propagation lag).
@@ -742,6 +757,7 @@ worktree_commit_and_pr() {
             if [[ "$commits_ahead" == "0" ]]; then
                 log_status "WARN" "No commits to PR for $_WT_CURRENT_BRANCH (origin/$base_branch..$_WT_CURRENT_BRANCH empty) — skipping PR creation"
                 popd >/dev/null 2>&1 || true
+                _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
                 return 0
             fi
 
@@ -761,19 +777,20 @@ worktree_commit_and_pr() {
                 log_status "ERROR" "PR creation failed for $_WT_CURRENT_BRANCH: $pr_url"
                 log_status "ERROR" "Branch is pushed — open by hand: gh pr create --head $_WT_CURRENT_BRANCH --base $base_branch"
                 popd >/dev/null 2>&1 || true
+                state_pr="failed"
+                _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
                 return 1
             fi
             log_status "SUCCESS" "PR created: $pr_url"
+            state_pr="created"
         fi
 
         # ── Step 4: Add failure label (still inside repo dir) ─────────────────
         if [[ "$gate_passed" == "false" ]]; then
             _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
             local label_out
-            # shellcheck disable=SC2034
-            local state_label="applied"
+            state_label="applied"
             if ! label_out=$(gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>&1); then
-                # shellcheck disable=SC2034
                 state_label="failed"
                 log_status "WARN" "Could not add 'quality-gates-failed' label to PR: $label_out"
             fi
@@ -785,6 +802,7 @@ worktree_commit_and_pr() {
         _pr_print_compare_url "$_WT_CURRENT_BRANCH" "$base_branch"
     fi
 
+    _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
     return 0
 }
 
@@ -862,6 +880,7 @@ worktree_fallback_branch_pr() {
                       | sed 's@^refs/remotes/origin/@@')
     fi
     [[ -z "$base_branch" ]] && base_branch="main"
+    local state_rebase="SKIPPED" state_pushed="false" state_pr="skipped" state_label="n/a"
 
     # ── Step 4b: Ensure branch contains real source diff before push/PR ─────
     if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
@@ -962,14 +981,13 @@ worktree_fallback_branch_pr() {
     if [[ "$gate_passed" == "false" && "$RALPH_PR_GH_CAPABLE" == "true" ]]; then
         _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
         local label_out
-        # shellcheck disable=SC2034
-        local state_label="applied"
+        state_label="applied"
         if ! label_out=$(gh pr edit "$FALLBACK_BRANCH" --add-label "quality-gates-failed" 2>&1); then
-            # shellcheck disable=SC2034
             state_label="failed"
             log_status "WARN" "Could not add 'quality-gates-failed' label to PR: $label_out"
         fi
     fi
 
+    _pr_log_task_state "$FALLBACK_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
     return 0
 }
