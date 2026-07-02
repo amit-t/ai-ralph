@@ -57,6 +57,13 @@ EOF
     export -f worktree_create worktree_get_path worktree_is_active worktree_cleanup
     export -f worktree_run_quality_gates worktree_commit_and_pr worktree_fallback_branch_pr
 
+    # ── Mock: log_status ─────────────────────────────────────────────────────
+    # The PR-failure path logs an ERROR via log_status; without this mock the
+    # extracted function dies "command not found" and coincidentally still
+    # returns non-zero, masking whether the real `return 1` contract fires.
+    log_status() { echo "[$1] $2" >> "${TEST_DIR}/.calls"; }
+    export -f log_status
+
     # ── Set up a tiny git repo so `git rev-parse HEAD` and `git status`
     #    succeed (the function's change-detection branch).
     git init -q "${TEST_DIR}" 2>/dev/null
@@ -359,7 +366,7 @@ _load_singlerepo_executor() {
     export -f execute_claude_code worktree_fallback_branch_pr
 
     run _singlerepo_execute_task "task-1|1|"
-    assert_failure
+    [ "$status" -eq 1 ]
     grep -q "worktree_fallback_branch_pr" "${TEST_DIR}/.calls"
 }
 
@@ -370,7 +377,7 @@ _load_singlerepo_executor() {
     export -f execute_devin_session worktree_fallback_branch_pr
 
     run _singlerepo_execute_task "task-1|1|"
-    assert_failure
+    [ "$status" -eq 1 ]
     grep -q "worktree_fallback_branch_pr" "${TEST_DIR}/.calls"
 }
 
@@ -381,6 +388,6 @@ _load_singlerepo_executor() {
     export -f execute_codex_session worktree_fallback_branch_pr
 
     run _singlerepo_execute_task "task-1|1|"
-    assert_failure
+    [ "$status" -eq 1 ]
     grep -q "worktree_fallback_branch_pr" "${TEST_DIR}/.calls"
 }

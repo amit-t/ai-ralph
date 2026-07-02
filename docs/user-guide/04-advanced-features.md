@@ -198,7 +198,7 @@ This is wired into all three engine loops; no configuration needed.
 
 ## PR Workflow Failure Semantics (v2.5+)
 
-Every PR workflow run emits one grep-able summary line to `.ralph/logs/ralph.log`:
+The single-repo PR workflow (worktree flow: every success and failure path; fallback-branch flow: on completion) emits one grep-able summary line to `.ralph/logs/ralph.log`:
 
     task-state branch=<b> quality_gates=<t|f> rebase=<CHANGED|UNCHANGED|SKIPPED|DIRTY|CONFLICT|FAILED> pushed=<t|f> pr=<created|exists|skipped|failed> failure_label=<applied|failed|n/a>
 

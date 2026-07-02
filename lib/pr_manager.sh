@@ -355,13 +355,15 @@ _pr_rebase_onto_base() {
 
     local snapshot_dir=""
     if [[ ${#ralph_dirty[@]} -gt 0 ]]; then
-        snapshot_dir=$(mktemp -d "${TMPDIR:-/tmp}/ralph-rebase-snap.XXXXXX")
-        for _f in "${ralph_dirty[@]}"; do
-            mkdir -p "$snapshot_dir/$(dirname "$_f")"
-            cp -p "$_f" "$snapshot_dir/$_f" 2>/dev/null || true
-        done
-        git checkout HEAD -- "${ralph_dirty[@]}" 2>/dev/null || true
-        log_status "INFO" "Stashed dirty tracked ralph artifacts for rebase: ${ralph_dirty[*]}"
+        snapshot_dir=$(mktemp -d "${TMPDIR:-/tmp}/ralph-rebase-snap.XXXXXX" 2>/dev/null) || snapshot_dir=""
+        if [[ -n "$snapshot_dir" ]]; then
+            for _f in "${ralph_dirty[@]}"; do
+                mkdir -p "$snapshot_dir/$(dirname "$_f")"
+                cp -p "$_f" "$snapshot_dir/$_f" 2>/dev/null || true
+            done
+            git checkout HEAD -- "${ralph_dirty[@]}" 2>/dev/null || true
+            log_status "INFO" "Stashed dirty tracked ralph artifacts for rebase: ${ralph_dirty[*]}"
+        fi
     fi
 
     local before after rebase_out rebase_rc=0

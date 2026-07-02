@@ -3298,7 +3298,9 @@ _singlerepo_execute_task() {
         return 1
     fi
 
-    # Quality gates + PR creation (best-effort; failures don't revert the task).
+    # Quality gates + PR creation. Quality-gate failure alone still completes
+    # the task (the PR is labeled with the failure); a push/PR-pipeline
+    # failure below returns 1 so the task is left open for retry.
     local gate_result=0
     if [[ "$WORKTREE_QUALITY_GATES" != "none" ]] && worktree_is_active; then
         worktree_run_quality_gates 2>&1 || gate_result=1
