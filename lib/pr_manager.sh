@@ -119,6 +119,22 @@ _pr_gh_try() {
     return $rc
 }
 
+# ── _pr_lookup_existing_pr ────────────────────────────────────────────────────
+# Args: $1=branch. Prints the existing PR's URL and returns 0 ONLY when a PR
+# exists. _pr_gh_try merges gh's stderr into its stdout, so "no pull requests
+# found" error text arrives on stdout — callers must never treat non-empty
+# output alone as proof of a PR. Gate on BOTH rc==0 and URL shape.
+_pr_lookup_existing_pr() {
+    local branch="$1"
+    local out
+    if out=$(_pr_gh_try pr view "$branch" --json url --jq '.url') \
+       && [[ "$out" =~ ^https?:// ]]; then
+        printf '%s\n' "$out"
+        return 0
+    fi
+    return 1
+}
+
 # ── _pr_ensure_label ──────────────────────────────────────────────────────────
 # Ensures a GitHub label exists in the repo, creating it if missing.
 # Args: $1=label_name  $2=color (hex without #, default: "d93f0b")
@@ -636,8 +652,7 @@ worktree_commit_and_pr() {
         fi
 
         local existing_pr
-        existing_pr=$(_pr_gh_try pr view "$_WT_CURRENT_BRANCH" --json url --jq '.url' 2>/dev/null)
-        if [[ -n "$existing_pr" ]]; then
+        if existing_pr=$(_pr_lookup_existing_pr "$_WT_CURRENT_BRANCH"); then
             log_status "INFO" "PR already exists for $_WT_CURRENT_BRANCH: $existing_pr. Skipping creation."
         else
             # Confirm the pushed branch is visible on origin before asking gh to
@@ -820,8 +835,7 @@ worktree_fallback_branch_pr() {
     # ── Steps 6–7: Create PR ─────────────────────────────────────────────────
     if [[ "$RALPH_PR_GH_CAPABLE" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
         local existing_pr
-        existing_pr=$(_pr_gh_try pr view "$FALLBACK_BRANCH" --json url --jq '.url' 2>/dev/null)
-        if [[ -n "$existing_pr" ]]; then
+        if existing_pr=$(_pr_lookup_existing_pr "$FALLBACK_BRANCH"); then
             log_status "INFO" "PR already exists for $FALLBACK_BRANCH: $existing_pr"
         else
             # Confirm the pushed branch is on origin (propagation lag) before gh.

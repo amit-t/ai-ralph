@@ -586,6 +586,70 @@ run_test "Fix D: ralph-only change produces no commit" "$before_d" "$after_d"
 RALPH_PR_PUSH_CAPABLE="false"; RALPH_PR_GH_CAPABLE="false"
 rm -rf "$DDIR"
 
+# ── _pr_lookup_existing_pr: gh failure text must not count as a PR ───────────
+out=$(
+    gh() {
+        if [[ "$1" == "pr" ]]; then echo 'no pull requests found for branch "b1"' >&2; return 1; fi
+        return 0
+    }
+    _pr_lookup_existing_pr "b1"
+)
+rc=$?
+run_test "lookup: gh error text yields empty stdout" "" "$out"
+run_test "lookup: gh error text yields rc 1" "1" "$rc"
+
+out=$(
+    gh() {
+        if [[ "$1" == "pr" ]]; then echo "https://github.com/o/r/pull/7"; return 0; fi
+        return 0
+    }
+    _pr_lookup_existing_pr "b1"
+)
+rc=$?
+run_test "lookup: real URL passes through" "https://github.com/o/r/pull/7" "$out"
+run_test "lookup: real URL yields rc 0" "0" "$rc"
+
+# ── Regression: pr view stderr text does NOT skip pr create ──────────────────
+# (was: _pr_gh_try merged gh stderr into stdout; non-empty capture skipped
+#  creation, then the quality-gates-failed label edit failed on a missing PR)
+WT_DIR_P=$(mktemp -d)
+(
+    cd "$WT_DIR_P" || exit
+    git init -q
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for phantom PR path" >> work.txt
+)
+_WT_CURRENT_PATH="$WT_DIR_P"
+_WT_CURRENT_BRANCH="ralph-claude/T-phantom"
+_WT_MAIN_DIR="$WT_DIR_P"
+RALPH_PR_PUSH_CAPABLE="true"
+RALPH_PR_GH_CAPABLE="true"
+PR_ENABLED="true"
+gh() {
+    if [[ "$1" == "pr" && "$2" == "view" ]]; then
+        echo "no pull requests found for branch \"ralph-claude/T-phantom\"" >&2
+        return 1
+    fi
+    if [[ "$1" == "pr" && "$2" == "create" ]]; then
+        touch "$WT_DIR_P/.pr_create_called"
+        echo "https://github.com/o/r/pull/1"
+        return 0
+    fi
+    return 0
+}
+git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
+worktree_commit_and_pr "T-P" "Phantom PR test" "true" "1"
+phantom_rc=$?
+run_test "phantom PR: pr create WAS called" "1" \
+    "$([[ -f "$WT_DIR_P/.pr_create_called" ]] && echo 1 || echo 0)"
+run_test "phantom PR: workflow returns 0" "0" "$phantom_rc"
+unset -f gh git
+RALPH_PR_PUSH_CAPABLE="false"
+RALPH_PR_GH_CAPABLE="false"
+rm -rf "$WT_DIR_P"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "Results: ${TESTS_PASSED} passed, ${TESTS_FAILED} failed"
