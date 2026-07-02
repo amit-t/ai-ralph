@@ -195,3 +195,32 @@ This is wired into all three engine loops; no configuration needed.
 - [Aliases reference in the main README](../../README.md#aliases-reference) -- every `rpc.*`, `rpd.*`, `rpx.*` alias
 - [Configuration](../../README.md#configuration) -- `.ralphrc`, `.ralphrc.devin`, `.ralphrc.codex` full reference
 - [How It Works](../../README.md#how-it-works) -- worktree lifecycle, task selection, change detection
+
+## PR Workflow Failure Semantics (v2.5+)
+
+Every PR workflow run emits one grep-able summary line to `.ralph/logs/ralph.log`:
+
+    task-state branch=<b> quality_gates=<t|f> rebase=<CHANGED|UNCHANGED|SKIPPED|DIRTY|CONFLICT|FAILED> pushed=<t|f> pr=<created|exists|skipped|failed> failure_label=<applied|failed|n/a>
+
+Behavioral guarantees:
+
+- **PR existence** is decided by `gh pr view`'s exit code plus a URL-shaped
+  response — gh error text can no longer masquerade as an existing PR.
+- **Pre-push rebase** distinguishes three failures: `DIRTY` (uncommitted
+  tracked changes outside `.ralph/` — not a conflict), `CONFLICT` (real merge
+  conflict; conflicted files and `git status --short` are logged, then the
+  rebase is aborted and the branch preserved), `FAILED` (anything else; raw
+  git output is logged). Dirty tracked `.ralph/**` artifacts (e.g.
+  `.quality_gate_results` in repos that track `.ralph/`) are snapshotted,
+  reset for the rebase, and restored — they never block a rebase.
+- **Conflict-resolution hook:** define a function
+  `worktree_resolve_rebase_conflicts <base_branch>` (e.g. exported from your
+  `.ralphrc`) and Ralph calls it once mid-conflict inside the worktree. Return
+  0 after `git add` + `git rebase --continue` to signal resolution; quality
+  gates re-run automatically because the tip moved.
+- **Continuous mode** only marks a fix-plan row `[x]` when the branch push and
+  PR state are confirmed. On push/PR failure the row stays open, the worker
+  pool retries up to K times and then skip-lists it, and the log carries a
+  salvage command. Quality-gate failure alone still completes the task — the
+  PR is created with gate output in the body and the `quality-gates-failed`
+  label.
