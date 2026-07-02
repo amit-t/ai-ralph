@@ -307,6 +307,7 @@ rm -rf "$WT_DIR3"
 
 # Test: gate_passed=false + GH_CAPABLE=true → quality-gates-failed label applied
 WT_DIR4=$(mktemp -d)
+GH_LABEL_MARKER=$(mktemp)
 (
     cd "$WT_DIR4" || exit
     git init -q
@@ -320,20 +321,19 @@ _WT_CURRENT_BRANCH="ralph-claude/T-1-gates"
 _WT_MAIN_DIR="$WT_DIR4"
 RALPH_PR_PUSH_CAPABLE="true"
 RALPH_PR_GH_CAPABLE="true"
-PR_EDIT_LABEL_CALLED=0
 gh() {
     if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "https://github.com/owner/repo/pull/99"; return 0; fi
     if [[ "$1" == "label" && "$2" == "list" ]]; then echo "quality-gates-failed"; return 0; fi
-    if [[ "$1" == "pr" && "$2" == "edit" && "$*" == *"quality-gates-failed"* ]]; then PR_EDIT_LABEL_CALLED=1; return 0; fi
+    if [[ "$1" == "pr" && "$2" == "edit" && "$*" == *"quality-gates-failed"* ]]; then echo "called" > "$GH_LABEL_MARKER"; return 0; fi
     return 0
 }
 git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
 worktree_commit_and_pr "T-1" "Gates test" "false" "2"
-run_test "gate_passed=false calls gh pr edit --add-label" "1" "$PR_EDIT_LABEL_CALLED"
+run_test "gate_passed=false calls gh pr edit --add-label" "1" "$(grep -c called "$GH_LABEL_MARKER" 2>/dev/null || echo 0)"
 unset -f gh git
 RALPH_PR_PUSH_CAPABLE="false"
 RALPH_PR_GH_CAPABLE="false"
-rm -rf "$WT_DIR4"
+rm -rf "$WT_DIR4" "$GH_LABEL_MARKER"
 
 # Test: _pr_ensure_label auto-creates label when it doesn't exist
 LABEL_CREATE_CALLED=0
@@ -585,6 +585,167 @@ after_d=$(cd "$DDIR" && git rev-list --count HEAD)
 run_test "Fix D: ralph-only change produces no commit" "$before_d" "$after_d"
 RALPH_PR_PUSH_CAPABLE="false"; RALPH_PR_GH_CAPABLE="false"
 rm -rf "$DDIR"
+
+# ── _pr_lookup_existing_pr: gh failure text must not count as a PR ───────────
+out=$(
+    gh() {
+        if [[ "$1" == "pr" ]]; then echo 'no pull requests found for branch "b1"' >&2; return 1; fi
+        return 0
+    }
+    _pr_lookup_existing_pr "b1"
+)
+rc=$?
+run_test "lookup: gh error text yields empty stdout" "" "$out"
+run_test "lookup: gh error text yields rc 1" "1" "$rc"
+
+out=$(
+    gh() {
+        if [[ "$1" == "pr" ]]; then echo "https://github.com/o/r/pull/7"; return 0; fi
+        return 0
+    }
+    _pr_lookup_existing_pr "b1"
+)
+rc=$?
+run_test "lookup: real URL passes through" "https://github.com/o/r/pull/7" "$out"
+run_test "lookup: real URL yields rc 0" "0" "$rc"
+
+# ── Regression: pr view stderr text does NOT skip pr create ──────────────────
+# (was: _pr_gh_try merged gh stderr into stdout; non-empty capture skipped
+#  creation, then the quality-gates-failed label edit failed on a missing PR)
+WT_DIR_P=$(mktemp -d)
+(
+    cd "$WT_DIR_P" || exit
+    git init -q
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for phantom PR path" >> work.txt
+)
+_WT_CURRENT_PATH="$WT_DIR_P"
+_WT_CURRENT_BRANCH="ralph-claude/T-phantom"
+_WT_MAIN_DIR="$WT_DIR_P"
+RALPH_PR_PUSH_CAPABLE="true"
+RALPH_PR_GH_CAPABLE="true"
+PR_ENABLED="true"
+gh() {
+    if [[ "$1" == "pr" && "$2" == "view" ]]; then
+        echo "no pull requests found for branch \"ralph-claude/T-phantom\"" >&2
+        return 1
+    fi
+    if [[ "$1" == "pr" && "$2" == "create" ]]; then
+        touch "$WT_DIR_P/.pr_create_called"
+        echo "https://github.com/o/r/pull/1"
+        return 0
+    fi
+    return 0
+}
+git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
+worktree_commit_and_pr "T-P" "Phantom PR test" "true" "1"
+phantom_rc=$?
+run_test "phantom PR: pr create WAS called" "1" \
+    "$([[ -f "$WT_DIR_P/.pr_create_called" ]] && echo 1 || echo 0)"
+run_test "phantom PR: workflow returns 0" "0" "$phantom_rc"
+unset -f gh git
+RALPH_PR_PUSH_CAPABLE="false"
+RALPH_PR_GH_CAPABLE="false"
+rm -rf "$WT_DIR_P"
+
+# ── Label-add failure logs gh's stderr ───────────────────────────────────────
+WT_DIR_L=$(mktemp -d)
+(
+    cd "$WT_DIR_L" || exit
+    git init -q
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for label log path" >> work.txt
+)
+_WT_CURRENT_PATH="$WT_DIR_L"
+_WT_CURRENT_BRANCH="ralph-claude/T-label-log"
+_WT_MAIN_DIR="$WT_DIR_L"
+RALPH_PR_PUSH_CAPABLE="true"
+RALPH_PR_GH_CAPABLE="true"
+LABEL_LOG_CAPTURE=""
+log_status() { LABEL_LOG_CAPTURE+="[$1] $2"$'\n'; }
+gh() {
+    if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "https://github.com/o/r/pull/9"; return 0; fi
+    if [[ "$1" == "pr" && "$2" == "edit" ]]; then echo "HTTP 422: label rejected by server" >&2; return 1; fi
+    return 0
+}
+git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
+worktree_commit_and_pr "T-L" "Label log test" "false" "1"
+run_test "label failure log includes gh stderr" "1" \
+    "$([[ "$LABEL_LOG_CAPTURE" == *"HTTP 422: label rejected by server"* ]] && echo 1 || echo 0)"
+log_status() { :; }
+unset -f gh git
+RALPH_PR_PUSH_CAPABLE="false"
+RALPH_PR_GH_CAPABLE="false"
+rm -rf "$WT_DIR_L"
+
+# ── task-state summary line ──────────────────────────────────────────────────
+WT_DIR_S=$(mktemp -d)
+(
+    cd "$WT_DIR_S" || exit
+    git init -q
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    echo "source diff for state line path" >> work.txt
+)
+_WT_CURRENT_PATH="$WT_DIR_S"
+_WT_CURRENT_BRANCH="ralph-claude/T-state"
+_WT_MAIN_DIR="$WT_DIR_S"
+RALPH_PR_PUSH_CAPABLE="true"
+RALPH_PR_GH_CAPABLE="true"
+STATE_LOG_CAPTURE=""
+log_status() { STATE_LOG_CAPTURE+="[$1] $2"$'\n'; }
+gh() {
+    if [[ "$1" == "pr" && "$2" == "view" ]]; then return 1; fi
+    if [[ "$1" == "pr" && "$2" == "create" ]]; then echo "https://github.com/o/r/pull/3"; return 0; fi
+    return 0
+}
+git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
+worktree_commit_and_pr "T-S" "State line test" "true" "1"
+run_test "task-state line emitted with pr=created" "1" \
+    "$([[ "$STATE_LOG_CAPTURE" == *"task-state branch=ralph-claude/T-state quality_gates=true rebase=SKIPPED pushed=true pr=created failure_label=n/a"* ]] && echo 1 || echo 0)"
+log_status() { :; }
+unset -f gh git
+RALPH_PR_PUSH_CAPABLE="false"
+RALPH_PR_GH_CAPABLE="false"
+rm -rf "$WT_DIR_S"
+
+# ── task-state summary line on failure return (no committable source diff) ───
+WT_DIR_SF=$(mktemp -d)
+(
+    cd "$WT_DIR_SF" || exit
+    git init -q -b main
+    git config user.email "test@test.com"
+    git config user.name "Test"
+    echo "work" > work.txt && git add . && git commit -q -m "initial work"
+    # Only ralph internal state changes — no committable source diff vs main
+    mkdir -p .ralph && echo x > .ralph/.quality_gate_results
+)
+_WT_CURRENT_PATH="$WT_DIR_SF"
+_WT_CURRENT_BRANCH="ralph-claude/T-state-fail"
+_WT_MAIN_DIR="$WT_DIR_SF"
+RALPH_PR_PUSH_CAPABLE="true"
+RALPH_PR_GH_CAPABLE="true"
+STATE_FAIL_LOG_CAPTURE=""
+log_status() { STATE_FAIL_LOG_CAPTURE+="[$1] $2"$'\n'; }
+gh() {
+    if [[ "$1" == "pr" && "$2" == "view" ]]; then return 1; fi
+    if [[ "$1" == "pr" && "$2" == "create" ]]; then echo "https://github.com/o/r/pull/3"; return 0; fi
+    return 0
+}
+git() { [[ "$1" == "push" ]] && return 0; command git "$@"; }
+worktree_commit_and_pr "T-SF" "State line failure test" "true" "1" 2>/dev/null
+run_test "task-state line emitted on no-source-diff failure return" "1" \
+    "$([[ "$STATE_FAIL_LOG_CAPTURE" == *"task-state branch=ralph-claude/T-state-fail quality_gates=true rebase=SKIPPED pushed=false pr=skipped failure_label=n/a"* ]] && echo 1 || echo 0)"
+log_status() { :; }
+unset -f gh git
+RALPH_PR_PUSH_CAPABLE="false"
+RALPH_PR_GH_CAPABLE="false"
+rm -rf "$WT_DIR_SF"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""

@@ -1779,10 +1779,11 @@ _workspace_execute_task() {
     fi
 
     # ── PR creation ───────────────────────────────────────────────
+    local pr_rc=0
     if [[ "${PR_ENABLED:-true}" != "false" ]]; then
         local gate_flag="true"
         [[ $gate_result -ne 0 ]] && gate_flag="false"
-        workspace_repo_commit_and_pr "$repo_path" "$task_id" "$task_desc" "$gate_flag" || true
+        workspace_repo_commit_and_pr "$repo_path" "$task_id" "$task_desc" "$gate_flag" || pr_rc=$?
     fi
 
     # ── Cleanup ───────────────────────────────────────────────────
@@ -1790,6 +1791,10 @@ _workspace_execute_task() {
         workspace_repo_cleanup "$repo_path"
     fi
 
+    if [[ $pr_rc -ne 0 ]]; then
+        echo "Task implemented in [$repo_name] but push/PR failed (rc=$pr_rc)" >&2
+        return 2
+    fi
     echo "Task completed in [$repo_name]"
     return 0
 }
@@ -1822,18 +1827,28 @@ _continuous_workspace_executor() {
 
     local fix_plan="${RALPH_DIR}/fix_plan.md"
 
-    if _workspace_execute_task "$repo_name" "$task_desc" "."; then
-        # Row 6 safety net: ensure the per-task branch reached the remote and
-        # a PR exists. The inner helper already attempts this via
-        # workspace_repo_commit_and_pr; this is the executor-level fallback
-        # that catches silent no-ops (subshell state loss, missed preflight,
-        # engine commits landing outside the worktree). Push/PR failure must
-        # NOT block fix-plan completion — the work is committed locally and
-        # the user can salvage manually.
+    _workspace_execute_task "$repo_name" "$task_desc" "."
+    local exec_rc=$?
+    if [[ $exec_rc -eq 0 ]]; then
+        # Row 6 safety net (best effort): the inner helper already confirmed
+        # push/PR (or an intentional skip). A safety-net miss here can be a
+        # branch-name guess mismatch — warn, never block completion.
         _workspace_push_and_pr "$repo_name" "$task_id" "$task_desc" || \
-            log_status "WARN" "[continuous] task ${repo_name}/${task_id} marked complete; push/PR did not finish — see prior log lines"
+            log_status "WARN" "[continuous] safety-net push/PR could not verify ${repo_name}/${task_id} — inner PR step succeeded, continuing"
         mark_workspace_task_complete "$fix_plan" "$line_num"
         return 0
+    elif [[ $exec_rc -eq 2 ]]; then
+        # Implementation succeeded but push/PR failed. Try the safety net;
+        # only mark [x] when a push/PR actually succeeded. Otherwise leave
+        # the row open (pool retries K times, then skip-lists) so no task is
+        # silently [x]'d with no remote branch and no PR.
+        if _workspace_push_and_pr "$repo_name" "$task_id" "$task_desc"; then
+            mark_workspace_task_complete "$fix_plan" "$line_num"
+            return 0
+        fi
+        log_status "ERROR" "[continuous] ${repo_name}/${task_id} NOT marked complete — work is committed locally; salvage: git -C <repo> push origin <branch> && gh pr create"
+        revert_workspace_task "$fix_plan" "$line_num"
+        return 1
     else
         revert_workspace_task "$fix_plan" "$line_num"
         return 1
@@ -1981,13 +1996,14 @@ _singlerepo_execute_task() {
         worktree_run_quality_gates 2>&1 || gate_result=1
     fi
 
+    local pr_rc=0
     if [[ "${PR_ENABLED:-true}" != "false" ]]; then
         local gate_flag="true"
         [[ $gate_result -ne 0 ]] && gate_flag="false"
         if worktree_is_active; then
-            worktree_commit_and_pr "$task_id" "$task_desc" "$gate_flag" "1" || true
+            worktree_commit_and_pr "$task_id" "$task_desc" "$gate_flag" "1" || pr_rc=$?
         else
-            worktree_fallback_branch_pr "$task_id" "$task_desc" "1" "$gate_flag" || true
+            worktree_fallback_branch_pr "$task_id" "$task_desc" "1" "$gate_flag" || pr_rc=$?
         fi
     fi
 
@@ -1995,6 +2011,10 @@ _singlerepo_execute_task() {
         worktree_cleanup "false" 2>/dev/null || true
     fi
 
+    if [[ $pr_rc -ne 0 ]]; then
+        log_status "ERROR" "[continuous] PR workflow failed for ${task_id} — task left open; branch preserved for manual salvage"
+        return 1
+    fi
     return 0
 }
 export -f _singlerepo_execute_task

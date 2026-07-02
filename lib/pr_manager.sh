@@ -119,6 +119,22 @@ _pr_gh_try() {
     return $rc
 }
 
+# ── _pr_lookup_existing_pr ────────────────────────────────────────────────────
+# Args: $1=branch. Prints the existing PR's URL and returns 0 ONLY when a PR
+# exists. _pr_gh_try merges gh's stderr into its stdout, so "no pull requests
+# found" error text arrives on stdout — callers must never treat non-empty
+# output alone as proof of a PR. Gate on BOTH rc==0 and URL shape.
+_pr_lookup_existing_pr() {
+    local branch="$1"
+    local out
+    if out=$(_pr_gh_try pr view "$branch" --json url --jq '.url') \
+       && [[ "$out" =~ ^https?:// ]]; then
+        printf '%s\n' "$out"
+        return 0
+    fi
+    return 1
+}
+
 # ── _pr_ensure_label ──────────────────────────────────────────────────────────
 # Ensures a GitHub label exists in the repo, creating it if missing.
 # Args: $1=label_name  $2=color (hex without #, default: "d93f0b")
@@ -142,6 +158,13 @@ _pr_ensure_label() {
         return 0
     fi
     return 1
+}
+
+# ── _pr_log_task_state ────────────────────────────────────────────────────────
+# One canonical, grep-able line summarising the PR workflow outcome.
+# Args: $1=branch $2=gates $3=rebase $4=pushed $5=pr $6=label
+_pr_log_task_state() {
+    log_status "INFO" "task-state branch=$1 quality_gates=$2 rebase=$3 pushed=$4 pr=$5 failure_label=$6"
 }
 
 # ── _pr_remote_to_web_url ────────────────────────────────────────────────────
@@ -277,14 +300,32 @@ _pr_commits_ahead() {
     git rev-list --count "origin/${base}..${branch}" 2>/dev/null
 }
 
+# ── _pr_restore_ralph_snapshot ────────────────────────────────────────────────
+# Restore .ralph/** file contents snapshotted before a rebase, then delete the
+# snapshot dir. $1="" is a no-op. Always returns 0.
+_pr_restore_ralph_snapshot() {
+    local snapshot_dir="$1"
+    [[ -z "$snapshot_dir" || ! -d "$snapshot_dir" ]] && return 0
+    cp -pR "$snapshot_dir/." . 2>/dev/null || true
+    rm -rf "$snapshot_dir" 2>/dev/null || true
+    return 0
+}
+
 # ── _pr_rebase_onto_base ──────────────────────────────────────────────────────
-# Rebase the branch checked out in the CURRENT working tree onto origin/BASE so a
-# base that advanced mid-run does not leave the branch behind / unmergeable.
+# Rebase the branch checked out in the CURRENT working tree onto origin/BASE.
 # Must run from inside the working tree that holds the branch.
 # Args: $1=base_branch
-# Prints one of: CHANGED (tip moved), UNCHANGED, SKIPPED (no remote base ref).
-# Returns 1 on rebase conflict (after aborting the rebase) so the caller stops
-# rather than pushing an unmergeable branch.
+# Prints exactly one status word and returns:
+#   CHANGED   rc 0  tip moved (caller re-runs quality gates)
+#   UNCHANGED rc 0  already up to date
+#   SKIPPED   rc 0  no remote base ref
+#   DIRTY     rc 2  uncommitted tracked changes outside .ralph/ — NOT a conflict
+#   CONFLICT  rc 1  real merge conflict (aborted unless the
+#                   worktree_resolve_rebase_conflicts hook resolved it)
+#   FAILED    rc 3  rebase failed before producing conflict state
+# Dirty tracked .ralph/** files (gate results are written after the
+# auto-commit, which excludes .ralph/**, and some target repos track .ralph/)
+# are snapshotted, reset to HEAD for the rebase, and restored afterwards.
 _pr_rebase_onto_base() {
     local base_branch="$1"
 
@@ -295,13 +336,65 @@ _pr_rebase_onto_base() {
         echo "SKIPPED"; return 0
     fi
 
-    local before after
-    before=$(git rev-parse HEAD 2>/dev/null)
-    if ! git rebase "origin/$base_branch" >/dev/null 2>&1; then
-        git rebase --abort >/dev/null 2>&1 || true
-        return 1
+    local -a ralph_dirty=() other_dirty=()
+    local _f
+    while IFS= read -r _f; do
+        [[ -z "$_f" ]] && continue
+        if [[ "$_f" == .ralph/* ]]; then
+            ralph_dirty+=("$_f")
+        else
+            other_dirty+=("$_f")
+        fi
+    done < <(git diff --name-only HEAD -- 2>/dev/null)
+
+    if [[ ${#other_dirty[@]} -gt 0 ]]; then
+        log_status "ERROR" "Rebase blocked by uncommitted tracked changes (not a merge conflict): ${other_dirty[*]}"
+        echo "DIRTY"
+        return 2
     fi
+
+    local snapshot_dir=""
+    if [[ ${#ralph_dirty[@]} -gt 0 ]]; then
+        snapshot_dir=$(mktemp -d "${TMPDIR:-/tmp}/ralph-rebase-snap.XXXXXX" 2>/dev/null) || snapshot_dir=""
+        if [[ -n "$snapshot_dir" ]]; then
+            for _f in "${ralph_dirty[@]}"; do
+                mkdir -p "$snapshot_dir/$(dirname "$_f")"
+                cp -p "$_f" "$snapshot_dir/$_f" 2>/dev/null || true
+            done
+            git checkout HEAD -- "${ralph_dirty[@]}" 2>/dev/null || true
+            log_status "INFO" "Stashed dirty tracked ralph artifacts for rebase: ${ralph_dirty[*]}"
+        fi
+    fi
+
+    local before after rebase_out rebase_rc=0
+    before=$(git rev-parse HEAD 2>/dev/null)
+    rebase_out=$(git rebase "origin/$base_branch" 2>&1) || rebase_rc=$?
+
+    if [[ $rebase_rc -ne 0 ]]; then
+        local git_dir status_word="FAILED" status_rc=3
+        git_dir=$(git rev-parse --git-dir 2>/dev/null)
+        log_status "ERROR" "git rebase origin/$base_branch failed (rc=$rebase_rc): $rebase_out"
+        if [[ -d "$git_dir/rebase-merge" || -d "$git_dir/rebase-apply" ]]; then
+            status_word="CONFLICT"; status_rc=1
+            log_status "ERROR" "Conflicted files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
+            log_status "ERROR" "Worktree status: $(git status --short 2>/dev/null | tr '\n' ';' )"
+            if declare -F worktree_resolve_rebase_conflicts >/dev/null 2>&1 \
+               && worktree_resolve_rebase_conflicts "$base_branch" 1>&2; then
+                log_status "INFO" "Rebase conflict resolved by worktree_resolve_rebase_conflicts hook"
+                status_word=""; status_rc=0
+            else
+                git rebase --abort >/dev/null 2>&1 || true
+            fi
+        fi
+        if [[ $status_rc -ne 0 ]]; then
+            _pr_restore_ralph_snapshot "$snapshot_dir"
+            echo "$status_word"
+            return $status_rc
+        fi
+    fi
+
     after=$(git rev-parse HEAD 2>/dev/null)
+    _pr_restore_ralph_snapshot "$snapshot_dir"
 
     if [[ "$before" != "$after" ]]; then
         echo "CHANGED"
@@ -528,6 +621,7 @@ worktree_commit_and_pr() {
         base_branch="main"
     fi
     log_status "INFO" "PR base branch: $base_branch"
+    local state_rebase="SKIPPED" state_pushed="false" state_pr="skipped" state_label="n/a"
 
     # ── Step 1: Auto-commit in worktree ──────────────────────────────────────
     # Exclude .ralph/ from the auto-commit: ralph internal state (e.g.
@@ -551,7 +645,10 @@ worktree_commit_and_pr() {
         fi
     )
     local commit_result=$?
-    if [[ $commit_result -ne 0 ]]; then return 1; fi
+    if [[ $commit_result -ne 0 ]]; then
+        _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
+        return 1
+    fi
 
     # ── Step 1b: Ensure branch contains real source diff before push/PR ─────
     if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
@@ -560,7 +657,10 @@ worktree_commit_and_pr() {
             _pr_require_committable_source_diff "$base_branch" "$_WT_CURRENT_BRANCH"
         )
         local diff_result=$?
-        if [[ $diff_result -ne 0 ]]; then return 1; fi
+        if [[ $diff_result -ne 0 ]]; then
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
+            return 1
+        fi
     fi
 
     # ── Step 1c: Rebase onto advanced base ───────────────────────────────────
@@ -576,8 +676,17 @@ worktree_commit_and_pr() {
             _pr_rebase_onto_base "$base_branch"
         )
         local rebase_rc=$?
+        state_rebase="${rebase_status:-FAILED}"
         if [[ $rebase_rc -ne 0 ]]; then
-            log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch conflicted — stopping; resolve and re-run"
+            case "$rebase_status" in
+                DIRTY)
+                    log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH blocked by uncommitted tracked changes (see log above) — not a merge conflict" ;;
+                CONFLICT)
+                    log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch hit a real merge conflict — conflicted files logged above; resolve in $_WT_CURRENT_PATH and re-run" ;;
+                *)
+                    log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch failed — git output logged above" ;;
+            esac
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
             return 1
         fi
         if [[ "$rebase_status" == "CHANGED" ]]; then
@@ -621,7 +730,11 @@ worktree_commit_and_pr() {
             log_status "SUCCESS" "Branch pushed: $_WT_CURRENT_BRANCH"
         )
         local push_result=$?
-        if [[ $push_result -ne 0 ]]; then return 1; fi
+        if [[ $push_result -ne 0 ]]; then
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
+            return 1
+        fi
+        state_pushed="true"
     fi
 
     # ── Step 3: Create PR ────────────────────────────────────────────────────
@@ -632,13 +745,14 @@ worktree_commit_and_pr() {
     if [[ "$RALPH_PR_GH_CAPABLE" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
         if ! pushd "$_WT_MAIN_DIR" >/dev/null 2>&1; then
             log_status "ERROR" "Cannot enter repo dir for PR: $_WT_MAIN_DIR"
+            _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
             return 1
         fi
 
         local existing_pr
-        existing_pr=$(_pr_gh_try pr view "$_WT_CURRENT_BRANCH" --json url --jq '.url' 2>/dev/null)
-        if [[ -n "$existing_pr" ]]; then
+        if existing_pr=$(_pr_lookup_existing_pr "$_WT_CURRENT_BRANCH"); then
             log_status "INFO" "PR already exists for $_WT_CURRENT_BRANCH: $existing_pr. Skipping creation."
+            state_pr="exists"
         else
             # Confirm the pushed branch is visible on origin before asking gh to
             # open a PR (absorbs remote propagation lag).
@@ -652,6 +766,7 @@ worktree_commit_and_pr() {
             if [[ "$commits_ahead" == "0" ]]; then
                 log_status "WARN" "No commits to PR for $_WT_CURRENT_BRANCH (origin/$base_branch..$_WT_CURRENT_BRANCH empty) — skipping PR creation"
                 popd >/dev/null 2>&1 || true
+                _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
                 return 0
             fi
 
@@ -671,16 +786,23 @@ worktree_commit_and_pr() {
                 log_status "ERROR" "PR creation failed for $_WT_CURRENT_BRANCH: $pr_url"
                 log_status "ERROR" "Branch is pushed — open by hand: gh pr create --head $_WT_CURRENT_BRANCH --base $base_branch"
                 popd >/dev/null 2>&1 || true
+                state_pr="failed"
+                _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
                 return 1
             fi
             log_status "SUCCESS" "PR created: $pr_url"
+            state_pr="created"
         fi
 
         # ── Step 4: Add failure label (still inside repo dir) ─────────────────
         if [[ "$gate_passed" == "false" ]]; then
             _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
-            gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
-                || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
+            local label_out
+            state_label="applied"
+            if ! label_out=$(gh pr edit "$_WT_CURRENT_BRANCH" --add-label "quality-gates-failed" 2>&1); then
+                state_label="failed"
+                log_status "WARN" "Could not add 'quality-gates-failed' label to PR: $label_out"
+            fi
         fi
 
         popd >/dev/null 2>&1 || true
@@ -689,6 +811,7 @@ worktree_commit_and_pr() {
         _pr_print_compare_url "$_WT_CURRENT_BRANCH" "$base_branch"
     fi
 
+    _pr_log_task_state "$_WT_CURRENT_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
     return 0
 }
 
@@ -766,6 +889,7 @@ worktree_fallback_branch_pr() {
                       | sed 's@^refs/remotes/origin/@@')
     fi
     [[ -z "$base_branch" ]] && base_branch="main"
+    local state_rebase="SKIPPED" state_pushed="false" state_pr="skipped" state_label="n/a"
 
     # ── Step 4b: Ensure branch contains real source diff before push/PR ─────
     if [[ "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
@@ -783,7 +907,14 @@ worktree_fallback_branch_pr() {
         fb_rebase_status=$(_pr_rebase_onto_base "$base_branch")
         local fb_rebase_rc=$?
         if [[ $fb_rebase_rc -ne 0 ]]; then
-            log_status "ERROR" "Rebase of $FALLBACK_BRANCH onto origin/$base_branch conflicted — stopping"
+            case "$fb_rebase_status" in
+                DIRTY)
+                    log_status "ERROR" "Rebase of $FALLBACK_BRANCH blocked by uncommitted tracked changes (see log above) — not a merge conflict" ;;
+                CONFLICT)
+                    log_status "ERROR" "Rebase of $FALLBACK_BRANCH onto origin/$base_branch hit a real merge conflict — conflicted files logged above; resolve and re-run" ;;
+                *)
+                    log_status "ERROR" "Rebase of $FALLBACK_BRANCH onto origin/$base_branch failed — git output logged above" ;;
+            esac
             [[ -n "$original_branch" ]] && git checkout "$original_branch" >/dev/null 2>&1 || true
             return 1
         fi
@@ -820,8 +951,7 @@ worktree_fallback_branch_pr() {
     # ── Steps 6–7: Create PR ─────────────────────────────────────────────────
     if [[ "$RALPH_PR_GH_CAPABLE" == "true" && "$RALPH_PR_PUSH_CAPABLE" == "true" ]]; then
         local existing_pr
-        existing_pr=$(_pr_gh_try pr view "$FALLBACK_BRANCH" --json url --jq '.url' 2>/dev/null)
-        if [[ -n "$existing_pr" ]]; then
+        if existing_pr=$(_pr_lookup_existing_pr "$FALLBACK_BRANCH"); then
             log_status "INFO" "PR already exists for $FALLBACK_BRANCH: $existing_pr"
         else
             # Confirm the pushed branch is on origin (propagation lag) before gh.
@@ -859,9 +989,14 @@ worktree_fallback_branch_pr() {
     # ── Step 7: Add failure label ─────────────────────────────────────────────
     if [[ "$gate_passed" == "false" && "$RALPH_PR_GH_CAPABLE" == "true" ]]; then
         _pr_ensure_label "quality-gates-failed" "d93f0b" "Ralph: quality gates did not pass" || true
-        gh pr edit "$FALLBACK_BRANCH" --add-label "quality-gates-failed" 2>/dev/null \
-            || log_status "WARN" "Could not add 'quality-gates-failed' label to PR"
+        local label_out
+        state_label="applied"
+        if ! label_out=$(gh pr edit "$FALLBACK_BRANCH" --add-label "quality-gates-failed" 2>&1); then
+            state_label="failed"
+            log_status "WARN" "Could not add 'quality-gates-failed' label to PR: $label_out"
+        fi
     fi
 
+    _pr_log_task_state "$FALLBACK_BRANCH" "$gate_passed" "$state_rebase" "$state_pushed" "$state_pr" "$state_label"
     return 0
 }
