@@ -293,14 +293,32 @@ _pr_commits_ahead() {
     git rev-list --count "origin/${base}..${branch}" 2>/dev/null
 }
 
+# ── _pr_restore_ralph_snapshot ────────────────────────────────────────────────
+# Restore .ralph/** file contents snapshotted before a rebase, then delete the
+# snapshot dir. $1="" is a no-op. Always returns 0.
+_pr_restore_ralph_snapshot() {
+    local snapshot_dir="$1"
+    [[ -z "$snapshot_dir" || ! -d "$snapshot_dir" ]] && return 0
+    cp -pR "$snapshot_dir/." . 2>/dev/null || true
+    rm -rf "$snapshot_dir" 2>/dev/null || true
+    return 0
+}
+
 # ── _pr_rebase_onto_base ──────────────────────────────────────────────────────
-# Rebase the branch checked out in the CURRENT working tree onto origin/BASE so a
-# base that advanced mid-run does not leave the branch behind / unmergeable.
+# Rebase the branch checked out in the CURRENT working tree onto origin/BASE.
 # Must run from inside the working tree that holds the branch.
 # Args: $1=base_branch
-# Prints one of: CHANGED (tip moved), UNCHANGED, SKIPPED (no remote base ref).
-# Returns 1 on rebase conflict (after aborting the rebase) so the caller stops
-# rather than pushing an unmergeable branch.
+# Prints exactly one status word and returns:
+#   CHANGED   rc 0  tip moved (caller re-runs quality gates)
+#   UNCHANGED rc 0  already up to date
+#   SKIPPED   rc 0  no remote base ref
+#   DIRTY     rc 2  uncommitted tracked changes outside .ralph/ — NOT a conflict
+#   CONFLICT  rc 1  real merge conflict (aborted unless the
+#                   worktree_resolve_rebase_conflicts hook resolved it)
+#   FAILED    rc 3  rebase failed before producing conflict state
+# Dirty tracked .ralph/** files (gate results are written after the
+# auto-commit, which excludes .ralph/**, and some target repos track .ralph/)
+# are snapshotted, reset to HEAD for the rebase, and restored afterwards.
 _pr_rebase_onto_base() {
     local base_branch="$1"
 
@@ -311,13 +329,63 @@ _pr_rebase_onto_base() {
         echo "SKIPPED"; return 0
     fi
 
-    local before after
-    before=$(git rev-parse HEAD 2>/dev/null)
-    if ! git rebase "origin/$base_branch" >/dev/null 2>&1; then
-        git rebase --abort >/dev/null 2>&1 || true
-        return 1
+    local -a ralph_dirty=() other_dirty=()
+    local _f
+    while IFS= read -r _f; do
+        [[ -z "$_f" ]] && continue
+        if [[ "$_f" == .ralph/* ]]; then
+            ralph_dirty+=("$_f")
+        else
+            other_dirty+=("$_f")
+        fi
+    done < <(git diff --name-only HEAD -- 2>/dev/null)
+
+    if [[ ${#other_dirty[@]} -gt 0 ]]; then
+        log_status "ERROR" "Rebase blocked by uncommitted tracked changes (not a merge conflict): ${other_dirty[*]}"
+        echo "DIRTY"
+        return 2
     fi
+
+    local snapshot_dir=""
+    if [[ ${#ralph_dirty[@]} -gt 0 ]]; then
+        snapshot_dir=$(mktemp -d "${TMPDIR:-/tmp}/ralph-rebase-snap.XXXXXX")
+        for _f in "${ralph_dirty[@]}"; do
+            mkdir -p "$snapshot_dir/$(dirname "$_f")"
+            cp -p "$_f" "$snapshot_dir/$_f" 2>/dev/null || true
+        done
+        git checkout -- "${ralph_dirty[@]}" 2>/dev/null || true
+        log_status "INFO" "Stashed dirty tracked ralph artifacts for rebase: ${ralph_dirty[*]}"
+    fi
+
+    local before after rebase_out rebase_rc=0
+    before=$(git rev-parse HEAD 2>/dev/null)
+    rebase_out=$(git rebase "origin/$base_branch" 2>&1) || rebase_rc=$?
+
+    if [[ $rebase_rc -ne 0 ]]; then
+        local git_dir status_word="FAILED" status_rc=3
+        git_dir=$(git rev-parse --git-dir 2>/dev/null)
+        log_status "ERROR" "git rebase origin/$base_branch failed (rc=$rebase_rc): $rebase_out"
+        if [[ -d "$git_dir/rebase-merge" || -d "$git_dir/rebase-apply" ]]; then
+            status_word="CONFLICT"; status_rc=1
+            log_status "ERROR" "Conflicted files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
+            log_status "ERROR" "Worktree status: $(git status --short 2>/dev/null | tr '\n' ';' )"
+            if declare -F worktree_resolve_rebase_conflicts >/dev/null 2>&1 \
+               && worktree_resolve_rebase_conflicts "$base_branch"; then
+                log_status "INFO" "Rebase conflict resolved by worktree_resolve_rebase_conflicts hook"
+                status_word=""; status_rc=0
+            else
+                git rebase --abort >/dev/null 2>&1 || true
+            fi
+        fi
+        if [[ $status_rc -ne 0 ]]; then
+            _pr_restore_ralph_snapshot "$snapshot_dir"
+            echo "$status_word"
+            return $status_rc
+        fi
+    fi
+
     after=$(git rev-parse HEAD 2>/dev/null)
+    _pr_restore_ralph_snapshot "$snapshot_dir"
 
     if [[ "$before" != "$after" ]]; then
         echo "CHANGED"
@@ -593,7 +661,14 @@ worktree_commit_and_pr() {
         )
         local rebase_rc=$?
         if [[ $rebase_rc -ne 0 ]]; then
-            log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch conflicted — stopping; resolve and re-run"
+            case "$rebase_status" in
+                DIRTY)
+                    log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH blocked by uncommitted tracked changes (see log above) — not a merge conflict" ;;
+                CONFLICT)
+                    log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch hit a real merge conflict — conflicted files logged above; resolve in $_WT_CURRENT_PATH and re-run" ;;
+                *)
+                    log_status "ERROR" "Rebase of $_WT_CURRENT_BRANCH onto origin/$base_branch failed — git output logged above" ;;
+            esac
             return 1
         fi
         if [[ "$rebase_status" == "CHANGED" ]]; then
@@ -804,7 +879,14 @@ worktree_fallback_branch_pr() {
         fb_rebase_status=$(_pr_rebase_onto_base "$base_branch")
         local fb_rebase_rc=$?
         if [[ $fb_rebase_rc -ne 0 ]]; then
-            log_status "ERROR" "Rebase of $FALLBACK_BRANCH onto origin/$base_branch conflicted — stopping"
+            case "$fb_rebase_status" in
+                DIRTY)
+                    log_status "ERROR" "Rebase of $FALLBACK_BRANCH blocked by uncommitted tracked changes (see log above) — not a merge conflict" ;;
+                CONFLICT)
+                    log_status "ERROR" "Rebase of $FALLBACK_BRANCH onto origin/$base_branch hit a real merge conflict — conflicted files logged above; resolve and re-run" ;;
+                *)
+                    log_status "ERROR" "Rebase of $FALLBACK_BRANCH onto origin/$base_branch failed — git output logged above" ;;
+            esac
             [[ -n "$original_branch" ]] && git checkout "$original_branch" >/dev/null 2>&1 || true
             return 1
         fi
