@@ -346,3 +346,41 @@ _load_singlerepo_executor() {
     assert_success
     grep -q "task_id=task-no-bead" "${TEST_DIR}/.calls"
 }
+
+# =============================================================================
+# Branch 5: engine ok + files changed, but PR workflow fails → return 1
+# (task left open for the pool's K-retry/skip-list — never a silent [x])
+# =============================================================================
+
+@test "claude executor: PR step fails → return 1" {
+    _load_singlerepo_executor "${BATS_TEST_DIRNAME}/../../ralph_loop.sh"
+    execute_claude_code() { echo "modified" > "${TEST_DIR}/some_file.txt"; return 0; }
+    worktree_fallback_branch_pr() { echo "worktree_fallback_branch_pr $*" >> "${TEST_DIR}/.calls"; return 1; }
+    export -f execute_claude_code worktree_fallback_branch_pr
+
+    run _singlerepo_execute_task "task-1|1|"
+    assert_failure
+    grep -q "worktree_fallback_branch_pr" "${TEST_DIR}/.calls"
+}
+
+@test "devin executor: PR step fails → return 1" {
+    _load_singlerepo_executor "${BATS_TEST_DIRNAME}/../../devin/ralph_loop_devin.sh"
+    execute_devin_session() { echo "modified" > "${TEST_DIR}/some_file.txt"; return 0; }
+    worktree_fallback_branch_pr() { echo "worktree_fallback_branch_pr $*" >> "${TEST_DIR}/.calls"; return 1; }
+    export -f execute_devin_session worktree_fallback_branch_pr
+
+    run _singlerepo_execute_task "task-1|1|"
+    assert_failure
+    grep -q "worktree_fallback_branch_pr" "${TEST_DIR}/.calls"
+}
+
+@test "codex executor: PR step fails → return 1" {
+    _load_singlerepo_executor "${BATS_TEST_DIRNAME}/../../codex/ralph_loop_codex.sh"
+    execute_codex_session() { echo "modified" > "${TEST_DIR}/some_file.txt"; return 0; }
+    worktree_fallback_branch_pr() { echo "worktree_fallback_branch_pr $*" >> "${TEST_DIR}/.calls"; return 1; }
+    export -f execute_codex_session worktree_fallback_branch_pr
+
+    run _singlerepo_execute_task "task-1|1|"
+    assert_failure
+    grep -q "worktree_fallback_branch_pr" "${TEST_DIR}/.calls"
+}
