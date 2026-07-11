@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   release-please:
+    # Origin owns release-please. Mirror remotes receive the release PR
+    # commit, tag, and GitHub release after origin completes.
+    if: github.repository == 'amit-t/ai-ralph'
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4

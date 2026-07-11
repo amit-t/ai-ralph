@@ -1655,6 +1655,10 @@ ralph.upgrade --rollback    # revert
 
 When a newer version is on `main`, the `ralph` command prints a one-line banner before running (cache-throttled to one network call per 12h).
 
+Release authority is `amit-t/ai-ralph` only. Mirror remotes skip
+release-please and receive the release bump, tag, and GitHub release after
+origin completes.
+
 Full system documented in [ai-devkit/docs/versioning.md](https://github.com/amit-t/ai-devkit/blob/main/docs/versioning.md).
 
 ---
